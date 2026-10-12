@@ -157,6 +157,12 @@ class Jobs:
                                                 a.get("variation"))
                 elif job["kind"] == "dun_trial":
                     job["result"] = dg.trial(a["set"], a["piece"], a["rel"], a.get("variation", ""), int(a.get("seed", 1)))
+                elif job["kind"] == "dun_edit":
+                    job["result"] = dg.edit_candidate(a["set"], a["piece"], a["rel"], a.get("prompt", ""),
+                                                      float(a.get("denoise", 0.5)), int(a.get("seed", 1)))
+                elif job["kind"] == "dun_rescale":
+                    job["result"] = dg.rescale_master(a["set"], a["piece"], a["rel"], float(a["factor"]),
+                                                      bool(a.get("redetail")), int(a.get("seed", 1)))
                 elif job["kind"] == "dun_capture":
                     job["result"] = dg.capture(a["set"])
                 elif job["kind"] == "base":
@@ -259,6 +265,12 @@ def dungeon_post(action, b):
         return {"piece": dg.star(name, b["piece"], b["rel"], bool(b.get("on", True)))}
     if action == "promote":
         return {"piece": dg.promote(name, b["piece"], b["rel"])}
+    if action == "edit":
+        job = JOBS.add("dun_edit", b, f"{name} · {b['piece']} edit: {b.get('prompt', '')[:30]}")
+        return {"job": job["id"]}
+    if action == "rescale":
+        job = JOBS.add("dun_rescale", b, f"{name} · {b['piece']} ×{b['factor']}")
+        return {"job": job["id"]}
     if action == "trial":
         job = JOBS.add("dun_trial", b, f"{name} · {b['piece']} trial: {b.get('variation', '')[:30]}")
         return {"job": job["id"]}

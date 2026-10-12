@@ -51,6 +51,24 @@
   .famcard .btns button.on { border-color:var(--ok); color:var(--ok); }
   .famcard .trials { display:flex; gap:3px; margin-top:4px; flex-wrap:wrap; } .famcard .trials img { width:50px; height:50px; border-radius:2px; cursor:zoom-in; }
   .strip img.stale { outline:2px dashed #e0a030; outline-offset:-2px; opacity:.6; }
+  body.famview .layout { grid-template-columns: 230px minmax(360px, 1fr) minmax(380px, 1.3fr); }
+  body.famview #famPanel .famstage { height:calc(100vh - 190px); min-height:360px; }
+  .outrow { justify-content:space-between; margin-bottom:6px; }
+  #imgPanel { position:fixed; inset:0; background:rgba(8,6,12,.78); z-index:70; display:flex; align-items:center; justify-content:center; }
+  #imgPanel.hidden { display:none; }
+  .ipbox { background:var(--panel); border:1px solid var(--line); border-radius:8px; width:min(1280px, 96vw); height:min(860px, 94vh); display:flex; flex-direction:column; padding:10px; gap:8px; }
+  .iphead { display:flex; gap:8px; align-items:center; } .iphead button { padding:3px 10px; }
+  .ipbody { display:flex; gap:12px; flex:1; min-height:0; }
+  .ipview { flex:1; display:flex; flex-direction:column; min-width:0; } .ipview .tabs { margin-bottom:6px; }
+  .ipimg { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; background:#16121c; border-radius:6px; }
+  .ipimg img { max-width:100%; max-height:100%; object-fit:contain; }
+  .ipimg img.px { image-rendering:pixelated; }
+  .ipside { width:340px; overflow:auto; display:flex; flex-direction:column; gap:8px; font-size:12px; }
+  .ipside table td { padding:2px 4px; vertical-align:top; } .ipside table td:first-child { color:var(--muted); white-space:nowrap; }
+  .ipside .row button { flex:1; } .ipside textarea { width:100%; } .ipside .stale { color:#e0a030; }
+  .navgrp { color:var(--accent); font-size:11px; text-transform:uppercase; letter-spacing:1px; margin:12px 0 4px; }
+  .navlink { display:flex; justify-content:space-between; align-items:center; padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer; margin:3px 0; }
+  .navlink:hover, .navlink.sel { border-color:var(--accent); } .navnote { color:var(--muted); font-size:11px; margin:10px 2px; line-height:1.4; }
   .famstage { position:relative; height:460px; border-radius:6px; overflow:hidden; background:#16121c; border:1px solid var(--line); }
   .famstage.full { position:fixed; inset:0; height:auto; z-index:60; border-radius:0; }
   .famstage canvas { width:100%; height:100%; display:block; cursor:grab; } .famstage canvas.grabbing { cursor:grabbing; }
@@ -120,6 +138,13 @@
 <div id="notice" class="hidden"><span></span><button onclick="this.parentElement.classList.add('hidden')">✕</button></div>
 <div id="jobsPanel"><div class="row"><b>Queue</b><button id="clearJobs" style="margin-left:auto">Clear finished</button></div><div id="jobs"></div></div>
 <div id="zoom"><img alt=""></div>
+<div id="imgPanel" class="hidden"><div class="ipbox">
+  <div class="iphead"><b id="ipTitle"></b><span class="hint" id="ipCount"></span>
+    <span style="margin-left:auto"></span><button id="ipPrev" title="previous (←)">◀</button><button id="ipNext" title="next (→)">▶</button><button id="ipClose" title="close (Esc)">✕</button></div>
+  <div class="ipbody">
+    <div class="ipview"><div class="tabs" id="ipTabs"></div><div class="ipimg"><img id="ipImg" alt=""></div></div>
+    <div class="ipside" id="ipSide"></div>
+  </div></div></div>
 
 <div class="layout">
   <!-- pieces -->
@@ -215,15 +240,26 @@
   </div>
 
   <!-- preview -->
-  <div class="col side">
-    <div class="row" style="justify-content:space-between"><h2 style="margin:0">Room preview</h2>
+  <div class="col side" id="rightCol">
+    <div class="row outrow"><span class="hint">Output</span>
       <span><label class="hint" title="Downsample the generated art for a pixel-art look. Off = full resolution. Used by the candidate previews, this room and the Unity export.">Pixelate
         <input id="r_pixel" type="range" min="0" step="1" style="width:110px;vertical-align:middle"></label>
         <span id="r_pixelLbl" class="badge"></span>
         <label class="hint" title="Pull every floor and wall image's colours toward the set's approved pieces (floors and walls separately; props untouched). Previews, room and export follow it.">Harmonize
         <input id="r_harm" type="range" min="0" max="1" step="0.1" style="width:80px;vertical-align:middle"></label>
-        <span id="r_harmLbl" class="badge"></span>
-      <button id="roomBtn">↻</button></span></div>
+        <span id="r_harmLbl" class="badge"></span></span></div>
+    <div id="famPanel" class="hidden">
+      <div class="gbar">board<input id="famW" type="number" value="16" min="4" max="48" style="width:50px">×<input id="famH" type="number" value="12" min="4" max="48" style="width:50px">
+        <label><input id="famOutline" type="checkbox" style="width:auto"> blocks</label>
+        <label title="A hero figure (1.5 units: half a wall) and a 1-tile block at wall height (3 units), to judge texture scale"><input id="famGuides" type="checkbox" checked style="width:auto"> scale guides</label>
+        <label title="Hero height in units (1 unit = half a tile width; walls are 3, doors 2)">hero<input id="famHero" type="number" step="0.1" min="0.5" max="4" value="1.5" style="width:52px"></label>
+        <button id="famReroll" title="another layout">↻</button><button id="famFit">fit</button><button id="famFull">⛶</button>
+        <button id="famExport" title="Export the set to Unity">Export</button></div>
+      <div id="famStage" class="famstage"><canvas id="famCanvas"></canvas><div class="famhint" id="famStageMsg"></div></div>
+      <div class="hint">The approved family laid out by the game's planner, cut and filtered like the Unity export. Drag to pan, wheel to zoom, double-click to fit.</div>
+    </div>
+    <div id="roomPanel">
+    <div class="row" style="justify-content:space-between"><h2 style="margin:0">Room preview</h2><button id="roomBtn">↻</button></div>
     <div class="hint" id="roomHint">Approved pieces in a mock room (back walls only).</div>
     <img id="room" alt="room preview">
     <div class="row">
@@ -233,6 +269,7 @@
     <div class="hint" id="exportHint">Export writes Assets/StreamingAssets/Art/Dungeon/&lt;set&gt;. Capture exports, then runs Unity in batch mode (about a minute; the project must not be open in the editor).</div>
     <h2>Prototype V</h2>
     <div class="caps" id="caps"></div>
+    </div>
   </div>
 </div>
 
@@ -262,6 +299,11 @@ async function load() {
   }
   $("#setSel").innerHTML = D.sets.map(s => `<option ${s === SET ? "selected" : ""}>${s}</option>`).join("");
   syncPixel();
+  // Start on a floor family (or the walls board) instead of an empty editor; keep the view when it still exists.
+  const fams = Object.keys(D.families || {});
+  if (VIEW === "family" && !famInfo()) { FAM = fams[0] || null; if (!FAM) { VIEW = "group"; GROUP = "Walls"; } }
+  if (VIEW === "pieces" && !SEL) { if (fams.length) { VIEW = "family"; FAM = FAM && famInfo() ? FAM : fams[0]; } else { VIEW = "group"; GROUP = "Walls"; } }
+  applyChrome();
   if (SEL && !piece(SEL)) SEL = null;
   renderList(); renderCenter(); refreshRoom(); loadCaps();
 }
@@ -269,29 +311,26 @@ const piece = id => D.spec.pieces.find(p => p.id === id);
 const pstate = id => D.state.pieces[id] || {candidates: [], approved: []};
 const natUrl = (pid, rel, tile, scale) => `/api/dun/native?set=${SET}&piece=${encodeURIComponent(pid)}&rel=${encodeURIComponent(rel)}&tile=${tile}&scale=${scale}`;
 
+// Dungeon Forge areas: floor families, walls (walls, doors, pillars, arches, windows), props (later: their own area).
 function group(p) {
-  if (p.retired) return "Retired (old geometry)";
-  if (p.id.startsWith("feature.")) return "Features & traps";
-  if (p.kind === "prop") return "Props";
-  if (p.kind === "wall_decor") return "Wall decor";
+  if (p.retired) return "Retired";
+  if (["master", "repaint"].includes(p.method)) return "Family";
+  if (p.kind === "prop" || p.kind === "wall_decor" || p.id.startsWith("feature.") && p.kind !== "tile") return "Props";
   if (p.shape === "floor") return "Floors";
-  if (p.shape === "pillar") return "Pillars";
-  return "Walls & doors";
+  return "Walls";
 }
 function running(pid) { return JOBS.some(j => j.status !== "done" && j.status !== "failed" && j.label.startsWith(`${SET} · ${pid} `)); }
 
 function renderList() {
-  const order = ["Floors", "Walls & doors", "Wall decor", "Pillars", "Props", "Features & traps", "Retired (old geometry)"];
   const by = {}; D.spec.pieces.forEach(p => (by[group(p)] ||= []).push(p));
-  $("#plist").innerHTML = renderFamiliesList() + order.filter(g => by[g]).map(g => `<div class="grp gclick ${VIEW === "group" && GROUP === g ? "sel" : ""}" data-g="${esc(g)}" title="Open the ${esc(g)} board: all prompts and candidates">${g} ▸</div>` + by[g].map(p => {
-    const s = pstate(p.id), a = s.approved.length, v = p.variants || 1;
-    const cls = running(p.id) ? "run" : a >= v ? "ok" : (a || s.candidates.length) ? "part" : "none";
-    const txt = running(p.id) ? "generating" : `${a}/${v}` + (s.candidates.length && a < v ? ` · ${s.candidates.length} cand` : "");
-    const img = a ? `<img src="${natUrl(p.id, s.approved[0], D.spec.tile, 1)}">` : `<div class="ph"></div>`;
-    return `<div class="pitem ${p.id === SEL && VIEW === "pieces" ? "sel" : ""}" data-id="${esc(p.id)}">${img}<span class="nm" title="${esc(p.id)}">${esc(p.id)}</span><span class="badge ${cls}">${txt}</span></div>`;
-  }).join("")).join("") + renderOrphans();
-  document.querySelectorAll(".pitem").forEach(el => el.onclick = () => { SEL = el.dataset.id; TRY = null; setView("pieces"); });
-  document.querySelectorAll(".plist .grp.gclick").forEach(el => el.onclick = () => { GROUP = el.dataset.g; setView("group"); });
+  const count = g => (by[g] || []).length, done = g => (by[g] || []).filter(p => pstate(p.id).approved.length >= (p.variants || 1)).length;
+  const link = (g, label, hint) => `<div class="navlink ${VIEW === "group" && GROUP === g ? "sel" : ""}" data-g="${esc(g)}" title="${esc(hint)}"><span>${label}</span><span class="badge ${done(g) === count(g) ? "ok" : "part"}">${done(g)}/${count(g)}</span></div>`;
+  $("#plist").innerHTML = renderFamiliesList() +
+    `<div class="navgrp">Walls</div>` + link("Walls", "Walls, doors, pillars, arches ▸", "All wall parts on one board: prompts side by side, candidates, generate selected") +
+    (count("Floors") ? `<div class="navgrp">Older floors</div>` + link("Floors", "Single floor pieces ▸", "Floor pieces made before families (warp tiles, atlases)") : "") +
+    `<div class="navnote">Props and wall decor are moving to their own part of Dungeon Forge (wall decor will use the decal system). Until then they're on the Style &amp; set tab's add-piece list and keep exporting.</div>` +
+    renderOrphans();
+  document.querySelectorAll(".plist .navlink").forEach(el => el.onclick = () => { GROUP = el.dataset.g; setView("group"); });
   document.querySelectorAll(".plist .fitem").forEach(el => el.onclick = () => { FAM = el.dataset.fam; setView("family"); });
   $("#newFamBtn").onclick = newFamily;
   document.querySelectorAll(".orphan button").forEach(b => b.onclick = async () => {
@@ -362,16 +401,18 @@ function renderFamMasters() {
   const order = Object.keys(groups).sort((a, b) => (versions.indexOf(a) + 1 || 99) - (versions.indexOf(b) + 1 || 99));
   $("#famMasters").innerHTML = s.candidates.length ? order.map(pr => `<div class="hint famgrp" title="${esc(pr)}">${esc(label(pr))}</div><div class="famcards">` +
     groups[pr].map(rel => `<div class="famcard ${rel === active ? "active" : ""}" data-rel="${esc(rel)}">
-      <img class="seam" src="/api/dun/seam?set=${SET}&piece=${encodeURIComponent(FAM)}&rel=${encodeURIComponent(rel)}" title="tiled 3×3 (click to zoom)">
+      <img class="seam" src="/api/dun/seam?set=${SET}&piece=${encodeURIComponent(FAM)}&rel=${encodeURIComponent(rel)}" title="tiled 3×3 (click to inspect)">
       <div class="btns"><button data-a="star" class="${starred.includes(rel) ? "on" : ""}" title="keep for comparing">${starred.includes(rel) ? "★" : "☆"}</button>
         <button data-a="use" class="${rel === active ? "on" : ""}">${rel === active ? "✓ Active master" : "Use as master"}</button>
         <button data-a="drop" class="danger" title="archive">✕</button></div>
       <div class="trials">${(trials[rel] || []).map(t => `<img src="/api/dun/img?set=${SET}&rel=${encodeURIComponent(t.rel)}" title="${esc(t.variation)}">`).join("")}</div>
     </div>`).join("") + `</div>`).join("") : `<div class="hint">No masters yet: write a prompt version or two and hit Generate masters.</div>`;
-  document.querySelectorAll(".famcard").forEach(card => {
+  const masterList = [...document.querySelectorAll(".famcard")].map(c => ({pid: FAM, rel: c.dataset.rel, kind: "master"}));
+  document.querySelectorAll(".famcard").forEach((card, ci) => {
     const rel = card.dataset.rel;
-    card.querySelector(".seam").onclick = e => zoom(e.target.src);
-    card.querySelectorAll(".trials img").forEach(i => i.onclick = () => zoom(i.src));
+    card.querySelector(".seam").onclick = () => openImage(masterList, ci);
+    const tl = (trials[rel] || []).map(t => ({pid: FAM, rel: t.rel, kind: "trial", variation: t.variation, from: rel}));
+    card.querySelectorAll(".trials img").forEach((i, ti) => i.onclick = () => openImage(tl, ti));
     card.querySelectorAll("button").forEach(b => b.onclick = async () => {
       try {
         if (b.dataset.a === "star") D.state.pieces[FAM] = (await post("star", {piece: FAM, rel, on: !(pstate(FAM).starred || []).includes(rel)})).piece;
@@ -417,7 +458,7 @@ function renderFamily() {
   const f = famSet();
   $("#familyView").innerHTML = `
     <h2 style="margin-top:0">${esc(FAM)} <span class="hint">· floor family: one seamless master, variants repainted from it (they share its edges)</span></h2>
-    <h3>1 · Masters <span class="hint">prompt versions × seeds, judged tiled 3×3. ★ the keepers, then Use as master.</span></h3>
+    <h3>1 · Masters <span class="hint">prompt versions × seeds, judged tiled 3×3. Click a master to inspect, ★, use, edit or rescale it.</span></h3>
     <div id="famPrompts"></div>
     <div class="gbar"><button id="famAddVer">+ prompt version</button>
       <label>seeds each<input id="famSeeds" type="number" value="2" min="1" max="8" style="width:52px"></label>
@@ -426,18 +467,12 @@ function renderFamily() {
     <div id="famMasters"></div>
     <div class="gbar"><label style="flex:1">variation test<input id="famTrialText" value="${esc((f.variations[0] || {}).text || "")}" style="width:100%"></label>
       <button id="famTrialBtn" title="A quick 1×1 repaint of this variation from every ★ master, to see how each takes variations">Test on ★ masters</button></div>
-    <h3>2 · Variations <span class="hint">each row is repainted from the active master at every ticked size. Click an image to approve, double-click to zoom.</span></h3>
+    <h3>2 · Variations <span class="hint">each row is repainted from the active master at every ticked size. Click an image to inspect, approve or edit it.</span></h3>
     <div id="famMatrix"></div>
     <div class="gbar"><button id="famAddVar">+ variation</button>
       <label>per cell<input id="famN" type="number" value="1" min="1" max="6" style="width:52px"></label>
       <button id="famGenAll" class="primary">Generate all</button>
-      <span class="hint">▶ on a row = that variation at every ticked size · ▶ on a column = that size for every variation</span></div>
-    <h3>3 · Preview <span class="hint">the approved family laid out by the game's planner, cut and filtered like the Unity export</span></h3>
-    <div class="gbar">board<input id="famW" type="number" value="16" min="4" max="48" style="width:52px">×<input id="famH" type="number" value="12" min="4" max="48" style="width:52px">
-      <label><input id="famOutline" type="checkbox" style="width:auto"> block outlines</label>
-      <button id="famReroll">↻ re-roll</button><button id="famFit">fit</button><button id="famFull">⛶ full screen</button>
-      <span class="hint">drag to pan · wheel to zoom · double-click to fit</span></div>
-    <div id="famStage" class="famstage"><canvas id="famCanvas"></canvas><div class="famhint" id="famStageMsg"></div></div>`;
+      <span class="hint">▶ on a row = that variation at every ticked size · ▶ on a column = that size for every variation</span></div>`;
   renderFamPrompts();
   $("#famAddVer").onclick = () => { famSet().prompts.push(famSet().prompts[famSet().prompts.length - 1] || ""); renderFamPrompts(); saveFamily(); };
   $("#famGenMasters").onclick = generateMasters;
@@ -445,18 +480,12 @@ function renderFamily() {
   $("#famAddVar").onclick = () => { famSet().variations.push({id: "v" + Date.now().toString(36), text: ""}); renderFamMatrix(); saveFamily();
     const ins = document.querySelectorAll("#famMatrix .vtext"); ins[ins.length - 1]?.focus(); };
   $("#famGenAll").onclick = () => generateVariants(null, null);
-  $("#famOutline").onchange = drawFam;
-  $("#famReroll").onclick = () => { FAMSEED = rnd(); loadFamLayout(true); };
-  $("#famW").onchange = $("#famH").onchange = () => loadFamLayout(false);
-  $("#famFit").onclick = () => { fitFam(); drawFam(); };
-  $("#famFull").onclick = () => { $("#famStage").classList.toggle("full"); fitFam(); drawFam(); };
-  setupFamCanvas();
   renderFamilyDynamic(false);
 }
 
 function renderFamilyDynamic(keepView = true) {
   if (VIEW !== "family" || !famInfo() || !$("#famMasters")) return;
-  renderFamMasters(); renderFamMatrix(); loadFamLayout(keepView);
+  setupFamCanvas(); renderFamMasters(); renderFamMatrix(); loadFamLayout(keepView);
 }
 
 // Variations × sizes. Candidates are matched to a row by meta.variation (older ones without it: "untagged").
@@ -500,15 +529,8 @@ function renderFamMatrix() {
     w.oninput = () => w.nextElementSibling.textContent = w.value + "%";
     w.onchange = () => { famSet().weights[+w.dataset.n] = +w.value; saveFamily().then(() => loadFamLayout(true)); };
   });
-  document.querySelectorAll("#famMatrix .mcell img").forEach(el => {
-    let t = null;
-    el.onclick = () => { clearTimeout(t); t = setTimeout(async () => {
-      const pid = el.dataset.pid, rel = el.dataset.rel, on = !pstate(pid).approved.includes(rel);
-      try { D.state.pieces[pid] = (await post("approve", {piece: pid, rel, on})).piece; renderFamMatrix(); renderList(); loadFamLayout(true); }
-      catch (e) { famMsg(e.message); }
-    }, 220); };
-    el.ondblclick = () => { clearTimeout(t); zoom(el.src); };
-  });
+  const cellList = [...document.querySelectorAll("#famMatrix .mcell img")].map(el => ({pid: el.dataset.pid, rel: el.dataset.rel, kind: "variant"}));
+  document.querySelectorAll("#famMatrix .mcell img").forEach((el, i) => el.onclick = () => openImage(cellList, i));
 }
 
 async function generateVariants(varIds, sizes) {
@@ -528,6 +550,80 @@ async function saveFamily() {
   try { D.spec = (await post("piece/save", {piece: {...m, prompt: f.prompts[0] || m.prompt, family}})).spec; }
   catch (e) { famMsg(e.message); }
 }
+
+// ---- image panel: inspect one family image; approve / use, star, archive, edit (repaint), rescale (masters).
+let IMG = null;  // {list: [{pid, rel, kind}], i, view}
+function openImage(list, i) { IMG = {list, i, view: IMG?.view || "tiled"}; $("#imgPanel").classList.remove("hidden"); renderImage(); }
+function closeImage() { IMG = null; $("#imgPanel").classList.add("hidden"); }
+function stepImage(d) { if (!IMG) return; IMG.i = (IMG.i + d + IMG.list.length) % IMG.list.length; renderImage(); }
+
+function renderImage() {
+  const it = IMG.list[IMG.i], p = piece(it.pid), s = pstate(it.pid), meta = it.kind === "trial" ? {} : (s.meta || {})[it.rel] || {};
+  const master = it.kind === "master", trial = it.kind === "trial", active = pstate(FAM).approved[0];
+  const varText = (famSet().variations.find(v => v.id === meta.variation) || {}).text;
+  const n = p ? atlas_n_js(p) : 1;
+  const views = trial ? [["image", "image"], ["game", "in game"]] : [["tiled", master ? "tiled 3×3" : "among master tiles"], ["image", "image"], ["game", "in game"]];
+  if (!views.some(v => v[0] === IMG.view)) IMG.view = views[0][0];
+  const src = IMG.view === "image" ? `/api/dun/img?set=${SET}&rel=${encodeURIComponent(it.rel)}`
+    : IMG.view === "tiled" ? `/api/dun/seam?set=${SET}&piece=${encodeURIComponent(it.pid)}&rel=${encodeURIComponent(it.rel)}`
+    : natUrl(it.pid, it.rel, OUT(), D.spec.pixel ? viewScale() : 1);
+  $("#ipTitle").textContent = trial ? `variation test · ${it.variation}` : master ? `master · ${it.pid}` : `${n}×${n} · ${varText || "untagged"}`;
+  $("#ipCount").textContent = `${IMG.i + 1} / ${IMG.list.length}`;
+  $("#ipTabs").innerHTML = views.map(([k, l]) => `<button data-v="${k}" class="${IMG.view === k ? "on" : ""}">${l}</button>`).join("");
+  $("#ipTabs").querySelectorAll("button").forEach(b => b.onclick = () => { IMG.view = b.dataset.v; renderImage(); });
+  $("#ipImg").src = src; $("#ipImg").classList.toggle("px", IMG.view === "game" && !!D.spec.pixel);
+  const on = master ? it.rel === active : s.approved.includes(it.rel), stale = !master && !trial && meta.master !== active;
+  const rows = [["piece", it.pid], ["prompt", meta.prompt || ""], ["seed", meta.seed ?? ""], ["strength", meta.denoise ?? ""],
+    ["made from", meta.edited_from ? `edit of ${meta.edited_from.split("/").pop()}` : meta.rescaled_from ? `×${meta.scale} of ${meta.rescaled_from.split("/").pop()}` : ""],
+    ["file", it.rel.split("/").pop()]].filter(r => r[1] !== "");
+  $("#ipSide").innerHTML = `
+    ${stale ? `<div class="stale">STALE: made from another master. Its edges won't match the active master.</div>` : ""}
+    <table>${rows.map(([k, v]) => `<tr><td>${k}</td><td>${esc(v)}</td></tr>`).join("")}</table>
+    ${trial ? `<div class="hint">A variation test: not part of the family. Make it a variant by adding the variation and generating its row.</div>` : `
+    <div class="row">${master
+      ? `<button id="ipUse" class="${on ? "on" : "primary"}">${on ? "✓ Active master" : "Use as master"}</button><button id="ipStar">${(s.starred || []).includes(it.rel) ? "★ Starred" : "☆ Star"}</button>`
+      : `<button id="ipApprove" class="${on ? "on" : "primary"}">${on ? "✓ Approved (unapprove)" : "Approve"}</button>`}
+      <button id="ipArchive" class="danger">Archive</button></div>
+    <h3>Edit</h3>
+    <div class="hint">Repaint this image's interior from itself (its edges stay, so it still fits the family). The result is a new image next to this one.</div>
+    <textarea id="ipPrompt" rows="3">${esc(meta.prompt || (p && p.prompt) || "")}</textarea>
+    <div class="row"><label>strength<input id="ipDen" type="range" min="0.2" max="1" step="0.05" value="0.5" style="width:120px"></label><span class="badge" id="ipDenLbl">0.50</span>
+      <button id="ipEdit" class="primary">Repaint</button></div>
+    ${master ? `<h3>Rescale</h3><div class="hint">Change the texture scale (stone size) as a new master. ×½ / ×⅓ are exact repeats; the others are resampled and made seamless again.</div>
+      <div class="row">${[[1 / 3, "×⅓"], [0.5, "×½"], [0.75, "×¾"], [1.5, "×1.5"], [2, "×2"]].map(([f, l]) => `<button data-f="${f}" class="ipScale">${l}</button>`).join("")}</div>
+      <label><input id="ipRedetail" type="checkbox" checked style="width:auto"> re-detail upscales (light repaint)</label>` : ""}`}
+    <div class="hint" id="ipMsg"></div>`;
+  const msg = t => $("#ipMsg").textContent = t;
+  const refresh = () => { renderFamilyDynamic(true); renderList(); renderImage(); };
+  if ($("#ipApprove")) $("#ipApprove").onclick = async () => { try { D.state.pieces[it.pid] = (await post("approve", {piece: it.pid, rel: it.rel, on: !on})).piece; refresh(); } catch (e) { msg(e.message); } };
+  if ($("#ipUse")) $("#ipUse").onclick = async () => { if (on) return; try { D.state.pieces[FAM] = (await post("promote", {piece: FAM, rel: it.rel})).piece; await load(); renderImage(); } catch (e) { msg(e.message); } };
+  if ($("#ipStar")) $("#ipStar").onclick = async () => { try { D.state.pieces[FAM] = (await post("star", {piece: FAM, rel: it.rel, on: !(s.starred || []).includes(it.rel)})).piece; refresh(); } catch (e) { msg(e.message); } };
+  if ($("#ipArchive")) $("#ipArchive").onclick = async () => {
+    try {
+      D.state.pieces[it.pid] = (await post("discard", {piece: it.pid, rel: it.rel})).piece;
+      IMG.list.splice(IMG.i, 1); renderFamilyDynamic(true); renderList();
+      if (!IMG.list.length) return closeImage();
+      IMG.i = Math.min(IMG.i, IMG.list.length - 1); renderImage();
+    } catch (e) { msg(e.message); }
+  };
+  if ($("#ipDen")) $("#ipDen").oninput = () => $("#ipDenLbl").textContent = (+$("#ipDen").value).toFixed(2);
+  if ($("#ipEdit")) $("#ipEdit").onclick = async () => {
+    try { await post("edit", {piece: it.pid, rel: it.rel, prompt: $("#ipPrompt").value, denoise: +$("#ipDen").value, seed: rnd()}); msg("Queued: the repaint appears next to this image."); pollJobs(); }
+    catch (e) { msg(e.message); }
+  };
+  document.querySelectorAll(".ipScale").forEach(b => b.onclick = async () => {
+    try { await post("rescale", {piece: it.pid, rel: it.rel, factor: +b.dataset.f, redetail: $("#ipRedetail").checked, seed: rnd()}); msg(`Queued: ${b.textContent} appears as a new master.`); pollJobs(); }
+    catch (e) { msg(e.message); }
+  });
+}
+const atlas_n_js = p => p.method === "atlas" ? (p.atlas || 4) : p.method === "repaint" ? (p.atlas || 1) : 1;
+$("#ipClose").onclick = closeImage; $("#ipPrev").onclick = () => stepImage(-1); $("#ipNext").onclick = () => stepImage(1);
+$("#imgPanel").onclick = e => { if (e.target.id === "imgPanel") closeImage(); };
+document.addEventListener("keydown", e => {
+  if (!IMG || /TEXTAREA|INPUT/.test(document.activeElement.tagName)) return;
+  if (e.key === "Escape") closeImage(); else if (e.key === "ArrowLeft") stepImage(-1); else if (e.key === "ArrowRight") stepImage(1);
+  else if (e.key === "a" && $("#ipApprove")) $("#ipApprove").click();
+});
 
 // ---- live preview: the planner's layout drawn with the cut sprites (what the Unity export ships), pan + zoom.
 const PV = {scale: 1, ox: 0, oy: 0, data: null, imgs: {}, fitted: false, raf: 0};
@@ -585,6 +681,7 @@ function drawFam() {
     const [sx, sy] = at(c.x, c.y);
     ctx.drawImage(im, sx - t / 2, sy, t, im.naturalHeight * t / im.naturalWidth);
   }
+  if ($("#famGuides").checked) drawGuides(ctx, t, at);
   if ($("#famOutline") && $("#famOutline").checked) {
     const colour = {1: "#ffffff", 2: "#5ac8ff", 3: "#ffc83c", 4: "#ff5a78"}, seen = new Set();
     ctx.lineWidth = 2 / PV.scale;
@@ -595,6 +692,33 @@ function drawFam() {
       ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.stroke();
     }
     ctx.globalAlpha = 1;
+  }
+}
+
+// Scale guides: hero figures (height in units: 1 unit = half a tile width; walls 3, doors 2) and a 1-tile block at wall
+// height, drawn in the same iso projection, to judge how big the texture reads.
+const WALL_UNITS = 3;  // Eric 2026-10-12: walls 3 units (2 heroes), doors 2, hero 1.5
+function drawGuides(ctx, t, at) {
+  const W = PV.data.W, H = PV.data.H, unit = t / 2, hero = Math.max(0.3, +$("#famHero").value || 1.5);
+  const holes = new Set(PV.data.holes.map(([x, y]) => `${x},${y}`)), free = (x, y) => !holes.has(`${x},${y}`);
+  const label = (txt, x, y) => { ctx.font = `${Math.round(t * 0.13)}px sans-serif`; ctx.textAlign = "center"; ctx.lineWidth = t * 0.03;
+    ctx.strokeStyle = "rgba(0,0,0,.85)"; ctx.strokeText(txt, x, y); ctx.fillStyle = "#fff"; ctx.fillText(txt, x, y); };
+  // block: 1 x 1 tile, wall height (3 units)
+  const bx = 1, by = 1, h = WALL_UNITS * unit, up = ([x, y]) => [x, y - h];
+  const A = at(bx, by), B = at(bx + 1, by), C = at(bx + 1, by + 1), E = at(bx, by + 1);
+  const face = (pts, fill) => { ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath();
+    ctx.fillStyle = fill; ctx.fill(); ctx.lineWidth = t * 0.012; ctx.strokeStyle = "rgba(10,8,14,.9)"; ctx.stroke(); };
+  face([E, C, up(C), up(E)], "rgba(110,124,150,.92)"); face([C, B, up(B), up(C)], "rgba(84,96,120,.92)"); face([up(A), up(B), up(C), up(E)], "rgba(150,164,190,.92)");
+  label(`1 tile · wall ${WALL_UNITS}u`, up(A)[0], up(A)[1] - t * 0.06);
+  // heroes: a simple figure on its cell centre
+  for (const [x, y] of [[Math.floor(W / 2), Math.floor(H / 2)], [3, H - 3], [W - 3, 3]]) {
+    if (!free(x, y)) continue;
+    const [cx, cy] = at(x + 0.5, y + 0.5), hp = hero * unit, bw = t * 0.17;
+    ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.beginPath(); ctx.ellipse(cx, cy, t * 0.16, t * 0.08, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#c9a15a"; ctx.strokeStyle = "rgba(20,14,8,.95)"; ctx.lineWidth = t * 0.012;
+    ctx.beginPath(); ctx.roundRect(cx - bw / 2, cy - hp * 0.8, bw, hp * 0.8, bw * 0.45); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy - hp * 0.89, hp * 0.11, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    label(`hero ${hero}u`, cx, cy - hp - t * 0.05);
   }
 }
 
@@ -612,6 +736,14 @@ function setupFamCanvas() {
   cv.ondblclick = () => { fitFam(); drawFam(); };
   if (PV.bound) return;  // page-level listeners once
   PV.bound = true;
+  try { $("#famHero").value = localStorage.getItem("dun.hero") || 1.5; } catch {}
+  $("#famHero").onchange = () => { try { localStorage.setItem("dun.hero", $("#famHero").value); } catch {} drawFam(); };
+  $("#famGuides").onchange = $("#famOutline").onchange = drawFam;
+  $("#famReroll").onclick = () => { FAMSEED = rnd(); loadFamLayout(true); };
+  $("#famW").onchange = $("#famH").onchange = () => loadFamLayout(false);
+  $("#famFit").onclick = () => { fitFam(); drawFam(); };
+  $("#famFull").onclick = () => { $("#famStage").classList.toggle("full"); fitFam(); drawFam(); };
+  $("#famExport").onclick = () => $("#exportBtn").click();
   window.addEventListener("resize", scheduleFamDraw);
   document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#famStage")?.classList.contains("full")) { $("#famStage").classList.remove("full"); fitFam(); drawFam(); } });
 }
@@ -703,14 +835,20 @@ async function generateGroup() {
   } catch (e) { $("#gMsg").textContent = e.message; }
 }
 
-function setView(v) {
-  VIEW = v;
+// Which panels show for the current VIEW (middle column views, and the right column: room or family preview).
+function applyChrome() {
+  const v = VIEW, fam = v === "family";
   $("#pieceView").classList.toggle("hidden", v !== "pieces");
   $("#groupView").classList.toggle("hidden", v !== "group");
-  $("#familyView").classList.toggle("hidden", v !== "family");
+  $("#familyView").classList.toggle("hidden", !fam);
   $("#styleView").classList.toggle("hidden", v !== "style");
   $("#addView").classList.toggle("hidden", v !== "add");
   $("#tabPieces").classList.toggle("on", v !== "style"); $("#tabStyle").classList.toggle("on", v === "style");
+  document.body.classList.toggle("famview", fam);
+  $("#famPanel").classList.toggle("hidden", !fam); $("#roomPanel").classList.toggle("hidden", fam);
+}
+function setView(v) {
+  VIEW = v; applyChrome();
   renderList(); renderCenter();
 }
 
@@ -952,14 +1090,14 @@ document.querySelectorAll("[data-blank]").forEach(b => b.onclick = () => {
   const wall = (D.spec.pieces.find(q => q.kind === "tile" && (q.shape === "run" && !q.opening && (q.length || 1) === 1 || q.shape === "wall") && !q.retired) || {}).id;
   const t = {prop: {id: "prop.new", kind: "prop", footprint: 0.5, prompt: "an old wooden ..."},
              floor: {id: `tile.${SET}_floor_new`, kind: "tile", shape: "floor", variants: 2, prompt: "flagstones ..."},
-             wall: {id: `tile.${SET}_wall_run_new`, board: `tile.${SET}_wall`, kind: "tile", shape: "run", length: 3, height: 2, thickness: 0.25, variants: 2, prompt: "a thin wall of ..."},
-             door: {id: `tile.${SET}_door_new`, board: `tile.${SET}_door`, kind: "tile", shape: "run", opening: "door", length: 1, height: 2, thickness: 0.25, prompt: "a thin stone wall with ... door set into it"},
-             arch: {id: `tile.${SET}_arch_new`, board: `tile.${SET}_arch`, kind: "tile", shape: "mesh", mesh: "archway", length: 1, height: 2, thickness: 0.25, prompt: "a thin wall with an open stone archway ..."},
+             wall: {id: `tile.${SET}_wall_run_new`, board: `tile.${SET}_wall`, kind: "tile", shape: "run", length: 3, height: WALL_UNITS, thickness: 0.25, variants: 2, prompt: "a thin wall of ..."},
+             door: {id: `tile.${SET}_door_new`, board: `tile.${SET}_door`, kind: "tile", shape: "run", opening: "door", length: 1, height: WALL_UNITS, door_height: 2, thickness: 0.25, prompt: "a thin stone wall with ... door set into it"},
+             arch: {id: `tile.${SET}_arch_new`, board: `tile.${SET}_arch`, kind: "tile", shape: "mesh", mesh: "archway", length: 1, height: WALL_UNITS, thickness: 0.25, prompt: "a thin wall with an open stone archway ..."},
              area: {id: `tile.${SET}_floor_area_new`, board: `tile.${SET}_floor`, kind: "tile", shape: "floor", method: "atlas", atlas: 4, variants: 2, prompt: "flagstones ..."},
-             decor: {id: `tile.${SET}_wall_decor`, kind: "wall_decor", shape: "wall", height: 2, of: wall, prompt: "the same stone wall block with ... on the front faces"},
+             decor: {id: `tile.${SET}_wall_decor`, kind: "wall_decor", shape: "wall", height: WALL_UNITS, of: wall, prompt: "the same stone wall block with ... on the front faces"},
              master: {id: `tile.${SET}_floor_master`, board: floorBoard, kind: "tile", shape: "floor", method: "master", variants: 1, prompt: "cracked grey flagstones with dark mortar lines"},
              variant: {id: `tile.${SET}_floor_var`, board: floorBoard, kind: "tile", shape: "floor", method: "repaint", from: master, atlas: 1, variants: 2, prompt: "cracked grey flagstones, one with a large crack and moss in the joints"},
-             pillar: {id: `tile.${SET}_pillar_new`, kind: "tile", shape: "pillar", height: 1.5, prompt: "a carved stone pillar ..."}}[b.dataset.blank];
+             pillar: {id: `tile.${SET}_pillar_new`, kind: "tile", shape: "pillar", height: WALL_UNITS, prompt: "a carved stone pillar ..."}}[b.dataset.blank];
   addPiece(t);
 });
 
@@ -1062,7 +1200,7 @@ async function pollJobs() {
   for (const j of JOBS) {
     if ((j.status === "done" || j.status === "failed") && !seenDone.has(j.id)) {
       seenDone.add(j.id);
-      if (j.kind === "dun" || j.kind === "dun_trial") reload = true;
+      if (["dun", "dun_trial", "dun_edit", "dun_rescale"].includes(j.kind)) reload = true;
       if (j.kind === "dun_capture") { caps = true; if (j.error) $("#exportHint").textContent = j.error; }
     }
   }

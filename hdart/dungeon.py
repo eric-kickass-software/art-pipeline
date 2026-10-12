@@ -1298,6 +1298,76 @@ def _runs(cells, along_x, lengths):
                 i += L
     return out
 
+
+# ----------------------------------------------------------------------------- editing candidates (image panel)
+
+def _new_candidate(name, pid, img, meta, tag):
+    """Save an image as a new candidate of a piece (full mask), with its meta, at the top of the list."""
+    out = set_dir(name) / "candidates" / pid
+    out.mkdir(parents=True, exist_ok=True)
+    f = out / f"{tag}_{time.time_ns() // 1000000}.png"
+    img.save(f)
+    np.save(f.with_suffix(".npy"), np.ones(img.size[::-1], bool))
+    rel = str(f.relative_to(set_dir(name))).replace("\\", "/")
+    with LOCK:
+        s = state(name)
+        ps = s["pieces"].setdefault(pid, {"candidates": [], "approved": []})
+        ps["candidates"].insert(0, rel)
+        ps.setdefault("meta", {})[rel] = meta
+        save_state(name, s)
+    return rel
+
+
+def edit_candidate(name, pid, rel, prompt, denoise=0.5, seed=1):
+    """Repaint a master or variant from itself (not from the master): its kept border stays exactly, so a variant
+    still fits the family and a master still tiles. `prompt` = the full prompt to repaint with (the panel pre-fills
+    the image's own). Saved as a new candidate with the same variation/master tags."""
+    spec = load_set(name)
+    piece = resolved(spec, pid)
+    if piece.get("method") not in ("master", "repaint"):
+        raise ValueError("edit works on floor family images (masters and variants)")
+    old = state(name)["pieces"].get(pid, {}).get("meta", {}).get(rel, {})
+    img = Image.open(set_dir(name) / rel).convert("RGB")
+    N = atlas_n(piece)
+    per = img.width // N
+    text = prompt.strip() or old.get("prompt", piece.get("prompt", ""))
+    out = repaint(img, block_mask(N, per, float(piece.get("border", 0.08))), floor_texture_prompt(set_style(spec), text),
+                  seed, denoise=float(denoise), reference=False)
+    meta = {**{k: v for k, v in old.items() if k in ("variation", "master")}, "seed": seed, "prompt": text,
+            "denoise": float(denoise), "edited_from": rel}
+    return _new_candidate(name, pid, out, meta, f"e{seed}")
+
+
+def rescale_master(name, pid, rel, factor, redetail=False, seed=1):
+    """A master candidate at another texture scale (factor < 1 = smaller stones, > 1 = bigger), as a new candidate.
+    1/factor an integer: the tile repeated and shrunk, exactly seamless. Otherwise: resampled from a 3x3 tiling and
+    made seamless again. `redetail` repaints the whole tile lightly (0.35) first, to sharpen an upscale."""
+    spec = load_set(name)
+    piece = resolved(spec, pid)
+    if piece.get("method") != "master":
+        raise ValueError("rescale works on master tiles (variants are repainted from the master)")
+    factor = float(factor)
+    if not 0.2 <= factor <= 4:
+        raise ValueError("scale factor: 0.2 to 4")
+    old = state(name)["pieces"].get(pid, {}).get("meta", {}).get(rel, {})
+    prompt = old.get("prompt", piece.get("prompt", ""))
+    full = floor_texture_prompt(set_style(spec), prompt)
+    S = MASTER_PX
+    src = np.asarray(Image.open(set_dir(name) / rel).convert("RGB").resize((S, S), Image.LANCZOS))
+    k = round(1 / factor)
+    if factor < 1 and abs(1 / factor - k) < 1e-6:
+        out = Image.fromarray(np.tile(src, (k, k, 1))).resize((S, S), Image.LANCZOS)
+    else:
+        big = Image.fromarray(np.tile(src, (3, 3, 1)))  # 3S x 3S
+        side, c = S / factor, 1.5 * S                    # source px that become one tile, around the centre
+        out = big.crop((round(c - side / 2), round(c - side / 2), round(c + side / 2), round(c + side / 2))).resize((S, S), Image.LANCZOS)
+        if redetail:
+            out = repaint(out, np.ones((S, S), np.float32), full, seed, denoise=0.35, reference=True)
+        out = make_seamless(out, full, seed)
+    meta = {"seed": seed, "prompt": prompt, "rescaled_from": rel, "scale": factor, "redetail": bool(redetail)}
+    return _new_candidate(name, pid, out, meta, f"x{factor:g}".replace(".", "_"))
+
+
 # ----------------------------------------------------------------------------- floor families (Studio > family board)
 # A family = one master piece (method "master") + one repaint piece per block size, made from its approved candidate.
 # Settings live on the master piece as `family`: prompt versions for the master shootout, variation phrases, target

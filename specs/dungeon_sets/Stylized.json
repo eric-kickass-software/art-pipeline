@@ -344,25 +344,55 @@
       "method": "master",
       "board": "tile.crypt_floor",
       "variants": 1,
-      "prompt": "flat gray stone tiles, pristine squares with crisp edges and sharp corners, small tiles (64x64); with dark mortar lines",
+      "prompt": "flat pale gray tiles, pristine squares, grid with crisp edges, medium tiles; with dark mortar lines",
       "family": {
         "prompts": [
-          "flat gray stone tiles, pristine squares with crisp edges and sharp corners, small tiles (64x64); with dark mortar lines"
+          "flat pale gray tiles, pristine squares, grid with crisp edges, medium tiles; with dark mortar lines"
         ],
         "variations": [
-          "one large crack running across",
-          "moss growing in the joints",
-          "a few sunken and chipped stones",
-          "a shallow puddle",
-          "scattered dust and small rubble",
-          "a worn, smoother patch"
+          {
+            "id": "v1",
+            "text": "one large crack running across"
+          },
+          {
+            "id": "v2",
+            "text": "moss growing in the joints"
+          },
+          {
+            "id": "v3",
+            "text": "a few sunken and chipped stones"
+          },
+          {
+            "id": "v4",
+            "text": "a shallow puddle"
+          },
+          {
+            "id": "v5",
+            "text": "scattered dust and small rubble"
+          },
+          {
+            "id": "v6",
+            "text": "a worn, smoother patch"
+          },
+          {
+            "id": "vmv4zx5fa",
+            "text": "large tiles"
+          },
+          {
+            "id": "vmv4zzovz",
+            "text": "Large roots breaking through the tiles"
+          },
+          {
+            "id": "vmv501qav",
+            "text": "small tiles\n"
+          }
         ],
-        "targets": {
-          "1": 3,
-          "2": 2,
-          "3": 1,
-          "4": 1
-        },
+        "sizes": [
+          1,
+          2,
+          3,
+          4
+        ],
         "weights": {
           "2": 70,
           "3": 70,
@@ -414,5 +444,6 @@
       "variants": 1,
       "prompt": "flat pale blue-gray stone tiles, pristine squares with crisp edges and sharp corners, but a mix of small/medium/large tiles; with dark mortar lines"
     }
-  ]
+  ],
+  "harmonize": 1.0
 }

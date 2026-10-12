@@ -120,6 +120,18 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
     change strength. `dungeon.repaint()` wraps it (upload, run, blend back).
   - Each master/variant candidate card has a **seam check** (master tiled 3×3, or the variant in a ring of master tiles).
   - Timing on the 4080 (model loaded): master ~5 s, 1×1 variant ~3 s, 3×3 block ~11 s. Tests: `tests/test_master.py`.
+- **Layout (2026-10-12):** the sidebar is by area: **Floor families**, **Walls** (walls, doors, pillars, arches,
+  windows: one board), **Older floors** (single pieces made before families). Props and wall decor will get their own
+  Dungeon Forge area (wall decor via decals); until then they're reachable from the add-piece list and keep exporting.
+  On a family the right column is the **live preview** (Output settings on top); elsewhere it's the room preview.
+- **Scale (GDD 5.1):** 1 unit = half a tile width; **walls 3 units, doors 2, hero ~1.5**. New wall/door/arch/pillar
+  pieces default to it (`WALL_UNITS` in the page); existing 2-unit wall art gets redone in the walls workflow.
+  The preview's **scale guides** draw heroes (height adjustable) and a 1-tile block at wall height.
+- **Image panel:** clicking any family image (master card, matrix cell, trial) opens it large: views *tiled 3×3 /
+  among master tiles*, *image*, *in game* (the cut sprite); metadata (prompt, seed, stale, made from); **Approve** or
+  **Use as master** / ★; **Archive**; **Edit** = repaint its interior from itself with a prompt + strength
+  (`edit_candidate`, edges kept, same variation tag); masters also **Rescale** ×⅓ ×½ (exact repeats) ×¾ ×1.5 ×2
+  (resampled + made seamless, optional re-detail) (`rescale_master`). ◀ ▶ / arrow keys, Esc closes.
 - **Floor family board** (piece list → FLOOR FAMILIES → a family, or **+ New floor family**): the master workflow on
   one page. A family = a master piece + one repaint piece per size (`<master>_v<N>`, made on first Fill); its settings
   live on the master as `family` (prompt versions, variation phrases, per-size targets and planner weights).
