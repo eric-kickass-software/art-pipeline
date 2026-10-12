@@ -120,6 +120,18 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
     change strength. `dungeon.repaint()` wraps it (upload, run, blend back).
   - Each master/variant candidate card has a **seam check** (master tiled 3×3, or the variant in a ring of master tiles).
   - Timing on the 4080 (model loaded): master ~5 s, 1×1 variant ~3 s, 3×3 block ~11 s. Tests: `tests/test_master.py`.
+- **Floor family board** (piece list → FLOOR FAMILIES → a family, or **+ New floor family**): the master workflow on
+  one page. A family = a master piece + one repaint piece per size (`<master>_v<N>`, made on first Fill); its settings
+  live on the master as `family` (prompt versions, variation phrases, per-size targets and planner weights).
+  1. **Masters:** prompt versions (A, B, …) × seeds → cards tiled 3×3, grouped by version. ★ to compare,
+     **Use as master** (= the only approved one), ✕ archives. **Variation test** repaints a 1×1 of a phrase from every
+     ★ master (`trial`, saved under `candidates/<master>/trials/`) to see how each master takes variations.
+  2. **Variants:** **Fill** / **Fill family** queues one candidate per missing variant (prompt = the active master's
+     prompt + the next variation phrase). Variants record their master (`meta.master`): switching masters marks the
+     old ones **stale** (dashed); only fresh approvals count toward targets, so Fill replaces them.
+  3. **Preview:** the planner's floor from the approved family (`/api/dun/family`), iso or top-down, outlines, re-roll.
+  Size weights (% of anchors where a size that fits is used, default 70) feed the room preview and the export
+  (`blockWeights` in set.json, read by the game's FloorBlocks).
 - **Group boards:** click a group header in the piece list (FLOORS ▸, WALLS & DOORS ▸, ...) for every piece of that
   group on one page: edit prompts side by side, see all candidates (click = approve/unapprove, double-click = zoom),
   tick pieces and **Generate selected** (random seeds, one job per piece).
