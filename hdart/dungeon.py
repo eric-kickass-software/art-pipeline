@@ -421,8 +421,18 @@ def gen_repaint(name, spec, piece, seed=1, denoise=None, lora=0.0, st=None):
     mask = block_mask(N, per, float(piece.get("border", 0.08)))
     # No reference image: with one FLUX copies the tiled master almost exactly. Starting from it at 0.85 keeps the
     # master's stone scale but redraws the layout; 1.0 = freer (scale may drift), ~0.6 = subtle changes.
-    return repaint(base, mask, floor_texture_prompt(st, piece["prompt"]), seed,
-                   denoise=float(denoise) if denoise else REPAINT_DENOISE, lora=lora, reference=False)
+    out = repaint(base, mask, floor_texture_prompt(st, piece["prompt"]), seed,
+                  denoise=float(denoise) if denoise else REPAINT_DENOISE, lora=lora, reference=False)
+    return lock_palette(spec, piece.get("from"), out, mask, master)
+
+
+def lock_palette(spec, master_id, img, weight, master_img):
+    """Palette lock (family setting, on by default): match a fresh repaint's interior to the master's colours."""
+    m = next((p for p in spec["pieces"] if p["id"] == master_id), None)
+    if not m or not family_settings(m).get("palette_lock", True):
+        return img
+    lab = _to_lab(np.asarray(master_img.convert("RGB")).astype(np.float32).reshape(-1, 3))
+    return match_palette(img, (lab.mean(0), lab.std(0)), weight, 1.0)
 
 
 def warp_floor(src, tile, u0=0.0, u1=1.0, v0=0.0, v1=1.0, rim=0.55):
@@ -728,12 +738,51 @@ def _reference(name, spec, fam):
     return _REF_CACHE[key]
 
 
+def match_palette(img, ref, weight, strength=1.0):
+    """Pull `img`'s colours (CIELAB mean and spread, measured over its interior: weight ~1) toward `ref` = (mean, std),
+    applied per pixel with weight * strength. Weight 0 = untouched, so a floor family image's kept border (the
+    master's exact edges) stays exact and the change fades in with the same soft ramp as the repaint."""
+    a = np.asarray(img.convert("RGB")).astype(np.float32)
+    inner = weight > 0.99
+    if strength <= 0 or inner.sum() < 64:
+        return img
+    lab = _to_lab(a.reshape(-1, 3)).reshape(a.shape)
+    ms, ss = lab[inner].mean(0), lab[inner].std(0)
+    mr, sr = ref
+    fixed = (lab - ms) * np.clip(sr / np.maximum(ss, 1e-3), 0.5, 2.0) + mr
+    w = (np.clip(weight, 0, 1) * strength)[..., None]
+    out = a * (1 - w) + _from_lab(fixed.reshape(-1, 3)).reshape(a.shape) * w
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
+
+
+def image_lab_stats(name, rel, interior=None):
+    """Lab (mean, std) of a candidate (whole image, or where `interior` weight ~1), cached by file."""
+    key = ("lab", name, rel, None if interior is None else interior.shape)
+    if key not in _REF_CACHE:
+        a = np.asarray(Image.open(set_dir(name) / rel).convert("RGB")).astype(np.float32)
+        px = a[interior > 0.99] if interior is not None else a.reshape(-1, 3)
+        lab = _to_lab(px)
+        _REF_CACHE[key] = (lab.mean(0), lab.std(0))
+    return _REF_CACHE[key]
+
+
+def family_weight(piece, size):
+    """The repaint mask of a family image (0 on the kept border, ramping to 1 inside), for an image of `size` px."""
+    N = atlas_n(piece)
+    return block_mask(N, size // N, float(piece.get("border", 0.08)))
+
+
 def harmonize(name, spec, piece, img, mask):
-    """`img` with its colours pulled toward the family reference by the set's `harmonize` strength."""
+    """`img` with its colours pulled toward a reference by the set's `harmonize` strength. Floor family variants:
+    only the interior, toward the active master's palette (their edges are the master's and must stay exact);
+    masters are the palette, unchanged. Other pieces: the whole image toward their family's approved images."""
     k = float(spec.get("harmonize") or 0)
     fam = family(piece)
-    if k <= 0 or fam is None:
+    if k <= 0 or fam is None or piece.get("method") == "master":
         return img
+    if piece.get("method") == "repaint":
+        mrel = master_rel(name, piece.get("from"))
+        return match_palette(img, image_lab_stats(name, mrel), family_weight(piece, img.width), k) if mrel else img
     ref = _reference(name, spec, fam)
     rgb = np.asarray(img).copy()
     paint = _paint_mask(img, mask)
@@ -1331,8 +1380,14 @@ def edit_candidate(name, pid, rel, prompt, denoise=0.5, seed=1):
     N = atlas_n(piece)
     per = img.width // N
     text = prompt.strip() or old.get("prompt", piece.get("prompt", ""))
-    out = repaint(img, block_mask(N, per, float(piece.get("border", 0.08))), floor_texture_prompt(set_style(spec), text),
-                  seed, denoise=float(denoise), reference=False)
+    weight = block_mask(N, per, float(piece.get("border", 0.08)))
+    out = repaint(img, weight, floor_texture_prompt(set_style(spec), text), seed, denoise=float(denoise), reference=False)
+    # palette lock: a variant toward the active master, a master toward itself (an edit shouldn't shift its palette)
+    mid = piece["id"] if piece.get("method") == "master" else piece.get("from")
+    mrel = rel if piece.get("method") == "master" else master_rel(name, mid)
+    if mrel:
+        with Image.open(set_dir(name) / mrel) as mi:
+            out = lock_palette(spec, mid, out, weight, mi)
     meta = {**{k: v for k, v in old.items() if k in ("variation", "master")}, "seed": seed, "prompt": text,
             "denoise": float(denoise), "edited_from": rel}
     return _new_candidate(name, pid, out, meta, f"e{seed}")
@@ -1386,6 +1441,7 @@ def family_settings(master):
     # entries {id, text}: the id tags the candidates made from it (meta.variation), so renaming keeps them together
     f["variations"] = [v if isinstance(v, dict) else {"id": f"v{i + 1}", "text": v} for i, v in enumerate(f["variations"])]
     f["sizes"] = [int(n) for n in f.get("sizes", FAMILY_SIZES)]
+    f["palette_lock"] = bool(f.get("palette_lock", True))
     f["targets"] = {str(n): int(v) for n, v in {"1": 3, "2": 2, "3": 1, "4": 1, **f.get("targets", {})}.items()}
     f["weights"] = {str(n): int(v) for n, v in {"2": DEFAULT_WEIGHT, "3": DEFAULT_WEIGHT, "4": DEFAULT_WEIGHT,
                                                 **f.get("weights", {})}.items()}
@@ -1464,8 +1520,10 @@ def trial(name, master_id, rel, variation, seed=1):
     meta = state(name)["pieces"].get(master_id, {}).get("meta", {}).get(rel, {})
     material = meta.get("prompt") or master.get("prompt", "")
     base = Image.open(set_dir(name) / rel).convert("RGB").resize((MASTER_PX, MASTER_PX), Image.LANCZOS)
-    img = repaint(base, block_mask(1, MASTER_PX, 0.08), floor_texture_prompt(set_style(spec), variant_prompt(material, variation)),
+    weight = block_mask(1, MASTER_PX, 0.08)
+    img = repaint(base, weight, floor_texture_prompt(set_style(spec), variant_prompt(material, variation)),
                   seed, denoise=REPAINT_DENOISE, reference=False)
+    img = lock_palette(spec, master_id, img, weight, base)
     out = set_dir(name) / "candidates" / master_id / "trials"
     out.mkdir(parents=True, exist_ok=True)
     f = out / f"t{seed}_{int(time.time())}.png"
@@ -1505,6 +1563,31 @@ def variant_jobs(name, master_id, var_ids=None, sizes=None, n=1):
                 jobs.append({"set": name, "piece": pid, "n": 1, "seed": random.randint(1, 99999),
                              "prompt": variant_prompt(material, v["text"]), "variation": v["id"]})
     return jobs
+
+
+def family_palette(name, master_id):
+    """Colour of every image in the family (interior mean) and its distance from the active master (CIE76 ΔE: ~2 is
+    barely visible, 5+ obvious, 10+ a different colour), so drifting variants stand out."""
+    spec = load_set(name)
+    mrel = master_rel(name, master_id)
+    if not mrel:
+        return {"master": None, "items": []}
+    to_rgb = lambda lab: "#%02x%02x%02x" % tuple(int(v) for v in _from_lab(np.asarray(lab, np.float32)[None])[0])
+    mm = image_lab_stats(name, mrel)[0]
+    s = state(name)["pieces"]
+    items = []
+    for N, p in family_pieces(spec, master_id).items():
+        ps = s.get(p["id"], {})
+        for rel in ps.get("candidates", []):
+            with Image.open(set_dir(name) / rel) as im:
+                size = im.width
+            mean = image_lab_stats(name, rel, family_weight(p, size))[0]
+            meta = ps.get("meta", {}).get(rel, {})
+            items.append({"piece": p["id"], "rel": rel, "n": N, "rgb": to_rgb(mean), "dE": round(float(np.linalg.norm(mean - mm)), 1),
+                          "approved": rel in ps.get("approved", []), "variation": meta.get("variation"),
+                          "stale": meta.get("master") != mrel})
+    items.sort(key=lambda it: -it["dE"])
+    return {"master": {"rel": mrel, "rgb": to_rgb(mm)}, "items": items}
 
 
 def family_layout(name, master_id, seed=0, W=16, H=12):

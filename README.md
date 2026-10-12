@@ -154,6 +154,13 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
 - **Style editing in place:** the piece editor and the group boards have an "Edit the shared style" box with just the
   fields that kind of piece uses (floors: medium/style/rendering/biome; walls: all six; props: the prop fields).
   Prompt previews update as you type; saves (there and on the Style tab) send only fields that changed.
+- **Floor family palette:** variants share the master's edges, so a whole-image colour shift would break them.
+  For families everything is interior-only and toward the **master** (`match_palette`, weighted by the repaint mask:
+  the kept border never changes): **palette lock** (family setting, on by default) matches each fresh repaint, edit
+  and trial right after generation; **Harmonize** on a family pulls existing variants' interiors (masters unchanged:
+  they are the palette). The board's **Palette** section shows a colour chip per image with its dE from the master
+  (`family_palette`), worst first. Measured on `zz_master`: unlocked variants median dE 3.5 (max 6.9), locked 0.2.
+  At 100% Harmonize also greys local accents (puddles); 50–70% keeps more of them.
 - **Harmonize** (slider by Pixelate; set field `harmonize`, 0–1): pulls each floor/wall image's CIELAB mean and
   spread toward its family's reference (floors and walls separately; the approved images, or all candidates while
   none are approved). Props are left alone. Like Pixelate it's applied when cutting, so previews, the room and the

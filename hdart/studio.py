@@ -316,6 +316,8 @@ def dungeon_get(path, q):
                                                "style": dg.style(), "set_style": dg.set_style(spec)["groups"]}).encode()
     if path == "sets":
         return "application/json", json.dumps(dg.list_sets()).encode()
+    if path == "family_palette":  # family board: colour drift per image
+        return "application/json", json.dumps(dg.family_palette(name, g("piece"))).encode()
     if path == "family_layout":  # live preview: which sprite goes where
         return "application/json", json.dumps(dg.family_layout(name, g("piece"), int(g("seed", 0)),
                                                                int(g("w", 16)), int(g("h", 12)))).encode()

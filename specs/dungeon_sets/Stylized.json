@@ -356,7 +356,7 @@
           },
           {
             "id": "v2",
-            "text": "moss growing in the joints"
+            "text": "moist moss growing in the mortar and creeping along the tiles, wet moss everywhere\n"
           },
           {
             "id": "v3",
@@ -364,27 +364,27 @@
           },
           {
             "id": "v4",
-            "text": "a shallow puddle"
+            "text": "a shallow puddle, wet, slippery\n"
           },
           {
             "id": "v5",
             "text": "scattered dust and small rubble"
           },
           {
-            "id": "v6",
-            "text": "a worn, smoother patch"
-          },
-          {
             "id": "vmv4zx5fa",
-            "text": "large tiles"
+            "text": "A large tile in the center"
           },
           {
             "id": "vmv4zzovz",
-            "text": "Large roots breaking through the tiles"
+            "text": "thick sprawling roots emerging from under the tiles"
           },
           {
             "id": "vmv501qav",
-            "text": "small tiles\n"
+            "text": "a cluster of small tiles\n\n"
+          },
+          {
+            "id": "vmv51zvj7",
+            "text": "overgrown vines\n"
           }
         ],
         "sizes": [
@@ -445,5 +445,6 @@
       "prompt": "flat pale blue-gray stone tiles, pristine squares with crisp edges and sharp corners, but a mix of small/medium/large tiles; with dark mortar lines"
     }
   ],
-  "harmonize": 1.0
+  "harmonize": 0.1,
+  "pixel": 512
 }

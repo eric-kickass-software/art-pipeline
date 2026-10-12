@@ -82,6 +82,11 @@
   .fammatrix .mcell img.on { border-color:var(--ok); } .fammatrix .mcell.off { opacity:.35; } .fammatrix .none { color:var(--muted); }
   .fammatrix .vact { width:56px; text-align:center; } .fammatrix .vact button { padding:2px 6px; margin:1px; }
   .fammatrix .untagged td { opacity:.75; }
+  .fampal { display:flex; flex-wrap:wrap; gap:4px; }
+  .pchip { width:42px; height:42px; border-radius:5px; border:2px solid transparent; display:flex; align-items:flex-end; justify-content:center; cursor:pointer; }
+  .pchip span { font-size:10px; background:rgba(0,0,0,.55); color:#fff; padding:0 3px; border-radius:3px; margin-bottom:2px; }
+  .pchip.master { width:64px; border-color:var(--accent); cursor:default; } .pchip.on { border-color:var(--ok); }
+  .pchip.stale { opacity:.5; } .pchip.far span { background:#a33; }
   .fampreview { width:100%; border-radius:4px; background:#16121c; cursor:zoom-in; min-height:40px; }
   .gbar { display:flex; gap:6px; align-items:center; flex-wrap:wrap; position:sticky; top:0; background:var(--panel, #1d1924); padding:4px 0; z-index:2; }
   .pitem { display:flex; gap:8px; align-items:center; padding:4px; border-radius:5px; cursor:pointer; border:1px solid transparent; }
@@ -245,7 +250,7 @@
       <span><label class="hint" title="Downsample the generated art for a pixel-art look. Off = full resolution. Used by the candidate previews, this room and the Unity export.">Pixelate
         <input id="r_pixel" type="range" min="0" step="1" style="width:110px;vertical-align:middle"></label>
         <span id="r_pixelLbl" class="badge"></span>
-        <label class="hint" title="Pull every floor and wall image's colours toward the set's approved pieces (floors and walls separately; props untouched). Previews, room and export follow it.">Harmonize
+        <label class="hint" title="Floor families: pull each variant's interior to the master's palette (edges never change). Other pieces: pull colours toward the set's approved pieces. Previews, room and export follow it.">Harmonize
         <input id="r_harm" type="range" min="0" max="1" step="0.1" style="width:80px;vertical-align:middle"></label>
         <span id="r_harmLbl" class="badge"></span></span></div>
     <div id="famPanel" class="hidden">
@@ -472,7 +477,11 @@ function renderFamily() {
     <div class="gbar"><button id="famAddVar">+ variation</button>
       <label>per cell<input id="famN" type="number" value="1" min="1" max="6" style="width:52px"></label>
       <button id="famGenAll" class="primary">Generate all</button>
-      <span class="hint">▶ on a row = that variation at every ticked size · ▶ on a column = that size for every variation</span></div>`;
+      <span class="hint">▶ on a row = that variation at every ticked size · ▶ on a column = that size for every variation</span></div>
+    <h3>Palette <span class="hint">every image's colour (inside its kept border) next to the master's, sorted by distance (dE: ~2 barely visible, 5+ obvious). Click a chip to inspect.</span></h3>
+    <div class="gbar"><label title="Right after a repaint, match its interior to the master's colours (the kept border is never touched)"><input id="famLock" type="checkbox" style="width:auto" ${f.palette_lock ? "checked" : ""}> lock new variants and edits to the master's palette</label>
+      <span class="hint">For existing images, use Harmonize (Output, top right): on a family it pulls variant interiors to the master and never moves the edges.</span></div>
+    <div id="famPalette" class="fampal"></div>`;
   renderFamPrompts();
   $("#famAddVer").onclick = () => { famSet().prompts.push(famSet().prompts[famSet().prompts.length - 1] || ""); renderFamPrompts(); saveFamily(); };
   $("#famGenMasters").onclick = generateMasters;
@@ -480,12 +489,13 @@ function renderFamily() {
   $("#famAddVar").onclick = () => { famSet().variations.push({id: "v" + Date.now().toString(36), text: ""}); renderFamMatrix(); saveFamily();
     const ins = document.querySelectorAll("#famMatrix .vtext"); ins[ins.length - 1]?.focus(); };
   $("#famGenAll").onclick = () => generateVariants(null, null);
+  $("#famLock").onchange = () => { famSet().palette_lock = $("#famLock").checked; saveFamily(); };
   renderFamilyDynamic(false);
 }
 
 function renderFamilyDynamic(keepView = true) {
   if (VIEW !== "family" || !famInfo() || !$("#famMasters")) return;
-  setupFamCanvas(); renderFamMasters(); renderFamMatrix(); loadFamLayout(keepView);
+  setupFamCanvas(); renderFamMasters(); renderFamMatrix(); renderFamPalette(); loadFamLayout(keepView);
 }
 
 // Variations × sizes. Candidates are matched to a row by meta.variation (older ones without it: "untagged").
@@ -533,6 +543,20 @@ function renderFamMatrix() {
   document.querySelectorAll("#famMatrix .mcell img").forEach((el, i) => el.onclick = () => openImage(cellList, i));
 }
 
+// Palette drift: one chip per family image (its interior's mean colour) beside the master's, worst first.
+async function renderFamPalette() {
+  const el = $("#famPalette"); if (!el) return;
+  let P;
+  try { P = await api(`/api/dun/family_palette?set=${SET}&piece=${encodeURIComponent(FAM)}`); } catch (e) { el.textContent = e.message; return; }
+  if (!P.master) { el.innerHTML = `<span class="hint">Pick an active master first.</span>`; return; }
+  const vt = id => (famSet().variations.find(v => v.id === id) || {}).text || "untagged";
+  const list = P.items.map(it => ({pid: it.piece, rel: it.rel, kind: "variant"}));
+  el.innerHTML = `<div class="pchip master" style="background:${P.master.rgb}" title="the active master"><span>master</span></div>` +
+    P.items.map((it, i) => `<div class="pchip ${it.approved ? "on" : ""} ${it.stale ? "stale" : ""} ${it.dE >= 5 ? "far" : ""}" data-i="${i}" style="background:${it.rgb}"
+      title="${it.n}×${it.n} · ${esc(vt(it.variation))}${it.approved ? " · approved" : ""}${it.stale ? " · stale" : ""} · dE ${it.dE}"><span>${it.dE}</span></div>`).join("");
+  el.querySelectorAll(".pchip[data-i]").forEach(c => c.onclick = () => openImage(list, +c.dataset.i));
+}
+
 async function generateVariants(varIds, sizes) {
   await saveFamily();
   try {
@@ -546,7 +570,7 @@ async function generateVariants(varIds, sizes) {
 async function saveFamily() {
   clearTimeout(famSaveT);
   const m = piece(FAM), f = famSet();
-  const family = {prompts: f.prompts, variations: f.variations, sizes: f.sizes, weights: f.weights};
+  const family = {prompts: f.prompts, variations: f.variations, sizes: f.sizes, weights: f.weights, palette_lock: f.palette_lock};
   try { D.spec = (await post("piece/save", {piece: {...m, prompt: f.prompts[0] || m.prompt, family}})).spec; }
   catch (e) { famMsg(e.message); }
 }
