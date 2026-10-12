@@ -100,6 +100,12 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
   pieces, and `.n.png` normal maps (exact face normals + bump from the paint). Loader: `Prototypes/VisualStyle/DungeonArt.cs`.
   Board wiring: `PrototypeBoard.cs` (walls joined by neighbours, atlas floors, doors/arches, decor, flickering torches).
 - **Axes:** piece +x = board −Y, piece +y = board −X (see `iso.py` / `DungeonArt.cs`).
+- **Resolution / Pixelate:** FLUX paints at 8× the set's grid (`tile` 64 → 512 px per tile), with no pixel-art words
+  in the prompt and the pixel LoRA off unless set per generation. The set's `pixel` setting (the **Pixelate** slider
+  over the room preview) downsamples to that many px per tile for the pixel look; unset = full resolution.
+  Candidate previews, the room and the Unity export all follow it. The export writes the same images to `r32/` and
+  `r64/` and records `ppu` (px per tile = Unity pixels per unit) and `filter` (`point` / `bilinear`) in `set.json`,
+  which both Unity loaders read. `crypt` is set to 64, its earlier look.
 - **Removing things = archiving** (nothing is deleted; `archive/` is git-ignored, empty it by hand when sure):
   - ✕ on a candidate, **Archive unapproved**, and **Remove piece** move images to `archive/dungeon/<set>/` (same relative paths).
   - **Archive set** moves the spec, images and state to `archive/sets/<set>_<stamp>/`. A Unity export stays in the project.

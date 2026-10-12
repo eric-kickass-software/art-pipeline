@@ -182,7 +182,7 @@ def _i2i(init, prompt, seed, denoise, lora):
     return Image.open(p).convert("RGB").resize(init.size, Image.NEAREST)
 
 
-def gen_tile(piece, tile=64, seed=1, denoise=0.72, lora=0.8, st=None):
+def gen_tile(piece, tile=64, seed=1, denoise=0.72, lora=0.0, st=None):
     """Template img2img -> clamped to the template silhouette. Returns the 8x image (RGB, white bg)."""
     st = st or style()
     g = geometry(piece, tile)
@@ -198,7 +198,7 @@ def gen_tile(piece, tile=64, seed=1, denoise=0.72, lora=0.8, st=None):
     return enforce_silhouette(out, mask), mask
 
 
-def gen_floor(piece, tile=64, seed=1, lora=0.8, st=None):
+def gen_floor(piece, tile=64, seed=1, lora=0.0, st=None):
     """Floor-type tiles: a top-down square tile from FLUX, warped exactly onto the 2:1 iso diamond (always
     fills edge to edge, and neighbouring tiles meet cleanly). A 1 px darker rim gives the slab some depth."""
     st = st or style()
@@ -225,7 +225,7 @@ def gen_floor(piece, tile=64, seed=1, lora=0.8, st=None):
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8)), mask
 
 
-def gen_atlas(piece, seed=1, lora=0.8, st=None, size=1024):
+def gen_atlas(piece, seed=1, lora=0.0, st=None, size=1024):
     """Large floor area: one top-down texture covering atlas x atlas tiles, made seamless so the block
     repeats without a visible edge. Returns the square RGB source (cut into iso tiles by `cells`)."""
     st = st or style()
@@ -277,7 +277,7 @@ def warp_floor(src, tile, u0=0.0, u1=1.0, v0=0.0, v1=1.0, rim=0.55):
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8)), mask
 
 
-def gen_prop(piece, seed=1, lora=1.0, st=None, size=512):
+def gen_prop(piece, seed=1, lora=0.0, st=None, size=512):
     """Clean prompt -> object on white -> BiRefNet cut-out. Returns (RGB on white, mask)."""
     st = st or style()
     view = piece.get("view") or st["prop_view"]  # per-piece override, e.g. flat things lying on the ground
@@ -303,22 +303,26 @@ def cut_white(img, thresh=40):
 # ----------------------------------------------------------------------------- downsample
 
 def downsample(img, mask, out_w, out_h, colors=None):
-    """Area-average into the native grid with hard alpha (premultiplied, so white never bleeds in)."""
-    a = np.asarray(img.convert("RGB")).astype(np.float32) / 255
-    m = mask.astype(np.float32)
+    """Area-average into the output grid with hard alpha (premultiplied, so white never bleeds in). Box sums come
+    from integral images, so full-resolution output (hundreds of px per tile) is as quick as the pixel-art sizes."""
+    a = np.asarray(img.convert("RGB")).astype(np.float64) / 255
+    m = mask.astype(np.float64)
     H, W = m.shape
     ky, kx = H / out_h, W / out_w
-    rgb = np.zeros((out_h, out_w, 3), np.float32)
-    al = np.zeros((out_h, out_w), np.float32)
-    for y in range(out_h):
-        y0, y1 = int(round(y * ky)), int(round((y + 1) * ky))
-        for x in range(out_w):
-            x0, x1 = int(round(x * kx)), int(round((x + 1) * kx))
-            mm = m[y0:y1, x0:x1]
-            s = mm.sum()
-            al[y, x] = s / max(mm.size, 1)
-            if s:
-                rgb[y, x] = (a[y0:y1, x0:x1] * mm[..., None]).sum((0, 1)) / s
+    ys = np.array([int(round(i * ky)) for i in range(out_h + 1)])
+    xs = np.array([int(round(i * kx)) for i in range(out_w + 1)])
+
+    def boxes(v):  # sums of v over every output cell [ys[i], ys[i+1]) x [xs[j], xs[j+1])
+        s = np.zeros((H + 1, W + 1) + v.shape[2:])
+        s[1:, 1:] = v.cumsum(0).cumsum(1)
+        r = s[ys]
+        return r[1:, xs[1:]] - r[1:, xs[:-1]] - r[:-1, xs[1:]] + r[:-1, xs[:-1]]
+
+    sm = boxes(m)
+    area = np.outer(np.diff(ys), np.diff(xs))
+    al = sm / np.maximum(area, 1)
+    rgb = boxes(a * m[..., None]) / np.maximum(sm, 1e-12)[..., None]
+    rgb[sm == 0] = 0
     out = np.zeros((out_h, out_w, 4), np.uint8)
     out[..., :3] = np.clip(rgb * 255, 0, 255)
     out[..., 3] = (al >= 0.5) * 255
@@ -327,6 +331,27 @@ def downsample(img, mask, out_w, out_h, colors=None):
         from .pixel import quantize
         im = quantize(im, colors)
     return im
+
+
+# ----------------------------------------------------------------------------- output resolution (pixelation)
+
+def full_tile(spec):
+    """Pixels per tile at full resolution: what FLUX paints (SCALE x the set's grid size)."""
+    return SCALE * int(spec["tile"])
+
+
+def output_tile(spec):
+    """Pixels per tile in previews and the Unity export. The set's `pixel` setting (Studio > Dungeon slider)
+    downsamples to that many px per tile for the pixel-art look; unset = full resolution."""
+    px = int(spec.get("pixel") or 0)
+    return px if px else full_tile(spec)
+
+
+def pixel_steps(spec):
+    """Slider stops, chunkiest first. Multiples of 4 so half and quarter tiles stay whole pixels."""
+    T = int(spec["tile"])
+    steps = {max(4, int(round(T * f / 4)) * 4) for f in (0.25, 0.375, 0.5, 0.75, 1, 1.5, 2, 3, 4)}
+    return sorted(px for px in steps if px < full_tile(spec))
 
 
 # ----------------------------------------------------------------------------- sets: candidates, approval, export
@@ -379,18 +404,18 @@ def generate(name, pid, n=3, seed=1, denoise=None, prompt=None, lora=None):
     for k in range(n):
         sd = seed + k
         if piece["kind"] == "prop":
-            img, mask = gen_prop(piece, sd, lora=lora if lora is not None else 1.0, st=st)
+            img, mask = gen_prop(piece, sd, lora=lora if lora is not None else 0.0, st=st)
         elif piece.get("method") == "atlas":
-            img = gen_atlas(piece, sd, lora if lora is not None else 0.8, st=st)
+            img = gen_atlas(piece, sd, lora if lora is not None else 0.0, st=st)
             mask = np.ones(img.size[::-1], bool)
         elif piece.get("shape") == "floor" and piece.get("method", "warp") == "warp":
-            img, mask = gen_floor(piece, spec["tile"], sd, lora if lora is not None else 0.8, st=st)
+            img, mask = gen_floor(piece, spec["tile"], sd, lora if lora is not None else 0.0, st=st)
         elif base is not None:
             img, mask = gen_on_base(piece, base, sd, denoise or piece.get("denoise", 0.6),
-                                    lora if lora is not None else 0.8, st=st)
+                                    lora if lora is not None else 0.0, st=st)
         else:
             img, mask = gen_tile(piece, spec["tile"], sd, denoise or piece.get("denoise", 0.72),
-                                 lora if lora is not None else 0.8, st=st)
+                                 lora if lora is not None else 0.0, st=st)
         f = out / f"s{sd}_{int(time.time())}.png"
         img.save(f)
         np.save(f.with_suffix(".npy"), mask)
@@ -570,7 +595,7 @@ def native(name, pid, rel, tile=None):
     """A candidate at the native grid, assembled for review (a run in one piece, an atlas as its patch)."""
     spec = load_set(name)
     piece = resolved(spec, pid)
-    tile = tile or spec["tile"]
+    tile = tile or output_tile(spec)
     cs = {k: v[0] for k, v in cells(name, pid, rel, tile).items() if not k.endswith("m")}
     lay = layout(piece)
     if lay == "single":
@@ -606,11 +631,15 @@ def approve(name, pid, rel, on=True):
 def export(name, tiles=(32, 64)):
     """Approved variants -> Assets/StreamingAssets/Art/Dungeon/<set>/r<tile>/<key>.<v>[.<suffix>].png (+ .n.png
     normal maps) and set.json (format 2). Several pieces with the same `board` key become variants of it
-    (door styles, wall runs of different lengths, floor atlases)."""
+    (door styles, wall runs of different lengths, floor atlases).
+    The images are at the set's output resolution (`output_tile`: pixelated or full) in every r<tile> folder the
+    game asks for; set.json's `ppu` (pixels per tile = Unity pixels per unit) and `filter` say how to show them."""
     spec = load_set(name)
     s = state(name)
     root = EXPORT / spec["id"]
-    meta = {"id": spec["id"], "name": spec.get("name", spec["id"]), "format": 2, "tiles": list(tiles), "pieces": {}}
+    out_t = output_tile(spec)
+    meta = {"id": spec["id"], "name": spec.get("name", spec["id"]), "format": 2, "tiles": list(tiles),
+            "ppu": out_t, "filter": "point" if spec.get("pixel") else "bilinear", "pieces": {}}
     for t in tiles:  # variant counts can shrink: start each grid folder clean
         for old in (root / f"r{t}").glob("*.png"):
             old.unlink()
@@ -630,17 +659,17 @@ def export(name, tiles=(32, 64)):
             var = {"source": piece["id"], "layout": layout(piece), "mirror": mirrored(piece),
                    "length": int(piece.get("length", 1)) if layout(piece) == "run" else 1,
                    "atlas": int(piece.get("atlas", 4)) if layout(piece) == "atlas" else 0}
+            cs = cells(name, piece["id"], rel, out_t)
+            h = next(iter(cs.values()))[0].height
+            var["sprites"] = sorted(cs)
             for t in tiles:
                 d = root / f"r{t}"
                 d.mkdir(parents=True, exist_ok=True)
-                cs = cells(name, piece["id"], rel, t)
                 for suf, (rgba, nm) in cs.items():
                     stem = f"{key}.{vi}" + (f".{suf}" if suf else "")
                     rgba.save(d / f"{stem}.png")
                     nm.save(d / f"{stem}.n.png")
-                var["sprites"] = sorted(cs)
-                h = next(iter(cs.values()))[0].height
-                var[f"pivot{t}"] = [0.5, 0.1] if piece["kind"] == "prop" else [0.5, (t / 4) / h]
+                var[f"pivot{t}"] = [0.5, 0.1] if piece["kind"] == "prop" else [0.5, (out_t / 4) / h]
             entry["variants"].append(var)
     root.mkdir(parents=True, exist_ok=True)
     (root / "set.json").write_text(json.dumps(meta, indent=1) + "\n", encoding="utf-8")
@@ -731,12 +760,20 @@ def new_set(name, title=None, biome="", copy_from="crypt"):
 
 
 def update_set(name, fields):
-    """Set-level fields: name, biome, tile."""
+    """Set-level fields: name, biome, tile, pixel (px per tile; 0/empty = full resolution)."""
     with LOCK:
         spec = load_set(name)
         for k in ("name", "biome", "tile"):
             if k in fields:
                 spec[k] = int(fields[k]) if k == "tile" else fields[k]
+        if "pixel" in fields:
+            px = int(fields["pixel"] or 0)
+            if px and px not in pixel_steps(spec):
+                raise ValueError(f"pixel: one of {pixel_steps(spec)} px per tile, or 0 for full resolution")
+            if px:
+                spec["pixel"] = px
+            else:
+                spec.pop("pixel", None)
         return save_set(name, spec)
 
 
@@ -990,7 +1027,7 @@ def room_preview(name, tile=None, scale=3, include=None):
     """Compose approved pieces (native pixels) into a small iso room with thin, joined-up walls. `include` =
     {pid: rel} swaps in one candidate for a piece, to judge it in context before approving."""
     spec = load_set(name)
-    tile = tile or spec["tile"]
+    tile = tile or output_tile(spec)
     s = state(name)
     approved = {pid: list(ps.get("approved", [])) for pid, ps in s["pieces"].items()}
     for pid, rel in (include or {}).items():

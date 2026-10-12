@@ -282,6 +282,7 @@ def dungeon_get(path, q):
         spec = dg.load_set(name)
         return "application/json", json.dumps({"sets": dg.list_sets(), "spec": spec, "state": dg.state(name),
                                                "orphans": dg.orphans(name),
+                                               "output_tile": dg.output_tile(spec), "pixel_steps": dg.pixel_steps(spec),
                                                "style": dg.style(), "set_style": dg.set_style(spec)["groups"]}).encode()
     if path == "sets":
         return "application/json", json.dumps(dg.list_sets()).encode()

@@ -46,6 +46,7 @@
   .cand .meta { color:var(--muted); font-size:11px; margin:4px 0; }
   .cand .btns { display:flex; gap:4px; } .cand .btns button { flex:1; padding:3px; font-size:12px; }
   #room { width:100%; image-rendering:pixelated; border-radius:4px; display:block; background:#16121c; }
+  .hires #room, .hires .cand .nat { image-rendering:auto; } .hires .cand .nat { max-height:160px; }
   .caps { display:grid; grid-template-columns: 1fr 1fr; gap:6px; }
   .caps img { width:100%; border-radius:3px; cursor:zoom-in; display:block; }
   .caps figure { margin:0; } .caps figcaption { color:var(--muted); font-size:10px; }
@@ -124,7 +125,7 @@
           <label>count<input id="g_n" type="number" value="4" min="1" max="12"></label>
           <label>seed<input id="g_seed" type="number" value="1"></label>
           <label class="nf-only">denoise<input id="g_denoise" type="number" step="0.02" min="0.2" max="1" placeholder="auto"></label>
-          <label>LoRA<input id="g_lora" type="number" step="0.05" min="0" max="1.5" placeholder="auto"></label>
+          <label title="Pixel-art LoRA strength. Off by default; it needs 'pixel art sprite' in the medium to do much.">pixel LoRA<input id="g_lora" type="number" step="0.05" min="0" max="1.5" placeholder="off"></label>
           <button id="genBtn" class="primary">Generate</button>
           <button id="saveBtn">Save piece</button>
           <button id="delBtn" class="danger" title="Remove the piece from the set; its images move to archive/">Remove piece</button>
@@ -172,7 +173,9 @@
   <!-- preview -->
   <div class="col side">
     <div class="row" style="justify-content:space-between"><h2 style="margin:0">Room preview</h2>
-      <span><select id="r_tile" style="width:auto"><option value="64">64 grid</option><option value="32">32 grid</option></select>
+      <span><label class="hint" title="Downsample the generated art for a pixel-art look. Off = full resolution. Used by the candidate previews, this room and the Unity export.">Pixelate
+        <input id="r_pixel" type="range" min="0" step="1" style="width:110px;vertical-align:middle"></label>
+        <span id="r_pixelLbl" class="badge"></span>
       <button id="roomBtn">↻</button></span></div>
     <div class="hint" id="roomHint">Approved pieces in a mock room (back walls only).</div>
     <img id="room" alt="room preview">
@@ -211,6 +214,7 @@ async function load() {
     SET = next; localStorage.setItem("dun.set", SET); return load();
   }
   $("#setSel").innerHTML = D.sets.map(s => `<option ${s === SET ? "selected" : ""}>${s}</option>`).join("");
+  syncPixel();
   if (SEL && !piece(SEL)) SEL = null;
   renderList(); renderCenter(); refreshRoom(); loadCaps();
 }
@@ -346,16 +350,15 @@ function renderCenter() {
 }
 
 function renderCands() {
-  const p = piece(SEL), s = pstate(p.id), T = D.spec.tile, meta = s.meta || {};
+  const p = piece(SEL), s = pstate(p.id), meta = s.meta || {};
   $("#candHint").textContent = s.candidates.length ? `· click Approve on up to ${p.variants || 1} (the order = variant order) · Try = show in the room preview` : "· none yet, hit Generate";
-  const nScale = p.kind === "prop" ? 3 : 2;
+  const nScale = D.spec.pixel ? viewScale() : 1, outLbl = D.spec.pixel ? `${OUT()} px tiles, shown ×${nScale}` : "full resolution";
   $("#cands").innerHTML = s.candidates.map(rel => {
     const on = s.approved.includes(rel), m = meta[rel] || {}, ai = s.approved.indexOf(rel);
     return `<div class="cand ${on ? "on" : ""} ${TRY === rel ? "trying" : ""}" data-rel="${esc(rel)}">
       <div class="views">
         <img class="raw" src="/api/dun/img?set=${SET}&rel=${encodeURIComponent(rel)}" title="generated (8×)">
-        <div><img class="nat" src="${natUrl(p.id, rel, T, nScale)}" title="native ${T} grid ×${nScale}"><br>
-             <img class="nat" src="${natUrl(p.id, rel, T / 2, nScale)}" title="native ${T / 2} grid ×${nScale}"></div>
+        <div><img class="nat" src="${natUrl(p.id, rel, OUT(), nScale)}" title="as exported: ${outLbl}"></div>
       </div>
       <div class="meta">seed ${m.seed ?? "?"}${m.denoise ? " · dn " + m.denoise : ""}${m.lora != null ? " · lora " + m.lora : ""}${m.on_base ? " · on base" : ""}${on ? ` · <b style="color:var(--ok)">variant ${ai}</b>` : ""}${m.prompt && m.prompt !== p.prompt ? `<br><i title="${esc(m.prompt)}">older prompt</i>` : ""}</div>
       <div class="btns"><button data-a="approve" class="${on ? "on" : ""}">${on ? "✓ Approved" : "Approve"}</button><button data-a="try">${TRY === rel ? "Trying" : "Try"}</button><button data-a="seed" title="reuse this seed">Seed</button><button data-a="discard" class="danger" title="Archive this image (moves to archive/)">✕</button></div>
@@ -376,9 +379,21 @@ function renderCands() {
   });
 }
 
+// Pixelate slider: 0 = off (full resolution), then the set's pixel_steps from fine to chunky.
+const pixelStops = () => [0, ...D.pixel_steps.slice().reverse()];
+function syncPixel() {
+  const stops = pixelStops(), px = D.spec.pixel || 0;
+  $("#r_pixel").max = stops.length - 1; $("#r_pixel").value = Math.max(0, stops.indexOf(px));
+  pixelLabel(px);
+  document.body.classList.toggle("hires", !px);
+}
+function pixelLabel(px) { $("#r_pixelLbl").textContent = px ? `${px} px tiles` : `off (${D.spec.tile * 8} px)`; }
+// Previews: pixel-art sizes drawn enlarged with crisp pixels; full resolution capped so the room stays small.
+const OUT = () => D.output_tile;
+const viewScale = () => Math.max(1, Math.round(128 / OUT()));
 function refreshRoom() {
-  const t = $("#r_tile").value;
-  let url = `/api/dun/room?set=${SET}&tile=${t}&scale=${t == 32 ? 4 : 2}&_=${Date.now()}`;
+  const t = D.spec.pixel ? OUT() : Math.min(OUT(), 128);
+  let url = `/api/dun/room?set=${SET}&tile=${t}&scale=${D.spec.pixel ? viewScale() : 1}&_=${Date.now()}`;
   if (TRY && SEL) url += `&piece=${encodeURIComponent(SEL)}&rel=${encodeURIComponent(TRY)}`;
   $("#roomHint").textContent = TRY ? `Trying a candidate of ${SEL} in the room (not approved yet).` : "Approved pieces in a mock room (back walls only, props in set order).";
   $("#room").src = url;
@@ -442,7 +457,14 @@ $("#tabPieces").onclick = () => setView("pieces");
 $("#tabStyle").onclick = () => setView("style");
 $("#addPieceBtn").onclick = () => setView("add");
 $("#setSel").onchange = () => { SET = $("#setSel").value; localStorage.setItem("dun.set", SET); SEL = null; TRY = null; load(); };
-$("#r_tile").onchange = refreshRoom; $("#roomBtn").onclick = refreshRoom;
+$("#r_pixel").oninput = () => pixelLabel(pixelStops()[+$("#r_pixel").value]);
+$("#r_pixel").onchange = async () => {
+  try {
+    const r = await post("set/update", {fields: {pixel: pixelStops()[+$("#r_pixel").value]}});
+    D.spec = r.spec; await load();
+  } catch (e) { notice(e.message); syncPixel(); }
+};
+$("#roomBtn").onclick = refreshRoom;
 
 async function savePiece() {
   const p = formPiece();

@@ -2,11 +2,11 @@
   "_doc": "Prompt descriptors for dungeon sets (hdart/dungeon.py, Studio > Dungeon). Tiles: all groups + the piece text, painted onto a geometry template with img2img. Props: medium + style + rendering + biome + prop_view + piece text + prop_framing. CFG 1: no negative prompts, say what you want.",
   "groups": {
     "medium": {
-      "text": "pixel art sprite, detailed 16-bit dungeon tileset, modern high-resolution pixel art",
-      "hint": "'pixel art sprite' is the pixel LoRA trigger. '16-bit tileset' pushes clean tile shapes."
+      "text": "dungeon tile set, seamless, repeating",
+      "hint": "What kind of image it is. No pixel words: pixelation is the Pixelate slider (a downsample after generation). The pixel-art LoRA is off unless you set LoRA on a generation; it wants 'pixel art sprite' here."
     },
     "style": {
-      "text": "in the style of Octopath Traveler HD-2D dungeons and Diablo, hand-pixelled",
+      "text": "fine details, clean, stylized edges, almost voxel/texel, whimsical ",
       "hint": "Game references steer strongly. Try 'Sea of Stars', 'Hyper Light Drifter', 'Darkest Dungeon'."
     },
     "view": {
@@ -15,7 +15,7 @@
     },
     "rendering": {
       "text": "clean dark outlines, cel shading, hard edges, crisp pixels, limited palette, soft shadows in the cracks",
-      "hint": "Line + shading language. Extras: 'moody', 'high contrast', 'muted earthy colours', 'dithering'."
+      "hint": "Line + shading language. Extras: 'moody', 'high contrast', 'muted earthy colours', 'painterly'."
     },
     "framing": {
       "text": "single tile, centered, game asset, plain white background",

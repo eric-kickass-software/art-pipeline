@@ -330,9 +330,9 @@
     {
       "id": "tile.Stylized_floor_moss",
       "kind": "tile",
+      "prompt": "flat smooth stone tiles, mosaic squares, cool tones, evenly lit, small patches of moss growing in the cracks of the tiles",
       "shape": "floor",
-      "variants": 2,
-      "prompt": "flagstones with patches of green moss growing in the cracks"
+      "variants": 2
     }
   ]
 }
