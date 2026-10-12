@@ -1,12 +1,11 @@
-# Scratch output and the venv
+# Git is for the tool and its workflow (code, specs, docs) only. Everything it generates stays local: approved
+# art is exported into the game project, the rest can be thrown away.
+/sprites/
+/textures/
+/kit/
 /work/
 /.venv/
 __pycache__/
-/sprites/ai/candidates/_tmp_*
-/sprites/ai/candidates/**/tmp/
-/sprites/ai/candidates/tmp/
-/sprites/dungeon/tmp/
-/sprites/dungeon/_tmp_*
 
 # Archived sets, candidates and spec history (delete by hand when sure)
 /archive/
