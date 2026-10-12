@@ -1,4 +1,4 @@
-"""hdart: Hearthdelve art pipeline CLI. Run `uv run hdart --help` from P:\Tools\art-pipeline."""
+"""hdart: Hearthdelve art pipeline CLI. Run `uv run hdart --help` from P:/Tools/art-pipeline."""
 import argparse
 import json
 import os
