@@ -276,7 +276,7 @@ REPAINT_DENOISE = 0.85  # default repaint strength for variants (piece `denoise`
 def atlas_n(piece):
     """Tiles per side of a floor piece's square: atlas N, repaint N (default 1), else 1."""
     m = piece.get("method")
-    return int(piece.get("atlas", 4)) if m == "atlas" else int(piece.get("atlas", 1)) if m == "repaint" else 1
+    return int(piece.get("atlas", 4)) if m == "atlas" else int(piece.get("atlas", 1)) if m in ("repaint", "wall_repaint") else 1
 
 
 def floor_texture_prompt(st, text):
@@ -379,7 +379,13 @@ def seam_preview(name, pid, rel, size=768):
     spec = load_set(name)
     piece = resolved(spec, pid)
     img = Image.open(set_dir(name) / rel).convert("RGB")
-    if piece.get("method") == "master":
+    if piece.get("method") in ("wall_master", "wall_repaint"):
+        a = np.tile(np.asarray(img), (1, 2, 1))
+    elif piece.get("method") == "door_repaint":
+        full, _ = wall_master_image(name, spec, piece.get("from"))
+        sl = np.asarray(full)[:, :img.width]
+        a = np.concatenate([sl, np.asarray(img), sl], 1)
+    elif piece.get("method") == "master":
         a = np.tile(np.asarray(img), (3, 3, 1))
     else:
         N = atlas_n(piece)
@@ -583,6 +589,15 @@ def generate(name, pid, n=3, seed=1, denoise=None, prompt=None, lora=None, varia
         sd = seed + k
         if piece["kind"] == "prop":
             img, mask = gen_prop(piece, sd, lora=lora if lora is not None else 0.0, st=st)
+        elif piece.get("method") == "wall_master":
+            img = gen_wall_master(spec, piece, sd, lora if lora is not None else 0.0)
+            mask = np.ones(img.size[::-1], bool)
+        elif piece.get("method") == "wall_repaint":
+            img = gen_wall_variant(name, spec, piece, sd, denoise or piece.get("denoise"), lora if lora is not None else 0.0)
+            mask = np.ones(img.size[::-1], bool)
+        elif piece.get("method") == "door_repaint":
+            img = gen_door(name, spec, piece, sd, denoise or piece.get("denoise"), lora if lora is not None else 0.0)
+            mask = np.ones(img.size[::-1], bool)
         elif piece.get("method") == "master":
             img = gen_master(piece, sd, lora if lora is not None else 0.0, st=st)
             mask = np.ones(img.size[::-1], bool)
@@ -607,7 +622,7 @@ def generate(name, pid, n=3, seed=1, denoise=None, prompt=None, lora=None, varia
         made.append(rel)
         meta[rel] = {"seed": sd, "prompt": piece["prompt"], "denoise": denoise, "lora": lora,
                      "on_base": base is not None}
-        if piece.get("method") == "repaint":  # which master it was made from (switching masters makes it stale)
+        if piece.get("method") in ("repaint", "wall_repaint", "door_repaint"):  # its master (switching makes it stale)
             meta[rel]["master"] = master_rel(name, piece.get("from"))
         if variation:  # floor family: the variation entry it was made for
             meta[rel]["variation"] = variation
@@ -698,7 +713,7 @@ def _from_lab(lab):
 
 
 def family(piece):
-    if piece["kind"] == "prop":
+    if piece["kind"] in ("prop", "elevation"):
         return None
     return "floor" if piece.get("shape") == "floor" else "wall"
 
@@ -778,7 +793,7 @@ def harmonize(name, spec, piece, img, mask):
     masters are the palette, unchanged. Other pieces: the whole image toward their family's approved images."""
     k = float(spec.get("harmonize") or 0)
     fam = family(piece)
-    if k <= 0 or fam is None or piece.get("method") == "master":
+    if k <= 0 or fam is None or piece.get("method") == "master" or piece.get("built_from"):
         return img
     if piece.get("method") == "repaint":
         mrel = master_rel(name, piece.get("from"))
@@ -961,7 +976,7 @@ def export(name, tiles=(32, 64)):
         for old in (root / f"r{t}").glob("*.png"):
             old.unlink()
     for p0 in spec["pieces"]:
-        if p0.get("retired"):  # kept for reference (older geometry), not shipped
+        if p0.get("retired") or p0.get("kind") == "elevation":  # retired: kept for reference; elevations: sources
             continue
         piece = resolved(spec, p0["id"])
         approved = s["pieces"].get(piece["id"], {}).get("approved", [])
@@ -1373,13 +1388,35 @@ def edit_candidate(name, pid, rel, prompt, denoise=0.5, seed=1):
     the image's own). Saved as a new candidate with the same variation/master tags."""
     spec = load_set(name)
     piece = resolved(spec, pid)
-    if piece.get("method") not in ("master", "repaint"):
-        raise ValueError("edit works on floor family images (masters and variants)")
+    method = piece.get("method")
+    if method not in ("master", "repaint") + ELEV_METHODS:
+        raise ValueError("edit works on family images (floor and wall masters, variants, doors)")
     old = state(name)["pieces"].get(pid, {}).get("meta", {}).get(rel, {})
     img = Image.open(set_dir(name) / rel).convert("RGB")
     N = atlas_n(piece)
     per = img.width // N
     text = prompt.strip() or old.get("prompt", piece.get("prompt", ""))
+    if method in ELEV_METHODS:
+        if method == "door_repaint":
+            fam = wall_family_settings(piece_of(spec, piece["from"]))
+            x0, x1, y0, _ = door_rect(fam, per, iso._KZ * per, img.height)
+            xx, yy = np.arange(img.width) + 0.5, np.arange(img.height) + 0.5
+            weight = (np.clip(np.minimum(xx - x0, x1 - xx) / (0.04 * per), 0, 1)[None, :]
+                      * np.clip((yy - y0) / (0.04 * per), 0, 1)[:, None])
+            full = door_texture_prompt(set_style(spec), material_prompt(name, piece_of(spec, piece["from"])), text)
+        else:
+            weight = elev_keep_mask(img.width, img.height, per, iso._KZ * per, top=0.0 if method == "wall_master" else 0.15,
+                                    bottom=0.0 if method == "wall_master" else 0.08)
+            full = wall_texture_prompt(set_style(spec), text)
+        out = repaint(img, weight, full, seed, denoise=float(denoise), reference=False)
+        if method != "door_repaint":
+            mid = piece["id"] if method == "wall_master" else piece.get("from")
+            mrel = rel if method == "wall_master" else master_rel(name, mid)
+            with Image.open(set_dir(name) / mrel) as mi:
+                out = lock_palette(spec, mid, out, weight, mi)
+        meta = {**{k: v for k, v in old.items() if k in ("variation", "master")}, "seed": seed, "prompt": text,
+                "denoise": float(denoise), "edited_from": rel}
+        return _new_candidate(name, pid, out, meta, f"e{seed}")
     weight = block_mask(N, per, float(piece.get("border", 0.08)))
     out = repaint(img, weight, floor_texture_prompt(set_style(spec), text), seed, denoise=float(denoise), reference=False)
     # palette lock: a variant toward the active master, a master toward itself (an edit shouldn't shift its palette)
@@ -1421,6 +1458,313 @@ def rescale_master(name, pid, rel, factor, redetail=False, seed=1):
         out = make_seamless(out, full, seed)
     meta = {"seed": seed, "prompt": prompt, "rescaled_from": rel, "scale": factor, "redetail": bool(redetail)}
     return _new_candidate(name, pid, out, meta, f"x{factor:g}".replace(".", "_"))
+
+
+
+# ----------------------------------------------------------------------------- wall families (Studio > wall board)
+# A wall family is the floor family idea for walls: one flat front-view ELEVATION of the wall (the master: 3 units
+# tall, one tile wide, repeating sideways every tile, because the game drops runs anywhere and each run starts its
+# texture at its own edge), wall variations N tiles wide for runs of N cells (repainted from the master tiled N
+# times, keeping its edges, like floor blocks), and doors repainted into a one-tile slice of it (only the 2-unit opening changes, so a door keeps the wall's own stone and colours). "Build"
+# projects the approved elevations onto the exact thin-wall geometry (runs of 1-4 cells, the post, the doorway): every
+# wall piece shares one texture, so joins line up and the palette carries over between walls and doors. The
+# projections are ordinary candidates of ordinary wall pieces, so cutting, export and Unity are unchanged.
+# Elevation pieces have kind "elevation": they are sources, never exported or drawn themselves.
+
+WALL_UNITS, DOOR_UNITS, DOOR_WIDTH = 3.0, 2.0, 0.5   # GDD 5.1 scale: walls 3 units, doors 2 (hero ~1.5)
+DOOR_DENOISE = 0.8                                    # doors repaint a pre-filled opening (see gen_door)
+ELEV_PERIOD = 1                                       # the master repeats every tile (runs start anywhere)
+ELEV_METHODS = ("wall_master", "wall_repaint", "door_repaint")
+
+
+def elev_size(h=WALL_UNITS, tiles=ELEV_PERIOD, per=MASTER_PX):
+    """(w, h) px of an elevation: `per` px per tile along the wall, true proportions up it (1 unit = iso._KZ tiles)."""
+    return tiles * per, int(round(h * iso._KZ * per / 16)) * 16
+
+
+def project_elevation(piece, tile, elev, period=ELEV_PERIOD, h=None):
+    """A thin-wall piece (run / post / doorway) at SCALE, textured with `elev` (front view, `period` tiles wide):
+    the front faces sample it by (x along the wall, z up it), the end faces continue around the corner, the top cap
+    takes the elevation's top rows. Face shading as the geometry templates. -> (RGB image, mask)."""
+    h = h or float(piece.get("height", WALL_UNITS))
+    L = 1 if piece["shape"] == "post" else int(piece.get("length", 1))
+    W, Hc = iso.cell_canvas(tile, h, SCALE)
+    size = iso.run_canvas(tile, h, L, SCALE)
+    face, own, X, Y, Z = iso.render_boxes(thin_boxes(piece, L, h), size, W, Hc, xyz=True)
+    E = np.asarray(elev.convert("RGB")).astype(np.float32)
+    eh, ew = E.shape[:2]
+    per = ew / period
+    t = float(piece.get("thickness", 0.25))
+    u = np.where(face == 3, X + (Y - (0.5 - t / 2)), X)            # end faces: wrap the texture round the corner
+    col = np.clip(((u % period) * per).astype(int), 0, ew - 1)
+    row = np.clip(((h - Z) / h * eh).astype(int), 0, eh - 1)
+    cap = np.clip(((Y - (0.5 - t / 2)) / t * eh * 0.03).astype(int), 0, eh - 1)  # top: the elevation's top rows
+    row = np.where(face == 1, cap, row)
+    out = np.full(face.shape + (3,), 255, np.float32)
+    m = face > 0
+    out[m] = E[row[m], col[m]]
+    shade = np.ones(face.shape, np.float32)
+    shade[face == 3], shade[face == 1] = 0.72, 1.12
+    out[m] *= shade[m][:, None]
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8)), m
+
+
+def wall_texture_prompt(st, text):
+    return (f"{style_text(st, ('medium', 'style', 'rendering', 'biome'))}, flat front view of a dungeon wall, "
+            f"orthographic elevation, {text}, the wall fills the whole image from its base at the bottom edge to a "
+            f"stone cap at the top edge, no floor, no ceiling, no perspective, seamless horizontally, the pattern "
+            f"continues past the left and right edges, flat even lighting")
+
+
+def door_texture_prompt(st, material, text):
+    return (f"{style_text(st, ('medium', 'style', 'rendering', 'biome'))}, flat front view of a dungeon wall of "
+            f"{material}, orthographic elevation, {text} set into the wall in the middle, the door's base on the "
+            f"bottom edge, no perspective, flat even lighting")
+
+
+def flatten_light_x(img, strength=1.0):
+    """flatten_light across the wall only: removes side-to-side gradients and vignette, keeps the vertical
+    shading (a wall can be darker at its base)."""
+    a = np.asarray(img.convert("RGB")).astype(np.float32)
+    H, W = a.shape[:2]
+    lum = a @ np.array([0.299, 0.587, 0.114], np.float32)
+    col = lum.mean(0)
+    u = np.arange(W) / W - 0.5
+    basis = np.stack([np.ones_like(u), u, u * u], 1)
+    fit = basis @ np.linalg.lstsq(basis, col, rcond=None)[0]
+    gain = 1 + strength * (col.mean() / np.maximum(fit, 1.0) - 1)
+    return Image.fromarray(np.clip(a * gain[None, :, None], 0, 255).astype(np.uint8))
+
+
+def periodic_smooth_x(img):
+    """periodic_smooth for the left/right edges only (an elevation repeats sideways, not up)."""
+    a = np.asarray(img.convert("RGB")).astype(np.float64)
+    H, W = a.shape[:2]
+    v = np.zeros_like(a)
+    v[:, 0] += a[:, -1] - a[:, 0]
+    v[:, -1] += a[:, 0] - a[:, -1]
+    q = np.cos(2 * np.pi * np.arange(H) / H)[:, None]
+    r = np.cos(2 * np.pi * np.arange(W) / W)[None, :]
+    den = 2 * q + 2 * r - 4
+    den[0, 0] = 1
+    s = np.real(np.fft.ifft2(np.fft.fft2(v, axes=(0, 1)) / den[..., None], axes=(0, 1)))
+    return Image.fromarray(np.clip(a - s, 0, 255).astype(np.uint8))
+
+
+def make_seamless_x(img, prompt, seed, band=0.10, ramp=0.06):
+    """An elevation that repeats sideways: lighting flattened across, left/right edges made periodic, then the
+    vertical seam repainted (rolled to the middle so FLUX sees both sides) and rolled back."""
+    a = periodic_smooth_x(flatten_light_x(img))
+    w = a.size[0]
+    rolled = Image.fromarray(np.roll(np.asarray(a), w // 2, 1))
+    xx = (np.arange(w) + 0.5) / w
+    col = np.clip(1 - (np.abs(xx - 0.5) - band / 2) / ramp, 0, 1)
+    mask = np.tile(col[None, :], (a.size[1], 1))
+    fixed = repaint(rolled, mask, prompt, seed + 1000, denoise=0.75)
+    return Image.fromarray(np.roll(np.asarray(fixed), -(w // 2), 1))
+
+
+def gen_wall_master(spec, piece, seed=1, lora=0.0):
+    fam = wall_family_settings(piece)
+    w, h = elev_size(fam["height"])  # one tile wide, 3 units tall (512 x 1248)
+    prompt = wall_texture_prompt(set_style(spec), piece["prompt"])
+    gw, gh = 640, int(round(640 * h / w / 16)) * 16  # FLUX gets ~1 MP, then it's scaled to the elevation
+    p = comfy.run(comfy.build_txt2img(prompt, gw, gh, seed=seed, lora_strength=lora, prefix="hdart/dun_wallm"), DUN / "tmp")[0]
+    img = Image.open(p).convert("RGB").resize((w, h), Image.LANCZOS)
+    return make_seamless_x(img, prompt, seed)
+
+
+def elev_keep_mask(w, h, per, unit_px, side=0.08, top=0.15, bottom=0.08, ramp=0.10):
+    """Repaint mask of a wall variation: keeps a band at the left/right edges (where it meets other pieces), along
+    the top (the cap line) and the base, so every variation joins every other one."""
+    xx = (np.arange(w) + 0.5) / per
+    yy = (np.arange(h) + 0.5) / unit_px  # units from the top
+    H = h / unit_px
+    mx = np.clip((np.minimum(xx, w / per - xx) - side) / ramp, 0, 1)
+    my = np.clip((np.minimum(yy - top, H - yy - bottom)) / (ramp * 2), 0, 1)
+    return mx[None, :] * my[:, None]
+
+
+def wall_master_image(name, spec, master_id):
+    rel = master_rel(name, master_id)
+    if not rel:
+        raise ValueError(f"pick the active wall master of {master_id} first (Use as master)")
+    return Image.open(set_dir(name) / rel).convert("RGB"), rel
+
+
+def gen_wall_variant(name, spec, piece, seed=1, denoise=None, lora=0.0):
+    """A wall variation for runs of N cells: the master tiled N times sideways, everything but the kept edges
+    (left/right where it meets other pieces, the cap line and the base) repainted. Canvas <= BLOCK_MAX wide."""
+    master_id = piece.get("from")
+    m, _ = wall_master_image(name, spec, master_id)
+    fam = wall_family_settings(piece_of(spec, master_id))
+    N = atlas_n(piece)
+    per = min(m.width, BLOCK_MAX // N) // 16 * 16
+    m = m.resize((per, int(round(m.height * per / m.width))), Image.LANCZOS)
+    base = Image.fromarray(np.tile(np.asarray(m), (1, N, 1)))
+    w, h = base.size
+    mask = elev_keep_mask(w, h, per, iso._KZ * per)
+    out = repaint(base, mask, wall_texture_prompt(set_style(spec), piece["prompt"]), seed,
+                  denoise=float(denoise) if denoise else REPAINT_DENOISE, lora=lora, reference=False)
+    return lock_palette(spec, master_id, out, mask, m) if fam["palette_lock"] else out
+
+
+def door_rect(fam, per, unit_px, h_px):
+    """Door opening in a one-tile elevation slice: (x0, x1, y0, y1) px."""
+    a, b = (0.5 - fam["door_width"] / 2) * per, (0.5 + fam["door_width"] / 2) * per
+    return a, b, h_px - fam["door_height"] * unit_px, h_px
+
+
+def gen_door(name, spec, piece, seed=1, denoise=None, lora=0.0):
+    """A one-tile slice of the active wall master with only the door opening (plus a little frame) repainted."""
+    master_id = piece.get("from")
+    master = piece_of(spec, master_id)
+    fam = wall_family_settings(master)
+    base, _ = wall_master_image(name, spec, master_id)
+    per = base.width
+    unit_px = iso._KZ * per
+    x0, x1, y0, y1 = door_rect(fam, per, unit_px, base.height)
+    frame, ramp = 0.06 * per, 0.04 * per
+    xx, yy = np.arange(per) + 0.5, np.arange(base.height) + 0.5
+    mx = np.clip((np.minimum(xx - (x0 - frame), (x1 + frame) - xx)) / ramp, 0, 1)
+    my = np.clip((yy - (y0 - frame)) / ramp, 0, 1)
+    mask = mx[None, :] * my[:, None]
+    # Pre-fill the exact opening with dark wood (from the floor up to the door height): left alone, FLUX paints a
+    # nice door floating mid-wall; started from this shape at 0.8 it paints the door where the doorway geometry is.
+    init = np.asarray(base).astype(np.float32).copy()
+    r = np.random.default_rng(seed)
+    X0, X1, Y0 = int(round(x0)), int(round(x1)), int(round(y0))
+    plank = (np.sin((np.arange(X1 - X0) / max(X1 - X0, 1)) * np.pi * 8) * 10)[None, :, None]
+    init[Y0:, X0:X1] = np.array([96, 64, 42], np.float32) + plank + r.normal(0, 6, (base.height - Y0, X1 - X0, 1))
+    return repaint(Image.fromarray(np.clip(init, 0, 255).astype(np.uint8)), mask,
+                   door_texture_prompt(set_style(spec), material_prompt(name, master), piece["prompt"]),
+                   seed, denoise=float(denoise) if denoise else DOOR_DENOISE, lora=lora, reference=False)
+
+
+def set_wall_boards(spec):
+    """The board ids the game asks for (wall, post, door), read from the set's existing wall pieces."""
+    def first(pred, default):
+        p = next((p for p in spec["pieces"] if pred(p) and not p.get("built_from")), None)
+        return p.get("board", p["id"]) if p else default
+    return {"wall": first(lambda p: p.get("shape") == "run" and not p.get("opening") and int(p.get("length", 1)) == 1, "tile.crypt_wall"),
+            "post": first(lambda p: p.get("shape") == "post", "tile.crypt_wall.post"),
+            "door": first(lambda p: p.get("opening") == "door", "tile.crypt_door")}
+
+
+def wall_family_settings(master, spec=None):
+    f = family_settings(master)
+    f["doors"] = [v if isinstance(v, dict) else {"id": f"d{i + 1}", "text": v}
+                  for i, v in enumerate((master.get("family") or {}).get("doors",
+                      ["a closed arched wooden door with iron bands", "a heavy riveted black iron door",
+                       "a rusty iron portcullis grate", "closed double wooden doors with carved panels"]))]
+    f["height"] = float(f.get("height", WALL_UNITS))
+    f["door_height"] = float(f.get("door_height", DOOR_UNITS))
+    f["door_width"] = float(f.get("door_width", DOOR_WIDTH))
+    f["boards"] = {**(set_wall_boards(spec) if spec else {"wall": "tile.crypt_wall", "post": "tile.crypt_wall.post", "door": "tile.crypt_door"}),
+                   **(master.get("family") or {}).get("boards", {})}
+    return f
+
+
+def wall_family_pieces(spec, master_id):
+    """{"variant": elevation piece, "door": elevation piece, "run1".."run4", "post", "doorway": wall pieces}."""
+    out = {}
+    for p in spec["pieces"]:
+        if p.get("from") != master_id or p.get("retired"):
+            continue
+        if p.get("method") == "wall_repaint":
+            out.setdefault(f"var{atlas_n(p)}", p)
+        elif p.get("method") == "door_repaint":
+            out.setdefault("door", p)
+        elif p.get("built_from") == master_id or p.get("from") == master_id and p.get("shape") in THIN:
+            key = "post" if p["shape"] == "post" else "doorway" if p.get("opening") == "door" else f"run{int(p.get('length', 1))}"
+            out.setdefault(key, p)
+    return out
+
+
+def ensure_wall_pieces(name, master_id):
+    """The family's elevation pieces (variant, door) and wall pieces (runs 1-4, post, doorway), created on first use
+    at the family's heights. Returns wall_family_pieces."""
+    with LOCK:
+        spec = load_set(name)
+        master = piece_of(spec, master_id)
+        fam = wall_family_settings(master, spec)
+        have = wall_family_pieces(spec, master_id)
+        base = {"from": master_id, "variants": 1}
+        want = {
+            **{f"var{L}": {"id": f"{master_id}_var{L}", "kind": "elevation", "shape": "elevation", "method": "wall_repaint", "atlas": L,
+                           "prompt": master.get("prompt", "")} for L in (1, 2, 3, 4)},
+            "door": {"id": f"{master_id}_doors", "kind": "elevation", "shape": "elevation", "method": "door_repaint", "prompt": fam["doors"][0]["text"] if fam["doors"] else "a wooden door"},
+            "post": {"id": f"{master_id}_post", "kind": "tile", "shape": "post", "height": fam["height"], "board": fam["boards"]["post"], "built_from": master_id},
+            "doorway": {"id": f"{master_id}_doorway", "kind": "tile", "shape": "run", "opening": "door", "length": 1, "height": fam["height"],
+                        "door_height": fam["door_height"], "door_width": fam["door_width"], "thickness": 0.25, "board": fam["boards"]["door"], "built_from": master_id},
+        }
+        for L in (1, 2, 3, 4):
+            want[f"run{L}"] = {"id": f"{master_id}_run{L}", "kind": "tile", "shape": "run", "length": L, "height": fam["height"],
+                               "thickness": 0.25, "board": fam["boards"]["wall"], "built_from": master_id}
+        for key, piece in want.items():
+            if key not in have:
+                upsert_piece(name, {**base, **piece})
+        return wall_family_pieces(load_set(name), master_id)
+
+
+def build_walls(name, master_id):
+    """Project the active wall master + approved wall variations onto runs 1-4 (and the master onto the post), and
+    every approved door onto the doorway. Earlier builds are archived; the new projections become the approved
+    candidates of those pieces. Returns {piece: number of projections}."""
+    pcs = ensure_wall_pieces(name, master_id)
+    spec = load_set(name)
+    fam = wall_family_settings(piece_of(spec, master_id), spec)
+    boards = set(fam["boards"].values())
+    with LOCK:  # older wall pieces on the same boards would ship next to the new walls: retire them (reversible)
+        sp = load_set(name)
+        retired = [p["id"] for p in sp["pieces"] if p.get("kind") == "tile" and p.get("shape") in THIN
+                   and not p.get("built_from") and not p.get("retired") and p.get("board", p["id"]) in boards]
+        for p in sp["pieces"]:
+            if p["id"] in retired:
+                p["retired"] = True
+        if retired:
+            save_set(name, sp)
+    spec = load_set(name)
+    s = state(name)["pieces"]
+    master, mrel = wall_master_image(name, spec, master_id)
+    load = lambda r: Image.open(set_dir(name) / r).convert("RGB")
+    doors = [(r, load(r), 1) for r in s.get(pcs["door"]["id"], {}).get("approved", [])]
+    jobs = {}
+    for L in (1, 2, 3, 4):  # a run of L cells: the master repeated L times, plus every approved L-wide variation
+        jobs[f"run{L}"] = [(mrel, master, 1)] + [(r, load(r), L) for r in s.get(pcs[f"var{L}"]["id"], {}).get("approved", [])
+                                                if s[pcs[f"var{L}"]["id"]].get("meta", {}).get(r, {}).get("master") == mrel]
+    jobs["post"] = [(mrel, master, 1)]
+    jobs["doorway"] = doors
+    out = {}
+    for key, items in jobs.items():
+        piece = resolved(load_set(name), pcs[key]["id"])
+        old = state(name)["pieces"].get(piece["id"], {})
+        made = []
+        for src_rel, elev, period in items:
+            img, m = project_elevation(piece, spec["tile"], elev, period)
+            f = set_dir(name) / "candidates" / piece["id"] / f"b_{pathlib_stem(src_rel)}_{time.time_ns() // 1000000}.png"
+            f.parent.mkdir(parents=True, exist_ok=True)
+            img.save(f)
+            np.save(f.with_suffix(".npy"), m)
+            made.append(str(f.relative_to(set_dir(name))).replace("\\", "/"))
+        with LOCK:
+            st = state(name)
+            ps = st["pieces"].setdefault(piece["id"], {"candidates": [], "approved": []})
+            for r in list(ps.get("candidates", [])):  # earlier builds are derived: archive them
+                if ps.get("meta", {}).get(r, {}).get("built_from"):
+                    _archive_candidate(name, r)
+                    _drop(ps, {r})
+            ps["candidates"] = made + ps["candidates"]
+            ps["approved"] = list(made)
+            for r, (src_rel, _, _) in zip(made, items):
+                ps.setdefault("meta", {})[r] = {"built_from": src_rel, "master": mrel}
+            save_state(name, st)
+        out[piece["id"]] = len(made)
+    return {"built": out, "retired": retired}
+
+
+def pathlib_stem(rel):
+    return Path(rel).stem
 
 
 # ----------------------------------------------------------------------------- floor families (Studio > family board)
@@ -1544,20 +1888,30 @@ def fresh_approved(name, master_id, pid):
     return [r for r in ps.get("approved", []) if ps.get("meta", {}).get(r, {}).get("master") == active]
 
 
-def variant_jobs(name, master_id, var_ids=None, sizes=None, n=1):
+def variant_jobs(name, master_id, var_ids=None, sizes=None, n=1, doors=False):
     """Generation jobs for the chosen variations (default all) at the chosen sizes (default the family's enabled
-    sizes), n candidates each: prompt = the active master's prompt + the variation text, tagged with its id."""
+    sizes), n candidates each: prompt = the active master's prompt + the variation text, tagged with its id.
+    Wall families: sizes are run lengths (1-4); `doors` = the door rows instead (prompt = the door text)."""
     import random
     spec = load_set(name)
     master = piece_of(spec, master_id)
     if not master_rel(name, master_id):
         raise ValueError(f"pick the active master of {master_id} first (Use as master)")
-    fam = family_settings(master)
+    wall = master.get("method") == "wall_master"
+    fam = wall_family_settings(master, spec) if wall else family_settings(master)
     material = material_prompt(name, master)
-    vs = [v for v in fam["variations"] if (var_ids is None or v["id"] in var_ids) and v["text"].strip()]
     jobs = []
+    if doors:
+        pid = ensure_wall_pieces(name, master_id)["door"]["id"]
+        for v in [v for v in fam["doors"] if (var_ids is None or v["id"] in var_ids) and v["text"].strip()]:
+            for _ in range(max(1, int(n))):
+                jobs.append({"set": name, "piece": pid, "n": 1, "seed": random.randint(1, 99999), "prompt": v["text"],
+                             "variation": v["id"]})
+        return jobs
+    vs = [v for v in fam["variations"] if (var_ids is None or v["id"] in var_ids) and v["text"].strip()]
+    pcs = ensure_wall_pieces(name, master_id) if wall else None
     for N in sizes or fam["sizes"]:
-        pid = ensure_variant_piece(name, master_id, int(N))
+        pid = pcs[f"var{int(N)}"]["id"] if wall else ensure_variant_piece(name, master_id, int(N))
         for v in vs:
             for _ in range(max(1, int(n))):
                 jobs.append({"set": name, "piece": pid, "n": 1, "seed": random.randint(1, 99999),
@@ -1576,18 +1930,36 @@ def family_palette(name, master_id):
     mm = image_lab_stats(name, mrel)[0]
     s = state(name)["pieces"]
     items = []
-    for N, p in family_pieces(spec, master_id).items():
+    mp = piece_of(spec, master_id)
+    groups = ({int(k[3:]): p for k, p in wall_family_pieces(spec, master_id).items() if k.startswith("var")}
+              if mp.get("method") == "wall_master" else family_pieces(spec, master_id))
+    for N, p in groups.items():
         ps = s.get(p["id"], {})
         for rel in ps.get("candidates", []):
             with Image.open(set_dir(name) / rel) as im:
-                size = im.width
-            mean = image_lab_stats(name, rel, family_weight(p, size))[0]
+                size = im.size
+            weight = (elev_keep_mask(size[0], size[1], size[0] // N, iso._KZ * size[0] // N)
+                      if p.get("method") == "wall_repaint" else family_weight(p, size[0]))
+            mean = image_lab_stats(name, rel, weight)[0]
             meta = ps.get("meta", {}).get(rel, {})
             items.append({"piece": p["id"], "rel": rel, "n": N, "rgb": to_rgb(mean), "dE": round(float(np.linalg.norm(mean - mm)), 1),
                           "approved": rel in ps.get("approved", []), "variation": meta.get("variation"),
                           "stale": meta.get("master") != mrel})
     items.sort(key=lambda it: -it["dE"])
     return {"master": {"rel": mrel, "rgb": to_rgb(mm)}, "items": items}
+
+
+def family_info(name, spec, master):
+    """What the family board needs about a family: kind, settings, its pieces by size, material, built state."""
+    if master.get("method") == "wall_master":
+        pcs = wall_family_pieces(spec, master["id"])
+        built = state(name)["pieces"].get(pcs["run1"]["id"], {}).get("approved") if "run1" in pcs else None
+        return {"kind": "wall", "settings": wall_family_settings(master, spec), "material": material_prompt(name, master),
+                "pieces": {int(k[3:]): p["id"] for k, p in pcs.items() if k.startswith("var")},
+                "door": pcs["door"]["id"] if "door" in pcs else None,
+                "built": [pcs[k]["id"] for k in pcs if k.startswith("run") or k in ("post", "doorway")] if built else []}
+    return {"kind": "floor", "settings": family_settings(master), "material": material_prompt(name, master),
+            "pieces": {n: q["id"] for n, q in family_pieces(spec, master["id"]).items()}}
 
 
 def family_layout(name, master_id, seed=0, W=16, H=12):
@@ -1617,16 +1989,21 @@ def family_layout(name, master_id, seed=0, W=16, H=12):
             "holes": sorted(holes), "cells": out}
 
 
-def cell_png(name, pid, rel, suf, tile=None):
-    """One cut sprite as PNG (what the export ships), cached across requests: the live preview asks for many."""
-    spec = load_set(name)
+def cell_sprites(name, pid, rel, tile=None, spec=None):
+    """A candidate's cut sprites {suffix: RGBA} (what the export ships), cached across requests: the live previews
+    and the room preview ask for the same ones over and over."""
+    spec = spec or load_set(name)
     tile = tile or output_tile(spec)
     key = (name, pid, rel, tile, spec.get("pixel"), spec.get("harmonize"))
     if key not in _CELL_CACHE:
-        if len(_CELL_CACHE) > 64:
+        if len(_CELL_CACHE) > 160:
             _CELL_CACHE.clear()
-        _CELL_CACHE[key] = {k: png_bytes(v[0]) for k, v in cells(name, pid, rel, tile).items()}
-    return _CELL_CACHE[key][suf]
+        _CELL_CACHE[key] = {k: v[0] for k, v in cells(name, pid, rel, tile).items()}
+    return _CELL_CACHE[key]
+
+
+def cell_png(name, pid, rel, suf, tile=None):
+    return png_bytes(cell_sprites(name, pid, rel, tile)[suf])
 
 
 def family_tiles(name, spec, master_id):
@@ -1717,9 +2094,25 @@ def plan_floor_blocks(cells, sizes, seed, weights=None):
     return plan
 
 
-def room_preview(name, tile=None, scale=3, include=None):
+def room_grid(W=14, H=10):
+    """A preview room: back walls along the top row and left column, each with a door, a free-standing wall
+    across the far side (both faces and post ends show), floor everywhere else."""
+    g = [["." for _ in range(W)] for _ in range(H)]
+    for x in range(W):
+        g[0][x] = "W"
+    for y in range(H):
+        g[y][0] = "W"
+    g[0][W // 2], g[H // 2][0] = "D", "D"
+    for x in range(W // 2, W - 1):
+        g[2 * H // 3][x] = "W"
+    return ["".join(r) for r in g]
+
+
+def room_preview(name, tile=None, scale=3, include=None, grid=None, floor_board=None, as_layout=False):
     """Compose approved pieces (native pixels) into a small iso room with thin, joined-up walls. `include` =
-    {pid: rel} swaps in one candidate for a piece, to judge it in context before approving."""
+    {pid: rel} swaps in one candidate for a piece, to judge it in context before approving. `grid` replaces the
+    mock room (see room_grid), `floor_board` picks the main floor. `as_layout` returns the draw list instead of an
+    image (the Studio's live preview draws it): {w, h, ox, oy, tile, items: [{piece, rel, suf, x, y}], blocks}."""
     spec = load_set(name)
     tile = tile or output_tile(spec)
     s = state(name)
@@ -1727,6 +2120,8 @@ def room_preview(name, tile=None, scale=3, include=None):
     for pid, rel in (include or {}).items():
         approved[pid] = [rel]
     roles, by_key = _roles(spec, approved)
+    if floor_board:
+        roles["."] = roles["R"] = roles["X"] = floor_board
     cache = {}
 
     def variants(key):
@@ -1734,7 +2129,7 @@ def room_preview(name, tile=None, scale=3, include=None):
 
     def sprite(p, rel, suf):
         if (p["id"], rel) not in cache:
-            cache[(p["id"], rel)] = {k: v[0] for k, v in cells(name, p["id"], rel, tile).items()}
+            cache[(p["id"], rel)] = cell_sprites(name, p["id"], rel, tile, spec)
         im = cache[(p["id"], rel)].get(suf)
         piv = [0.5, 0.1] if p["kind"] == "prop" else [0.5, (tile / 4) / im.height] if im else None
         return im, piv
@@ -1743,8 +2138,9 @@ def room_preview(name, tile=None, scale=3, include=None):
         vs = [v for v in variants(key) if pred(v[0])]
         return vs[(x * 7 + y * 13) % len(vs)] if vs else None
 
-    rows, cols = len(ROOM), len(ROOM[0])
-    at = lambda x, y: ROOM[y][x] if 0 <= x < cols and 0 <= y < rows else " "
+    grid = grid or ROOM
+    rows, cols = len(grid), len(grid[0])
+    at = lambda x, y: grid[y][x] if 0 <= x < cols and 0 <= y < rows else " "
     wallish = {(x, y) for y in range(rows) for x in range(cols) if at(x, y) in WALLISH}
     nb = {c: {"+x": (c[0] + 1, c[1]) in wallish, "-x": (c[0] - 1, c[1]) in wallish,
               "+y": (c[0], c[1] + 1) in wallish, "-y": (c[0], c[1] - 1) in wallish} for c in wallish}
@@ -1831,12 +2227,19 @@ def room_preview(name, tile=None, scale=3, include=None):
                     add(1, x, y, 1, pick(roles["post"], x, y), "")
             elif ch == "P" or ch.islower():
                 add(1, x, y, 1, pick(roles[ch], x, y), "")
+    draws = []
     for layer, depth, sub, x, y, p, rel, suf in sorted(items, key=lambda t: (t[0], t[1], t[2])):
         im, piv = sprite(p, rel, suf)
         if im is None:
             continue
         sx, sy = ox + (x - y) * tile / 2, oy + (x + y) * tile / 4
-        canvas.alpha_composite(im, (int(round(sx - piv[0] * im.width)), int(round(sy - (1 - piv[1]) * im.height))))
+        draws.append((p["id"], rel, suf, int(round(sx - piv[0] * im.width)), int(round(sy - (1 - piv[1]) * im.height)), im))
+    if as_layout:
+        return {"w": W, "h": H, "ox": ox, "oy": oy, "tile": tile, "pixel": bool(spec.get("pixel")), "W": cols, "H": rows,
+                "items": [{"piece": d[0], "rel": d[1], "suf": d[2], "x": d[3], "y": d[4]} for d in draws],
+                "blocks": sorted(set(plan.values())), "walls": [[x, y] for (x, y) in sorted(wallish)]}
+    for d in draws:
+        canvas.alpha_composite(d[5], (d[3], d[4]))
     out = canvas.convert("RGB")
     return out.resize((out.width * scale, out.height * scale), Image.NEAREST)
 

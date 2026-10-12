@@ -54,13 +54,15 @@ def project(W, H_cell, x, y, z):
 _KZ = (math.sqrt(2) / 2) / math.cos(math.radians(30))  # one height unit in world units
 
 
-def render_boxes(boxes, size, W, H_cell):
+def render_boxes(boxes, size, W, H_cell, xyz=False):
     """boxes: [(x0, x1, y0, y1, z0, z1, owner)], z-buffered.
-    Returns face map (0 none, 1 top, 2 left, 3 right) and owner map (-1 none)."""
+    Returns face map (0 none, 1 top, 2 left, 3 right) and owner map (-1 none); with `xyz` also the piece-space point
+    (X, Y, Z arrays) under every pixel, so a texture can be mapped onto the faces (wall elevations)."""
     w, h = size
     face = np.zeros((h, w), np.uint8)
     own = np.full((h, w), -1, np.int32)
     depth = np.full((h, w), -np.inf, np.float32)
+    X, Y, Z = (np.zeros((h, w), np.float32) for _ in range(3))
     ox, oy = W / 2, H_cell - W / 2
     yy, xx = np.mgrid[0:h, 0:w].astype(np.float32) + 0.5
     u = 2 * (xx - ox) / W  # = x - y on any surface
@@ -92,7 +94,9 @@ def render_boxes(boxes, size, W, H_cell):
             d = (x + y) * 0.6124 + z * _KZ * 0.5
             win = m & (d > depth + 1e-4)
             depth[win], face[win], own[win] = d[win], f, owner
-    return face, own
+            if xyz:
+                X[win], Y[win], Z[win] = x[win], y[win], z[win]
+    return (face, own, X, Y, Z) if xyz else (face, own)
 
 
 def shade_image(face, normals=None, base=None):

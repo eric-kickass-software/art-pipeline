@@ -163,6 +163,8 @@ class Jobs:
                 elif job["kind"] == "dun_rescale":
                     job["result"] = dg.rescale_master(a["set"], a["piece"], a["rel"], float(a["factor"]),
                                                       bool(a.get("redetail")), int(a.get("seed", 1)))
+                elif job["kind"] == "dun_build":
+                    job["result"] = dg.build_walls(a["set"], a["piece"])
                 elif job["kind"] == "dun_capture":
                     job["result"] = dg.capture(a["set"])
                 elif job["kind"] == "base":
@@ -274,8 +276,11 @@ def dungeon_post(action, b):
     if action == "trial":
         job = JOBS.add("dun_trial", b, f"{name} · {b['piece']} trial: {b.get('variation', '')[:30]}")
         return {"job": job["id"]}
-    if action == "family/generate":  # variations x sizes x n
-        jobs = dg.variant_jobs(name, b["piece"], b.get("variations"), b.get("sizes"), int(b.get("n", 1)))
+    if action == "family/build":  # wall families: project the elevations onto the wall pieces
+        job = JOBS.add("dun_build", b, f"{name} · {b['piece']} build walls")
+        return {"job": job["id"]}
+    if action == "family/generate":  # variations x sizes x n (doors: the door rows)
+        jobs = dg.variant_jobs(name, b["piece"], b.get("variations"), b.get("sizes"), int(b.get("n", 1)), bool(b.get("doors")))
         ids = [JOBS.add("dun", j, f"{name} · {j['piece']} · {j['variation']}")["id"] for j in jobs]
         return {"jobs": ids, "spec": dg.load_set(name)}
     if action == "archive_unapproved":
@@ -309,13 +314,19 @@ def dungeon_get(path, q):
         return "application/json", json.dumps({"sets": dg.list_sets(), "spec": spec, "state": dg.state(name),
                                                "orphans": dg.orphans(name),
                                                "output_tile": dg.output_tile(spec), "pixel_steps": dg.pixel_steps(spec),
-                                               "families": {p["id"]: {"settings": dg.family_settings(p),
-                                                                      "pieces": {n: q["id"] for n, q in dg.family_pieces(spec, p["id"]).items()},
-                                                                      "material": dg.material_prompt(name, p)}
-                                                            for p in spec["pieces"] if p.get("method") == "master"},
+                                               "families": {p["id"]: dg.family_info(name, spec, p)
+                                                            for p in spec["pieces"] if p.get("method") in ("master", "wall_master")},
                                                "style": dg.style(), "set_style": dg.set_style(spec)["groups"]}).encode()
     if path == "sets":
         return "application/json", json.dumps(dg.list_sets()).encode()
+    if path == "room_layout":  # live preview of a room: floor (a family's board) + joined walls and doors
+        spec = dg.load_set(name)
+        fb = None
+        if g("floor"):
+            fp = next((p for p in spec["pieces"] if p["id"] == g("floor")), None)
+            fb = fp.get("board", fp["id"]) if fp else None
+        return "application/json", json.dumps(dg.room_preview(name, dg.output_tile(spec), 1, None,
+                                                              dg.room_grid(int(g("w", 14)), int(g("h", 10))), fb, True)).encode()
     if path == "family_palette":  # family board: colour drift per image
         return "application/json", json.dumps(dg.family_palette(name, g("piece"))).encode()
     if path == "family_layout":  # live preview: which sprite goes where

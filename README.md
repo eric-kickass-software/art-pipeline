@@ -154,6 +154,29 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
 - **Style editing in place:** the piece editor and the group boards have an "Edit the shared style" box with just the
   fields that kind of piece uses (floors: medium/style/rendering/biome; walls: all six; props: the prop fields).
   Prompt previews update as you type; saves (there and on the Style tab) send only fields that changed.
+- **Wall families** (sidebar → Wall families, **+ New wall family**): the floor family idea for walls.
+  - **Master = a front-view elevation** (`kind: "elevation"`, method `wall_master`): 512 × 1248 px = one tile wide,
+    3 units tall (1 unit = `iso._KZ` tiles), repeating sideways every tile, because the game drops runs anywhere
+    and each starts its texture at its own edge. Generated at ~1 MP, then `flatten_light_x` + `periodic_smooth_x`
+    + the vertical seam repainted (`make_seamless_x`).
+  - **Variations per run length** (`<master>_var1..4`, method `wall_repaint`): the master tiled N times, everything
+    but the kept edges, cap line and base repainted (`elev_keep_mask`), palette-locked to the master. Same matrix UI
+    as floors, with run lengths as the sizes.
+  - **Doors** (`<master>_doors`, method `door_repaint`, one row per door): a one-tile slice of the elevation with only
+    the opening repainted (0.5 tile wide, 2 units tall, on the floor), pre-filled with dark wood so FLUX paints the
+    door where the doorway geometry is (`DOOR_DENOISE` 0.8). Not palette-locked (wood isn't stone).
+  - **Build** (`build_walls`; also runs by itself after approving or switching masters): `project_elevation` maps the
+    elevations onto the exact thin-wall geometry (`iso.render_boxes(..., xyz=True)` gives every pixel's spot on the
+    wall): runs 1–4 (master repeated + approved variations of that length), the post, the doorway (each approved
+    door). The family's pieces get the GDD heights (walls 3, doors 2) and the set's board ids (`set_wall_boards`).
+    Older wall pieces on the same boards are marked `retired` (reversible) so they don't ship next to the new ones.
+  - Elevations are sources: never exported, cut or harmonized. Built walls are never harmonized either (the
+    palette is locked at the elevation; per-piece shifts would break the joins).
+- **Live preview = a room** once walls exist (or on a wall family): `room_layout` → `room_preview(..., grid=room_grid(w, h),
+  floor_board=<floor family>, as_layout=True)` returns positioned sprites (the room preview's wall joining, posts,
+  doors), drawn by the canvas; sprites come from the shared `cell_sprites` cache.
+- **Left panel "Set & style":** set name and grid plus the shared descriptors and biome, saved in place (only changed
+  fields). The Style & set tab is retired.
 - **Floor family palette:** variants share the master's edges, so a whole-image colour shift would break them.
   For families everything is interior-only and toward the **master** (`match_palette`, weighted by the repaint mask:
   the kept border never changes): **palette lock** (family setting, on by default) matches each fresh repaint, edit
