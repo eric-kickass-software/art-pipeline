@@ -392,6 +392,11 @@ def dungeon_get(path, q):
         from PIL import Image
         return "application/json", json.dumps(dg.measure_elevation(Image.open(dg.candidate_path(name, g("rel"))), fam["height"],
                                                                    float(g("top", dg.KEEP_TOP)), float(g("bottom", dg.KEEP_BOTTOM)))).encode()
+    if path == "elev_joints":  # wall master: horizontal joints (units from the top) + suggested keep bands
+        spec = dg.load_set(name)
+        fam = dg.wall_family_settings(dg.piece_of(spec, g("piece")), spec)
+        from PIL import Image
+        return "application/json", json.dumps(dg.elevation_joints(Image.open(dg.candidate_path(name, g("rel"))), fam["height"])).encode()
     if path == "elev_bands":  # wall master repeated sideways with the kept cap and base tinted
         spec = dg.load_set(name)
         fam = dg.wall_family_settings(dg.piece_of(spec, g("piece")), spec)

@@ -1727,13 +1727,14 @@ def wall_master_image(name, spec, master_id):
 KEEP_TOP, KEEP_BOTTOM = 0.25, 0.10  # wall rescale: units kept as they are at the top (cap) and the base (plinth)
 
 
-def _count_joints(sig, minsep, wrap=False):
+def _count_joints(sig, minsep, wrap=False, ref=100):
     """Joints along an edge-strength profile: peaks standing well above the typical level (median + 40% of the
-    way to the top), at least `minsep` apart (a bevelled joint's two edges count once). Returns their positions."""
+    way to the top, or to the `ref` percentile), at least `minsep` apart (a bevelled joint's two edges count once). Returns their positions."""
     sig = np.convolve(np.pad(sig, 2, mode="wrap" if wrap else "edge"), np.ones(5) / 5, "valid")
-    if sig.max() - np.median(sig) < 1.0:  # flat: no joints at all
+    top = np.percentile(sig, ref)  # ref < 100: one very strong line (a cap's underside) can't hide the rest
+    if top - np.median(sig) < 1.0:  # flat: no joints at all
         return []
-    thr = np.median(sig) + 0.4 * (sig.max() - np.median(sig))
+    thr = np.median(sig) + 0.4 * (top - np.median(sig))
     order = np.argsort(-sig)
     picked = []
     n = len(sig)
@@ -1863,6 +1864,53 @@ def rescale_wall_master(name, pid, rel, fx=1.0, fy=1.0, keep_top=KEEP_TOP, keep_
     meta = {"seed": seed, "prompt": prompt, "rescaled_from": rel, "scale": [round(fx, 3), round(fy, 3)], "keep": [keep_top, keep_bottom],
             "redetail": bool(redetail)}
     return _new_candidate(name, pid, Image.fromarray(res), meta, f"w{fx:g}x{fy:g}".replace(".", "_"))
+
+
+def elevation_joints(img, height_units=WALL_UNITS):
+    """The horizontal joints of a whole wall elevation, in units from the top (for the keep-band guides to snap to),
+    and a suggested keep top / bottom where the regular courses stop: walking out from the middle of the wall, the
+    last joint before the spacing breaks (a cap or plinth course is taller or shorter than the field's) or the
+    band's tone changes. 0 when the courses run right to the edge."""
+    rgb = np.asarray(img.convert("RGB")).astype(np.float64)
+    a = rgb.mean(-1)
+    h = a.shape[0]
+    unit = h / height_units
+    prof = np.abs(np.diff(a, axis=0, append=a[-1:])).mean(1)
+    edge = max(4, int(0.02 * unit))  # the image's own top and bottom rows aren't joints
+    js = [j for j in _count_joints(prof, max(6, int(0.04 * unit))) if edge <= j <= h - edge]
+    if len(js) < 4:  # one very strong line (a hard cap edge) hid the courses: measure against the 98th percentile
+        js = [j for j in _count_joints(prof, max(6, int(0.04 * unit)), ref=98) if edge <= j <= h - edge]
+    out = {"height": height_units, "joints": [round(j / unit, 3) for j in js], "suggest": {"top": 0.0, "bottom": 0.0}}
+    if len(js) < 4:
+        return out
+    course = float(np.median(np.diff(js)))
+    kept = [js[0]]
+    for j in js[1:]:  # a crack or chip reads as a joint a fraction of a course from a real one: drop it
+        if j - kept[-1] >= 0.6 * course:
+            kept.append(j)
+    bounds = [0] + kept + [h]
+    gaps = np.diff(bounds)
+    tone = [rgb[y0 + 1:y1 - 1].mean((0, 1)) if y1 - y0 > 3 else rgb[y0:y1 + 1].mean((0, 1)) for y0, y1 in zip(bounds, bounds[1:])]
+    field_tone = np.median(np.array(tone[1:-1]), 0)
+    # a gap that's a whole number of courses is a missed joint, not a cap; a cap course is a fraction off
+    off = lambda g: g < 0.65 * course or abs(g / course - round(g / course)) > 0.3
+    # at the image's edge a long gap is the cap or plinth itself (no joint can hide there): any size off counts
+    odd = lambda i: (abs(gaps[i] - course) > 0.35 * course if i in (0, len(gaps) - 1) else off(gaps[i])) \
+        or np.abs(tone[i] - field_tone).max() > 30
+    n = len(gaps)
+    c = n // 2
+    i = c
+    while i > 0 and not odd(i - 1):
+        i -= 1
+    out["suggest"]["top"] = round(bounds[i] / unit, 3) if i > 0 else 0.0
+    i = c
+    while i < n - 1 and not odd(i + 1):
+        i += 1
+    out["suggest"]["bottom"] = round((h - bounds[i + 1]) / unit, 3) if i < n - 1 else 0.0
+    for k in ("top", "bottom"):  # a 'cap' deeper than 0.8 units is a misread, not a cap
+        if out["suggest"][k] > 0.8:
+            out["suggest"][k] = 0.0
+    return out
 
 
 def elevation_bands(name, rel, height_units=WALL_UNITS, keep_top=KEEP_TOP, keep_bottom=KEEP_BOTTOM, repeat=2):

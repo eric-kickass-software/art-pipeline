@@ -32,6 +32,15 @@ for across, course in [(5, 0.11), (3, 0.2), (4, 0.08), (6, 0.1), (2, 0.15)]:
     rows = (d.WALL_UNITS - d.KEEP_TOP - d.KEEP_BOTTOM) * d.iso._KZ / course
     assert m["across"] == across and abs(m["rows"] - rows) < 0.6, (across, course, m, rows)
 assert d.measure_elevation(Image.new("RGB", (w, h), (120, 120, 120)))["rows"] is None
+# keep-band guides: joints of the whole wall, and a suggested cap / base where the regular courses stop
+im = np.asarray(d.template_render({"pattern": "running_bond", "params": {"across": 4, "course": 0.1, "mortar": 0.012, "bevel": 0.012}}, "wall", 512)["rgb"].resize((w, h))).copy()
+unit = h / d.WALL_UNITS
+cap = int(0.3 * unit)
+im[:cap] = (175, 170, 160); im[cap - 4:cap] = (40, 40, 45)  # a plain 0.3-unit cap, its underside a dark joint
+J = d.elevation_joints(Image.fromarray(im))
+assert len(J["joints"]) > 15 and abs(J["suggest"]["top"] - 0.3) < 0.05, J["suggest"]
+plain = d.elevation_joints(d.template_render({"pattern": "stack_bond", "params": {"across": 4, "course": 0.125, "mortar": 0.012, "bevel": 0.012}}, "wall", 512)["rgb"].resize((w, h)))
+assert plain["suggest"]["bottom"] < 0.2, plain["suggest"]
 # bands view: kept cap and base tinted, repeated sideways
 import json, shutil, tempfile
 from pathlib import Path

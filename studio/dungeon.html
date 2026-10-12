@@ -72,6 +72,15 @@
   .ipimg { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; background:#16121c; border-radius:6px; }
   .ipimg img { max-width:100%; max-height:100%; object-fit:contain; }
   .ipimg img.px { image-rendering:pixelated; }
+  .ipimg { position:relative; }
+  #ipGuides { position:absolute; pointer-events:none; }
+  #ipGuides .band { position:absolute; left:0; right:0; background:rgba(80,150,255,.28); }
+  #ipGuides .edge { position:absolute; left:-6px; right:-6px; height:12px; margin-top:-6px; cursor:ns-resize; pointer-events:auto; }
+  #ipGuides .edge::after { content:""; position:absolute; left:6px; right:6px; top:5px; height:2px; background:#ffd23c; box-shadow:0 0 0 1px rgba(0,0,0,.6); }
+  #ipGuides .edge.snapped::after { background:#7dffb0; }
+  #ipGuides .lbl { position:absolute; left:8px; padding:1px 6px; font-size:11px; background:rgba(10,8,14,.85); color:#ffd23c; border-radius:3px; white-space:nowrap; }
+  #ipGuides .joint { position:absolute; height:1px; background:rgba(90,230,255,.85); }
+  #ipGuides .tick { position:absolute; right:-34px; width:30px; font-size:10px; color:#9a93a8; border-top:1px solid #6d6680; text-align:right; }
   .ipside { width:340px; overflow:auto; display:flex; flex-direction:column; gap:8px; font-size:12px; }
   .ipside table td { padding:2px 4px; vertical-align:top; } .ipside table td:first-child { color:var(--muted); white-space:nowrap; }
   .ipside .row button { flex:1; } .ipside textarea { width:100%; } .ipside .stale { color:#e0a030; }
@@ -169,7 +178,7 @@
   <div class="iphead"><b id="ipTitle"></b><span class="hint" id="ipCount"></span>
     <span style="margin-left:auto"></span><button id="ipPrev" title="previous (←)">◀</button><button id="ipNext" title="next (→)">▶</button><button id="ipClose" title="close (Esc)">✕</button></div>
   <div class="ipbody">
-    <div class="ipview"><div class="tabs" id="ipTabs"></div><div class="ipimg"><img id="ipImg" alt=""></div></div>
+    <div class="ipview"><div class="tabs" id="ipTabs"></div><div class="ipimg"><img id="ipImg" alt=""><div id="ipGuides"></div></div></div>
     <div class="ipside" id="ipSide"></div>
   </div></div></div>
 
@@ -841,7 +850,7 @@ function renderImage() {
     : [["tiled", master ? "tiled 3×3" : "among master tiles"], ["image", "image"], ["game", "in game"]];
   if (!views.some(v => v[0] === IMG.view)) IMG.view = views[0][0];
   IMG.keepT ??= 0.25; IMG.keepB ??= 0.1;
-  const bandsUrl = () => `/api/dun/elev_bands?set=${SET}&piece=${encodeURIComponent(it.pid)}&rel=${encodeURIComponent(it.rel)}&top=${IMG.keepT}&bottom=${IMG.keepB}`;
+  const bandsUrl = () => `/api/dun/elev_bands?set=${SET}&piece=${encodeURIComponent(it.pid)}&rel=${encodeURIComponent(it.rel)}&top=0&bottom=0`;
   const src = IMG.view === "bands" ? bandsUrl() : IMG.view === "image" ? `/api/dun/img?set=${SET}&rel=${encodeURIComponent(it.rel)}`
     : IMG.view === "tiled" ? `/api/dun/seam?set=${SET}&piece=${encodeURIComponent(it.pid)}&rel=${encodeURIComponent(it.rel)}`
     : natUrl(it.pid, it.rel, OUT(), D.spec.pixel ? viewScale() : 1);
@@ -853,6 +862,8 @@ function renderImage() {
   $("#ipTabs").innerHTML = views.map(([k, l]) => `<button data-v="${k}" class="${IMG.view === k ? "on" : ""}">${l}</button>`).join("");
   $("#ipTabs").querySelectorAll("button").forEach(b => b.onclick = () => { IMG.view = b.dataset.v; renderImage(); });
   $("#ipImg").src = src; $("#ipImg").classList.toggle("px", IMG.view === "game" && !!D.spec.pixel);
+  IMG.guides = master && elev && IMG.view !== "game" ? it : null;
+  $("#ipImg").onload = drawKeepGuides; drawKeepGuides();
   const on = master ? it.rel === active : s.approved.includes(it.rel), stale = !master && !trial && meta.master !== active;
   const rows = [["piece", it.pid], ["prompt", meta.prompt || ""], ["seed", meta.seed ?? ""], ["strength", meta.denoise ?? ""],
     ["made from", meta.edited_from ? `edit of ${meta.edited_from.split("/").pop()}` : meta.rescaled_from ? `×${Array.isArray(meta.scale) ? meta.scale.join(" wide, ×") + " tall" : meta.scale} of ${meta.rescaled_from.split("/").pop()}` : meta.evened_from ? `even tone ${meta.even} of ${meta.evened_from.split("/").pop()}` : ""],
@@ -878,7 +889,9 @@ function renderImage() {
         <button id="ipEvenBtn">Even tone</button></div>` : ""}
     ${master && elev ? `<h3>Rescale bricks</h3><div class="hint">The cap and base (tinted in <b>keep bands</b>) stay exactly as they are; the wall between them is rescaled, counted up from the base, and snapped to whole courses so none is cut under the cap. The result is a new master.</div>
       <div class="row"><label title="Units kept at the top (cap / coping)">keep top<input id="ipKeepT" type="number" step="0.05" min="0" max="1.5" value="${IMG.keepT}" style="width:58px"></label>
-        <label title="Units kept at the base (plinth)">bottom<input id="ipKeepB" type="number" step="0.05" min="0" max="1.5" value="${IMG.keepB}" style="width:58px"></label><span class="hint">units (wall = ${famSet().height})</span></div>
+        <label title="Units kept at the base (plinth)">bottom<input id="ipKeepB" type="number" step="0.05" min="0" max="1.5" value="${IMG.keepB}" style="width:58px"></label><span class="hint">units (wall = ${famSet().height})</span>
+        <button id="ipKeepFit" title="Set both to where the regular courses stop (the cap's underside, the plinth's top)">fit to cap &amp; base</button></div>
+      <div class="hint">Drag the yellow lines on the image: they snap to the wall's joints (blue ticks; hold Shift for free placement) and turn green when snapped.</div>
       <div class="hint" id="ipMeasure">measuring the courses…</div>
       <div class="row"><label title="Courses between the kept bands">rows<input id="ipRows" type="number" step="1" min="2" max="80" style="width:56px"></label>
         <label title="Bricks per tile width (the wall repeats every tile)">bricks across<input id="ipAcross" type="number" step="1" min="1" max="24" style="width:56px"></label>
@@ -914,9 +927,17 @@ function renderImage() {
       if (M.rows) $("#ipRows").value = Math.round(M.rows);
       if (M.across) $("#ipAcross").value = Math.round(M.across);
     };
-    measure();
-    const keeps = () => { IMG.keepT = Math.max(0, +$("#ipKeepT").value || 0); IMG.keepB = Math.max(0, +$("#ipKeepB").value || 0);
-      if (IMG.view === "bands") $("#ipImg").src = bandsUrl(); measure(); };
+    IMG.remeasure = measure;
+    const setKeeps = (t, b) => { IMG.keepT = t; IMG.keepB = b; $("#ipKeepT").value = t; $("#ipKeepB").value = b; drawKeepGuides(); measure(); };
+    const loadJoints = async () => {
+      if (IMG.joints && IMG.joints.rel === it.rel) return IMG.joints;
+      try { IMG.joints = {rel: it.rel, ...(await api(`/api/dun/elev_joints?set=${SET}&piece=${encodeURIComponent(it.pid)}&rel=${encodeURIComponent(it.rel)}`))}; }
+      catch { IMG.joints = {rel: it.rel, joints: [], suggest: {top: IMG.keepT, bottom: IMG.keepB}, height: famSet().height}; }
+      drawKeepGuides(); return IMG.joints;
+    };
+    loadJoints().then(J => { if (IMG && IMG.keepFor !== it.rel) { IMG.keepFor = it.rel; setKeeps(J.suggest.top, J.suggest.bottom); } else measure(); });
+    $("#ipKeepFit").onclick = async () => { const J = await loadJoints(); setKeeps(J.suggest.top, J.suggest.bottom); };
+    const keeps = () => { setKeeps(Math.max(0, +$("#ipKeepT").value || 0), Math.max(0, +$("#ipKeepB").value || 0)); };
     $("#ipKeepT").onchange = $("#ipKeepB").onchange = keeps;
     const go = async (fx, fy) => {
       try {
@@ -943,6 +964,39 @@ function renderImage() {
     catch (e) { msg(e.message); }
   });
 }
+// Keep-band guides over a wall master in the image panel (all views show the full wall height).
+function drawKeepGuides() {
+  const g = $("#ipGuides"), im = $("#ipImg");
+  if (!g) return;
+  if (!IMG || !IMG.guides || !im.naturalHeight) { g.innerHTML = ""; g.style.display = "none"; return; }
+  const box = im.parentElement.getBoundingClientRect(), r = im.getBoundingClientRect();
+  Object.assign(g.style, {display: "block", left: `${r.left - box.left}px`, top: `${r.top - box.top}px`, width: `${r.width}px`, height: `${r.height}px`});
+  const H = (IMG.joints && IMG.joints.height) || famSet().height, px = r.height / H;
+  const joints = (IMG.joints && IMG.joints.joints) || [];
+  const snapped = u => joints.some(j => Math.abs(j - u) < 1e-3);
+  const t = IMG.keepT, b = IMG.keepB;
+  let html = `<div class="band" style="top:0;height:${t * px}px"></div><div class="band" style="top:${(H - b) * px}px;height:${b * px}px"></div>`;
+  for (const j of joints) html += `<div class="joint" style="top:${j * px}px;left:0;width:12px"></div><div class="joint" style="top:${j * px}px;right:0;width:12px"></div>`;
+  for (let u = 0; u <= H + 1e-6; u += 0.25) html += `<div class="tick" style="top:${u * px}px">${Math.abs(u % 0.5) < 1e-6 ? u.toFixed(1) : ""}</div>`;
+  html += `<div class="edge ${snapped(t) ? "snapped" : ""}" data-k="t" style="top:${t * px}px"></div><div class="edge ${snapped(H - b) ? "snapped" : ""}" data-k="b" style="top:${(H - b) * px}px"></div>`;
+  html += `<div class="lbl" style="top:${Math.max(0, t * px - 20)}px">keep top ${t.toFixed(2)} u</div><div class="lbl" style="top:${Math.min(r.height - 18, (H - b) * px + 4)}px">keep bottom ${b.toFixed(2)} u</div>`;
+  g.innerHTML = html;
+  g.querySelectorAll(".edge").forEach(e => e.onpointerdown = ev => {
+    ev.preventDefault(); e.setPointerCapture(ev.pointerId);
+    const k = e.dataset.k;
+    e.onpointermove = mv => {
+      const rr = $("#ipImg").getBoundingClientRect();
+      let u = Math.min(Math.max((mv.clientY - rr.top) / rr.height * H, 0), H);
+      if (!mv.shiftKey) { const near = joints.reduce((a, j) => Math.abs(j - u) < Math.abs(a - u) ? j : a, Infinity); if (Math.abs(near - u) * px < 10) u = near; }
+      if (k === "t") IMG.keepT = +Math.min(u, H - IMG.keepB - 0.3).toFixed(3); else IMG.keepB = +Math.min(H - u, H - IMG.keepT - 0.3).toFixed(3);
+      if ($("#ipKeepT")) { $("#ipKeepT").value = IMG.keepT; $("#ipKeepB").value = IMG.keepB; }
+      drawKeepGuides();
+    };
+    e.onpointerup = () => { e.onpointermove = null; IMG.remeasure && IMG.remeasure(); };
+  });
+}
+window.addEventListener("resize", drawKeepGuides);
+
 const atlas_n_js = p => p.method === "atlas" ? (p.atlas || 4) : p.method === "repaint" ? (p.atlas || 1) : 1;
 $("#famRefresh").onclick = pvForceRefresh;
 $("#ipClose").onclick = closeImage; $("#ipPrev").onclick = () => stepImage(-1); $("#ipNext").onclick = () => stepImage(1);
