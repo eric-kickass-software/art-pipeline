@@ -179,6 +179,31 @@ def build_img2mesh(image_name, seed=42, prefix="hdart/mesh", resolution=1024):
 
 # ----------------------------------------------------------------------------- transport
 
+def build_repaint(image_name, mask_name, prompt, denoise=1.0, seed=0, steps=8, lora_strength=0.0,
+                  prefix="hdart/repaint", reference=True):
+    """FLUX.2-klein masked repaint. The mask is a greyscale image (its red channel is read): black = keep exactly,
+    white = repaint fully, grey in between (Differential Diffusion turns it into a per-pixel change strength, so
+    a soft edge blends instead of leaving a seam). The model sees the whole image, so the repaint continues what's
+    around it; `reference` also feeds the image in as a ReferenceLatent so materials and colours stay the same."""
+    g = Graph()
+    model, clip, vae = _klein_model(g, lora_strength)
+    model = g.add("DifferentialDiffusion", model=model[0], strength=1.0)
+    load = g.add("LoadImage", image=image_name)
+    mask = g.add("LoadImageMask", image=mask_name, channel="red")
+    lat = g.add("VAEEncode", pixels=load[0], vae=vae[0])
+    lat = g.add("SetLatentNoiseMask", samples=lat[0], mask=mask[0])
+    pos = g.add("CLIPTextEncode", clip=clip[0], text=prompt)
+    neg = g.add("ConditioningZeroOut", conditioning=pos[0])
+    if reference:
+        ref = g.add("VAEEncode", pixels=load[0], vae=vae[0])
+        pos = g.add("ReferenceLatent", conditioning=pos[0], latent=ref[0])
+        neg = g.add("ReferenceLatent", conditioning=neg[0], latent=ref[0])
+    out = g.add("KSampler", model=model[0], positive=pos[0], negative=neg[0], latent_image=lat[0], seed=seed,
+                steps=steps, cfg=1.0, sampler_name="euler", scheduler="simple", denoise=denoise)
+    g.add("SaveImage", images=g.add("VAEDecode", samples=out[0], vae=vae[0])[0], filename_prefix=prefix)
+    return g.nodes
+
+
 def alive():
     try:
         return requests.get(f"{URL}/system_stats", timeout=2).ok

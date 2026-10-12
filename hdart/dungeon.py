@@ -158,7 +158,7 @@ def layout(piece):
     """How a piece is cut for the game: single sprite, run halves, or an NxN floor atlas."""
     if piece["kind"] == "prop":
         return "single"
-    if piece.get("method") == "atlas":
+    if piece.get("method") == "atlas" or piece.get("method") == "repaint" and atlas_n(piece) > 1:
         return "atlas"
     if piece.get("shape") == "run" and piece.get("opening") != "door":
         return "run"
@@ -255,6 +255,172 @@ def make_tileable(src, prompt, seed, lora, band=0.16, denoise=0.7):
     w = np.clip(1 - (dist - half * 0.5) / half, 0, 1)[..., None]
     out = rolled * (1 - w) + fixed * w
     return Image.fromarray(np.clip(np.roll(out, (-(S // 2), -(S // 2)), (0, 1)), 0, 255).astype(np.uint8))
+
+
+# ----------------------------------------------------------------------------- master tile + repainted variants
+# A floor family made from one seamless master tile, so every piece shares its edges and any piece can sit next to
+# any other (FloorBlocks mixes their sizes on the board):
+#   method "master"   one seamless top-down tile: generated, lighting flattened, edges made periodic, then the seam
+#                     cross repainted with a soft mask. Ships as a 1x1 floor tile.
+#   method "repaint"  `from` = the master piece, `atlas` = N (1 = a 1x1 tile, 2-4 = an NxN block): the approved master
+#                     tiled NxN, everything but an outer band (`border`, in tiles) repainted with the piece prompt.
+#                     Its outer edges are the master's, so it fits next to the master and every other variant.
+# Both are stored as top-down squares (like atlases) and warped onto the iso diamond when cut.
+
+MASTER_PX = 512    # source px per tile (= the full-resolution output for a 64 grid)
+BLOCK_MAX = 1536   # largest repaint canvas FLUX gets (a 4x4 block runs at 384 px per tile)
+SQUARE_METHODS = ("atlas", "master", "repaint")
+REPAINT_DENOISE = 0.85  # default repaint strength for variants (piece `denoise` / the editor's denoise field)
+
+
+def atlas_n(piece):
+    """Tiles per side of a floor piece's square: atlas N, repaint N (default 1), else 1."""
+    m = piece.get("method")
+    return int(piece.get("atlas", 4)) if m == "atlas" else int(piece.get("atlas", 1)) if m == "repaint" else 1
+
+
+def floor_texture_prompt(st, text):
+    return (f"{style_text(st, ('medium', 'style', 'rendering', 'biome'))}, seamless tileable floor texture seen "
+            f"straight from above, {text}, the pattern continues past every edge of the image, no border, "
+            f"no frame, no walls, flat even lighting")
+
+
+def repaint(img, mask, prompt, seed, denoise=1.0, lora=0.0, reference=True):
+    """Masked FLUX repaint (comfy.build_repaint). `mask` is float 0..1 (0 = keep, 1 = repaint fully). The result
+    is blended back with the same mask in pixel space, so kept areas stay exactly the input (no VAE drift)."""
+    tmp = DUN / "tmp"
+    tmp.mkdir(parents=True, exist_ok=True)
+    stem = f"_rp_{time.time_ns()}"
+    img.save(tmp / f"{stem}.png")
+    Image.fromarray((np.clip(mask, 0, 1) * 255).astype(np.uint8)).save(tmp / f"{stem}.mask.png")
+    try:
+        nodes = comfy.build_repaint(comfy.upload(tmp / f"{stem}.png"), comfy.upload(tmp / f"{stem}.mask.png"),
+                                    prompt, denoise=denoise, seed=seed, lora_strength=lora, prefix="hdart/dun_rp",
+                                    reference=reference)
+        p = comfy.run(nodes, tmp)[0]
+    finally:
+        for f in (tmp / f"{stem}.png", tmp / f"{stem}.mask.png"):
+            f.unlink(missing_ok=True)
+    out = Image.open(p).convert("RGB")
+    p.unlink(missing_ok=True)
+    if out.size != img.size:
+        out = out.resize(img.size, Image.LANCZOS)
+    m = np.clip(mask, 0, 1)[..., None]
+    a = np.asarray(img.convert("RGB")).astype(np.float32)
+    return Image.fromarray(np.clip(a * (1 - m) + np.asarray(out).astype(np.float32) * m, 0, 255).astype(np.uint8))
+
+
+def flatten_light(img, strength=1.0):
+    """Divide out smooth lighting across the image (FLUX's vignette, a gradient from one side) and keep the detail:
+    fit a quadratic surface (1, x, y, x², y², xy) to the brightness and even it out. Anything stone-sized or smaller
+    is far too wiggly for that surface, so it's left alone."""
+    a = np.asarray(img.convert("RGB")).astype(np.float32)
+    H, W = a.shape[:2]
+    lum = a @ np.array([0.299, 0.587, 0.114], np.float32)
+    yy, xx = np.mgrid[0:H, 0:W]
+    u, v = (xx / W - 0.5).ravel(), (yy / H - 0.5).ravel()
+    basis = np.stack([np.ones_like(u), u, v, u * u, v * v, u * v], 1)
+    fit = (basis @ np.linalg.lstsq(basis, lum.ravel(), rcond=None)[0]).reshape(H, W)
+    gain = 1 + strength * (lum.mean() / np.maximum(fit, 1.0) - 1)
+    return Image.fromarray(np.clip(a * gain[..., None], 0, 255).astype(np.uint8))
+
+
+def periodic_smooth(img):
+    """Moisan's periodic + smooth decomposition: remove the smooth image that explains the jump between opposite
+    edges, so the texture wraps without a step (fixes 'almost tileable' colour/brightness edges exactly)."""
+    a = np.asarray(img.convert("RGB")).astype(np.float64)
+    H, W = a.shape[:2]
+    v = np.zeros_like(a)
+    v[0] += a[-1] - a[0]
+    v[-1] += a[0] - a[-1]
+    v[:, 0] += a[:, -1] - a[:, 0]
+    v[:, -1] += a[:, 0] - a[:, -1]
+    q = np.cos(2 * np.pi * np.arange(H) / H)[:, None]
+    r = np.cos(2 * np.pi * np.arange(W) / W)[None, :]
+    den = 2 * q + 2 * r - 4
+    den[0, 0] = 1
+    s = np.real(np.fft.ifft2(np.fft.fft2(v, axes=(0, 1)) / den[..., None], axes=(0, 1)))
+    return Image.fromarray(np.clip(a - s, 0, 255).astype(np.uint8))
+
+
+def seam_cross_mask(S, band=0.10, ramp=0.06):
+    """Soft mask over the cross where a half-rolled texture's old edges meet (1 on the seam, 0 away from it)."""
+    yy, xx = np.mgrid[0:S, 0:S] + 0.5
+    d = np.minimum(np.abs(xx - S / 2), np.abs(yy - S / 2)) / S
+    return np.clip(1 - (d - band / 2) / ramp, 0, 1)
+
+
+def make_seamless(img, prompt, seed, lora=0.0, band=0.10):
+    """Lighting flattened, edges made periodic, then the seam cross repainted (rolled to the middle so FLUX sees
+    both sides of it) and rolled back. The result tiles with itself."""
+    a = periodic_smooth(flatten_light(img))
+    S = a.size[0]
+    rolled = Image.fromarray(np.roll(np.asarray(a), (S // 2, S // 2), (0, 1)))
+    fixed = repaint(rolled, seam_cross_mask(S, band), prompt, seed + 1000, denoise=0.75, lora=lora)
+    return Image.fromarray(np.roll(np.asarray(fixed), (-(S // 2), -(S // 2)), (0, 1)))
+
+
+def gen_master(piece, seed=1, lora=0.0, st=None):
+    """A seamless master floor tile (top-down square, MASTER_PX)."""
+    st = st or style()
+    prompt = floor_texture_prompt(st, piece["prompt"])
+    big = 1152  # FLUX likes a darker rim at the image edge: generate larger, keep the middle
+    p = comfy.run(comfy.build_txt2img(prompt, big, big, seed=seed, lora_strength=lora, prefix="hdart/dun_master"),
+                  DUN / "tmp")[0]
+    src = Image.open(p).convert("RGB")
+    m = (big - 1024) // 2
+    src = src.crop((m, m, m + 1024, m + 1024)).resize((MASTER_PX, MASTER_PX), Image.LANCZOS)
+    return make_seamless(src, prompt, seed, lora)
+
+
+def seam_preview(name, pid, rel, size=768):
+    """Top-down seam check for a master or repaint candidate: a master tiled 3x3; a variant (1x1 or NxN block) in a
+    ring of master tiles. Edges that don't match show up as lines."""
+    spec = load_set(name)
+    piece = resolved(spec, pid)
+    img = Image.open(set_dir(name) / rel).convert("RGB")
+    if piece.get("method") == "master":
+        a = np.tile(np.asarray(img), (3, 3, 1))
+    else:
+        N = atlas_n(piece)
+        per = img.width // N
+        m = np.asarray(master_image(name, spec, piece).resize((per, per), Image.LANCZOS))
+        a = np.tile(m, (N + 2, N + 2, 1))
+        a[per:per * (N + 1), per:per * (N + 1)] = np.asarray(img)
+    out = Image.fromarray(a)
+    return out.resize((size, size), Image.LANCZOS) if out.width > size else out
+
+
+def block_mask(N, per, band, ramp=0.10):
+    """0 in an outer band `band` tiles wide (kept: the master's edges), ramping to 1 over `ramp` tiles inside."""
+    S = N * per
+    yy, xx = np.mgrid[0:S, 0:S] + 0.5
+    d = np.minimum.reduce([xx, yy, S - xx, S - yy]) / per
+    return np.clip((d - band) / ramp, 0, 1)
+
+
+def master_image(name, spec, piece):
+    mid = piece.get("from")
+    if not mid or not any(p["id"] == mid for p in spec["pieces"]):
+        raise ValueError(f"{piece['id']}: pick the master it repaints (from)")
+    appr = state(name)["pieces"].get(mid, {}).get("approved", [])
+    if not appr:
+        raise ValueError(f"approve a candidate of {mid} first: it's the master {piece['id']} repaints")
+    return Image.open(set_dir(name) / appr[0]).convert("RGB")
+
+
+def gen_repaint(name, spec, piece, seed=1, denoise=None, lora=0.0, st=None):
+    """The approved master tiled NxN with everything inside an outer band repainted from the piece prompt."""
+    st = st or style()
+    N = atlas_n(piece)
+    per = min(MASTER_PX, BLOCK_MAX // N) // 16 * 16
+    master = master_image(name, spec, piece).resize((per, per), Image.LANCZOS)
+    base = Image.fromarray(np.tile(np.asarray(master), (N, N, 1)))
+    mask = block_mask(N, per, float(piece.get("border", 0.08)))
+    # No reference image: with one FLUX copies the tiled master almost exactly. Starting from it at 0.85 keeps the
+    # master's stone scale but redraws the layout; 1.0 = freer (scale may drift), ~0.6 = subtle changes.
+    return repaint(base, mask, floor_texture_prompt(st, piece["prompt"]), seed,
+                   denoise=float(denoise) if denoise else REPAINT_DENOISE, lora=lora, reference=False)
 
 
 def warp_floor(src, tile, u0=0.0, u1=1.0, v0=0.0, v1=1.0, rim=0.55):
@@ -405,6 +571,12 @@ def generate(name, pid, n=3, seed=1, denoise=None, prompt=None, lora=None):
         sd = seed + k
         if piece["kind"] == "prop":
             img, mask = gen_prop(piece, sd, lora=lora if lora is not None else 0.0, st=st)
+        elif piece.get("method") == "master":
+            img = gen_master(piece, sd, lora if lora is not None else 0.0, st=st)
+            mask = np.ones(img.size[::-1], bool)
+        elif piece.get("method") == "repaint":
+            img = gen_repaint(name, spec, piece, sd, denoise or piece.get("denoise"), lora if lora is not None else 0.0, st=st)
+            mask = np.ones(img.size[::-1], bool)
         elif piece.get("method") == "atlas":
             img = gen_atlas(piece, sd, lora if lora is not None else 0.0, st=st)
             mask = np.ones(img.size[::-1], bool)
@@ -647,6 +819,9 @@ def cells(name, pid, rel, tile=None):
                 im8, m8 = warp_floor(img, T, i / N, (i + 1) / N, j / N, (j + 1) / N, rim=piece.get("rim", 0))
                 out[f"i{i}j{j}"] = _sprite(im8, m8, _flat_normals(m8.shape), tile, tile // 2)
         return out
+    if piece.get("method") in SQUARE_METHODS:  # a 1x1 top-down square (master, 1x1 repaint): warp it on cutting
+        im8, m8 = warp_floor(img, T, rim=piece.get("rim", 0))
+        return {"": _sprite(im8, m8, _flat_normals(m8.shape), tile, tile // 2)}
     if piece.get("shape") in ("floor", "decal"):
         return {"": _sprite(fill_white(img, mask), mask, _flat_normals(mask.shape), w, h)}
     g = _geometry_cached(piece, T)

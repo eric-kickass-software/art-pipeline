@@ -106,6 +106,20 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
   Candidate previews, the room and the Unity export all follow it. The export writes the same images to `r32/` and
   `r64/` and records `ppu` (px per tile = Unity pixels per unit) and `filter` (`point` / `bilinear`) in `set.json`,
   which both Unity loaders read. `crypt` is set to 64, its earlier look.
+- **Floor families from one master (edge-compatible variants):** add piece → **Master floor**, generate, approve one.
+  Then **Floor variant** pieces (method `repaint`, `from` = the master, size 1×1–4×4) repaint the master's interior and
+  keep its edges, so any piece of the family fits next to any other, and the board mixes their sizes (FloorBlocks).
+  - Master: txt2img → `flatten_light` (fits and divides out a quadratic brightness surface: vignette, side
+    gradients) → `periodic_smooth` (Moisan periodic + smooth: opposite edges match) → the seam cross repainted with a
+    soft mask (rolled to the middle). 512 px per tile.
+  - Variant: the master tiled N×N (512 px per tile, 384 for 4×4: canvas ≤ 1536), `block_mask` keeps an outer band
+    (`border`, default 0.08 tile) and fades in over 0.1 tile; repainted from the piece prompt with no reference image
+    at denoise 0.85 (keeps the master's stone scale; ~0.6 subtle, 1.0 freer). The kept band is pasted back in pixel
+    space, so the edges equal the master exactly.
+  - `comfy.build_repaint`: FLUX.2 klein + `DifferentialDiffusion` + `SetLatentNoiseMask`; a grey mask = per-pixel
+    change strength. `dungeon.repaint()` wraps it (upload, run, blend back).
+  - Each master/variant candidate card has a **seam check** (master tiled 3×3, or the variant in a ring of master tiles).
+  - Timing on the 4080 (model loaded): master ~5 s, 1×1 variant ~3 s, 3×3 block ~11 s. Tests: `tests/test_master.py`.
 - **Group boards:** click a group header in the piece list (FLOORS ▸, WALLS & DOORS ▸, ...) for every piece of that
   group on one page: edit prompts side by side, see all candidates (click = approve/unapprove, double-click = zoom),
   tick pieces and **Generate selected** (random seeds, one job per piece).

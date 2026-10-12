@@ -286,6 +286,8 @@ def dungeon_get(path, q):
                                                "style": dg.style(), "set_style": dg.set_style(spec)["groups"]}).encode()
     if path == "sets":
         return "application/json", json.dumps(dg.list_sets()).encode()
+    if path == "seam":  # master / repaint candidate among master tiles
+        return "image/png", dg.png_bytes(dg.seam_preview(name, g("piece"), g("rel")))
     if path == "img":  # raw 8x candidate
         return "image/png", dg.candidate_path(name, g("rel")).read_bytes()
     if path == "native":

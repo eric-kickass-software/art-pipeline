@@ -58,6 +58,7 @@
   .cand .raw { width:120px; height:120px; object-fit:contain; background:#fff; border-radius:3px; flex:none; }
   .cand .views > div { min-width:0; } .cand .nat { max-width:100%; image-rendering:pixelated; background: repeating-conic-gradient(#1d1924 0 25%, #26202f 0 50%) 50%/12px 12px; border-radius:3px; }
   .cand .meta { color:var(--muted); font-size:11px; margin:4px 0; }
+  .cand .seam { width:120px; height:120px; flex:none; border-radius:3px; cursor:zoom-in; }
   .cand .btns { display:flex; gap:4px; } .cand .btns button { flex:1; padding:3px; font-size:12px; }
   #room { width:100%; image-rendering:pixelated; border-radius:4px; display:block; background:#16121c; }
   .hires #room, .hires .cand .nat { image-rendering:auto; } .hires .cand .nat { max-height:160px; }
@@ -124,8 +125,10 @@
         </div>
         <div class="row">
           <label class="d-only">painted on (of)<select id="f_of" style="width:200px"></select></label>
-          <label class="f-only">floor method<select id="f_method"><option value="warp">single tile (warp)</option><option value="atlas">large area (atlas)</option><option value="template">template img2img</option></select></label>
-          <label class="a-only">atlas<select id="f_atlas"><option value="2">2×2</option><option value="3">3×3</option><option value="4">4×4</option></select></label>
+          <label class="f-only">floor method<select id="f_method"><option value="warp">single tile (warp)</option><option value="atlas">large area (atlas)</option><option value="template">template img2img</option><option value="master">seamless master tile</option><option value="repaint">repaint of a master</option></select></label>
+          <label class="a-only">size<select id="f_atlas"><option value="1">1×1</option><option value="2">2×2</option><option value="3">3×3</option><option value="4">4×4</option></select></label>
+          <label class="rp-only">master<select id="f_from" style="width:200px"></select></label>
+          <label class="rp-only" title="How much of the master's edge is kept unchanged, in tiles (0.08 = 8% of a tile). The repaint fades in over another 0.1 tile.">kept border<input id="f_border" type="number" step="0.01" min="0" max="0.4" style="width:64px" placeholder="0.08"></label>
           <label>board id<input id="f_board" style="width:200px" placeholder="(same as id)"></label>
           <label class="t-only">tint<input id="f_tint" style="width:110px" placeholder="r,g,b"></label>
           <label class="p-only">view override<input id="f_view" style="width:300px" placeholder="(shared prop view)" title="e.g. 'seen from above, lying flat' for things on the ground"></label>
@@ -182,7 +185,7 @@
       <h2>Or a blank piece</h2>
       <div class="row">
         <button data-blank="prop">Prop</button><button data-blank="floor">Floor tile</button>
-        <button data-blank="wall">Wall run</button><button data-blank="door">Door</button><button data-blank="arch">Archway</button><button data-blank="decor">Wall decor</button><button data-blank="area">Floor area</button><button data-blank="pillar">Pillar</button>
+        <button data-blank="wall">Wall run</button><button data-blank="door">Door</button><button data-blank="arch">Archway</button><button data-blank="decor">Wall decor</button><button data-blank="area">Floor area</button><button data-blank="master" title="One seamless floor tile that a family of variants is repainted from">Master floor</button><button data-blank="variant" title="A 1x1 tile or NxN block repainted from a master, keeping its edges">Floor variant</button><button data-blank="pillar">Pillar</button>
       </div>
     </div>
   </div>
@@ -431,7 +434,7 @@ function styleText(groups) { return groups.map(sv).filter(t => t.trim()).join(",
 function fullPrompt(p, text) {
   const all = ["medium", "style", "view", "rendering", "framing", "biome"], core = ["medium", "style", "rendering", "biome"];
   if (p.kind === "prop") return `${sv("prop_medium") || sv("medium")}, ${styleText(p.biome === false ? ["style", "rendering"] : ["style", "rendering", "biome"])}, ${p.view || sv("prop_view")}, ${text}, ${sv("prop_framing")}`;
-  if (p.method === "atlas")
+  if (["atlas", "master", "repaint"].includes(p.method))
     return `${styleText(core)}, seamless tileable floor texture seen straight from above, ${text}, the pattern continues past every edge of the image, no border, no frame, no walls, flat even lighting`;
   if (p.shape === "floor" && (p.method || "warp") === "warp")
     return `${styleText(core)}, top-down orthographic view of a single square dungeon floor tile, ${text}, the tile fills the entire image edge to edge, flat even lighting`;
@@ -455,6 +458,10 @@ function formPiece() {
   if (kind === "wall_decor") p.of = $("#f_of").value;
   if (kind === "tile" && p.shape === "floor" && $("#f_method").value !== "warp") p.method = $("#f_method").value;
   if (p.method === "atlas") p.atlas = +$("#f_atlas").value;
+  if (p.method === "repaint") {
+    p.atlas = +$("#f_atlas").value; p.from = $("#f_from").value;
+    if ($("#f_border").value !== "") p.border = +$("#f_border").value;
+  }
   if ($("#f_board").value.trim()) p.board = $("#f_board").value.trim();
   if ($("#f_tint").value.trim()) p.tint = $("#f_tint").value.split(",").map(Number);
   const old = piece(SEL); if (old && old.denoise && kind !== "prop") p.denoise = old.denoise;
@@ -467,7 +474,9 @@ function syncFormVis() {
   document.querySelectorAll(".p-only").forEach(e => e.classList.toggle("hidden", kind !== "prop"));
   document.querySelectorAll(".d-only").forEach(e => e.classList.toggle("hidden", kind !== "wall_decor"));
   document.querySelectorAll(".f-only").forEach(e => e.classList.toggle("hidden", !(kind === "tile" && shape === "floor")));
-  document.querySelectorAll(".a-only").forEach(e => e.classList.toggle("hidden", !(kind === "tile" && shape === "floor" && $("#f_method").value === "atlas")));
+  const fm = kind === "tile" && shape === "floor" ? $("#f_method").value : "";
+  document.querySelectorAll(".a-only").forEach(e => e.classList.toggle("hidden", !["atlas", "repaint"].includes(fm)));
+  document.querySelectorAll(".rp-only").forEach(e => e.classList.toggle("hidden", fm !== "repaint"));
   document.querySelectorAll(".r-only").forEach(e => e.classList.toggle("hidden", !(kind === "tile" && (shape === "run" || shape === "mesh"))));
   document.querySelectorAll(".m-only").forEach(e => e.classList.toggle("hidden", !(kind === "tile" && shape === "mesh")));
   if (kind === "wall_decor") document.querySelectorAll(".t-only").forEach(e => e.classList.add("hidden"));
@@ -478,7 +487,11 @@ function syncFormVis() {
   const p = formPiece();
   $("#fullPrompt").textContent = fullPrompt(p, p.prompt);
   const base = kind === "wall_decor" && p.of && pstate(p.of).approved.length;
-  $("#genHint").textContent = kind === "prop" ? "Prop: clean prompt on white → background removed → cropped and scaled to the footprint (tiles wide) → downsampled."
+  const masterOk = fm === "repaint" && p.from && pstate(p.from).approved.length;
+  $("#genHint").textContent = fm === "master" ? "Master: one seamless top-down tile (lighting flattened, edges made periodic, seam repainted). Approve one: every 'repaint of a master' piece starts from it and keeps its edges."
+    : fm === "repaint" ? (masterOk ? `Repaint: the approved ${p.from} tiled ${p.atlas}×${p.atlas}, everything inside the kept border redrawn from this prompt. Edges = the master's, so it fits next to any piece of the family. denoise: 0.85 default, ~0.6 subtle, 1.0 freer.`
+                                   : `Approve a candidate of the master (${p.from || "pick one"}) first: the repaint starts from it.`)
+    : kind === "prop" ? "Prop: clean prompt on white → background removed → cropped and scaled to the footprint (tiles wide) → downsampled."
     : warp ? "Floor: a top-down square tile is generated, then warped exactly onto the 2:1 diamond."
     : kind === "wall_decor" ? (base ? `Painted over the approved ${p.of} (img2img, denoise ~0.6) so the stone matches.` : `No approved ${p.of} yet: approve the base wall first for matching stone (falls back to the geometry template).`)
     : "Tile: FLUX paints over an exact iso geometry template (img2img) and the result is clamped to its outline.";
@@ -496,7 +509,9 @@ function renderCenter() {
   $("#pBadge").textContent = `${s.approved.length}/${p.variants || 1} approved`;
   $("#f_id").value = p.id; $("#f_kind").value = p.kind; $("#f_shape").value = p.shape || "floor";
   $("#f_length").value = p.length || 1; $("#f_opening").value = p.opening || ""; $("#f_mesh").value = p.mesh || "archway";
-  $("#f_atlas").value = p.atlas || 4;
+  $("#f_atlas").value = p.atlas || (p.method === "repaint" ? 1 : 4);
+  $("#f_from").innerHTML = D.spec.pieces.filter(q => q.method === "master").map(q => `<option ${q.id === p.from ? "selected" : ""}>${esc(q.id)}</option>`).join("") || `<option value="">(no master piece yet)</option>`;
+  $("#f_border").value = p.border ?? "";
   $("#f_height").value = p.height ?? ""; $("#f_footprint").value = p.footprint ?? ""; $("#f_variants").value = p.variants || 1;
   $("#f_of").innerHTML = D.spec.pieces.filter(q => q.kind === "tile" && (q.shape === "run" && !q.opening && (q.length || 1) === 1 || q.shape === "wall") && !q.retired).map(q => `<option ${q.id === p.of ? "selected" : ""}>${esc(q.id)}</option>`).join("");
   $("#f_method").value = p.method || "warp"; $("#f_board").value = p.board || ""; $("#f_tint").value = (p.tint || []).join(",");
@@ -516,6 +531,7 @@ function renderCands() {
       <div class="views">
         <img class="raw" src="/api/dun/img?set=${SET}&rel=${encodeURIComponent(rel)}" title="generated (8×)">
         <div><img class="nat" src="${natUrl(p.id, rel, OUT(), nScale)}" title="as exported: ${outLbl}"></div>
+        ${["master", "repaint"].includes(p.method) ? `<img class="seam" src="/api/dun/seam?set=${SET}&piece=${encodeURIComponent(p.id)}&rel=${encodeURIComponent(rel)}" title="seam check: ${p.method === "master" ? "tiled 3×3" : "in a ring of master tiles"} (click to zoom)">` : ""}
       </div>
       <div class="meta">seed ${m.seed ?? "?"}${m.denoise ? " · dn " + m.denoise : ""}${m.lora != null ? " · lora " + m.lora : ""}${m.on_base ? " · on base" : ""}${on ? ` · <b style="color:var(--ok)">variant ${ai}</b>` : ""}${m.prompt && m.prompt !== p.prompt ? `<br><i title="${esc(m.prompt)}">older prompt</i>` : ""}</div>
       <div class="btns"><button data-a="approve" class="${on ? "on" : ""}">${on ? "✓ Approved" : "Approve"}</button><button data-a="try">${TRY === rel ? "Trying" : "Try"}</button><button data-a="seed" title="reuse this seed">Seed</button><button data-a="discard" class="danger" title="Archive this image (moves to archive/)">✕</button></div>
@@ -524,6 +540,7 @@ function renderCands() {
   document.querySelectorAll(".cand").forEach(el => {
     const rel = el.dataset.rel;
     el.querySelector(".raw").onclick = () => zoom(el.querySelector(".raw").src);
+    const seam = el.querySelector(".seam"); if (seam) seam.onclick = () => zoom(seam.src);
     el.querySelectorAll("button").forEach(b => b.onclick = async () => {
       const a = b.dataset.a;
       try {
@@ -598,6 +615,9 @@ async function addPiece(p) {
   const r = await post("piece/save", {piece: p}); D.spec = r.spec; SEL = id; setView("pieces");
 }
 document.querySelectorAll("[data-blank]").forEach(b => b.onclick = () => {
+  // A family shares the main floor's board id (what the game asks for): the master's, else the plain floor's.
+  const mp = D.spec.pieces.find(q => q.method === "master"), master = mp && mp.id;
+  const floorBoard = mp && mp.board || (D.spec.pieces.find(q => q.shape === "floor" && (q.board || q.id).endsWith("_floor")) || {}).board || `tile.${SET}_floor`;
   const wall = (D.spec.pieces.find(q => q.kind === "tile" && (q.shape === "run" && !q.opening && (q.length || 1) === 1 || q.shape === "wall") && !q.retired) || {}).id;
   const t = {prop: {id: "prop.new", kind: "prop", footprint: 0.5, prompt: "an old wooden ..."},
              floor: {id: `tile.${SET}_floor_new`, kind: "tile", shape: "floor", variants: 2, prompt: "flagstones ..."},
@@ -606,12 +626,14 @@ document.querySelectorAll("[data-blank]").forEach(b => b.onclick = () => {
              arch: {id: `tile.${SET}_arch_new`, board: `tile.${SET}_arch`, kind: "tile", shape: "mesh", mesh: "archway", length: 1, height: 2, thickness: 0.25, prompt: "a thin wall with an open stone archway ..."},
              area: {id: `tile.${SET}_floor_area_new`, board: `tile.${SET}_floor`, kind: "tile", shape: "floor", method: "atlas", atlas: 4, variants: 2, prompt: "flagstones ..."},
              decor: {id: `tile.${SET}_wall_decor`, kind: "wall_decor", shape: "wall", height: 2, of: wall, prompt: "the same stone wall block with ... on the front faces"},
+             master: {id: `tile.${SET}_floor_master`, board: floorBoard, kind: "tile", shape: "floor", method: "master", variants: 1, prompt: "cracked grey flagstones with dark mortar lines"},
+             variant: {id: `tile.${SET}_floor_var`, board: floorBoard, kind: "tile", shape: "floor", method: "repaint", from: master, atlas: 1, variants: 2, prompt: "cracked grey flagstones, one with a large crack and moss in the joints"},
              pillar: {id: `tile.${SET}_pillar_new`, kind: "tile", shape: "pillar", height: 1.5, prompt: "a carved stone pillar ..."}}[b.dataset.blank];
   addPiece(t);
 });
 
 // ---- actions
-["#f_kind", "#f_shape", "#f_method", "#f_of", "#f_prompt", "#f_view", "#f_biome", "#f_length", "#f_opening", "#f_atlas"].forEach(s => $(s).addEventListener("input", syncFormVis));
+["#f_kind", "#f_shape", "#f_method", "#f_of", "#f_prompt", "#f_view", "#f_biome", "#f_length", "#f_opening", "#f_atlas", "#f_from", "#f_border"].forEach(s => $(s).addEventListener("input", syncFormVis));
 $("#tabPieces").onclick = () => setView("pieces");
 $("#tabStyle").onclick = () => setView("style");
 $("#addPieceBtn").onclick = () => setView("add");
