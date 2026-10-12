@@ -2,11 +2,11 @@
   "_doc": "Prompt descriptors for dungeon sets (hdart/dungeon.py, Studio > Dungeon). Tiles: all groups + the piece text, painted onto a geometry template with img2img. Props: medium + style + rendering + biome + prop_view + piece text + prop_framing. CFG 1: no negative prompts, say what you want.",
   "groups": {
     "medium": {
-      "text": "dungeon tile set, seamless, repeating",
+      "text": "texture for module dungeon set, seamless, repeating",
       "hint": "What kind of image it is. No pixel words: pixelation is the Pixelate slider (a downsample after generation). The pixel-art LoRA is off unless you set LoRA on a generation; it wants 'pixel art sprite' here."
     },
     "style": {
-      "text": "fine details, clean, stylized edges, almost voxel/texel, whimsical ",
+      "text": "fine details, clean, stylized edges, almost voxel/texel, whimsical, hyper-stylized, juiced, high fantasy, pixar",
       "hint": "Game references steer strongly. Try 'Sea of Stars', 'Hyper Light Drifter', 'Darkest Dungeon'."
     },
     "view": {
@@ -14,7 +14,7 @@
       "hint": "Tiles follow the template geometry anyway; this keeps the shading/perspective consistent."
     },
     "rendering": {
-      "text": "clean dark outlines, cel shading, hard edges, crisp pixels, limited palette, soft shadows in the cracks",
+      "text": "clean dark outlines, hard edges, crisp pixels, limited palette",
       "hint": "Line + shading language. Extras: 'moody', 'high contrast', 'muted earthy colours', 'painterly'."
     },
     "framing": {

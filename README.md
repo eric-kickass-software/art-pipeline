@@ -106,6 +106,16 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
   Candidate previews, the room and the Unity export all follow it. The export writes the same images to `r32/` and
   `r64/` and records `ppu` (px per tile = Unity pixels per unit) and `filter` (`point` / `bilinear`) in `set.json`,
   which both Unity loaders read. `crypt` is set to 64, its earlier look.
+- **Group boards:** click a group header in the piece list (FLOORS ▸, WALLS & DOORS ▸, ...) for every piece of that
+  group on one page: edit prompts side by side, see all candidates (click = approve/unapprove, double-click = zoom),
+  tick pieces and **Generate selected** (random seeds, one job per piece).
+- **Style editing in place:** the piece editor and the group boards have an "Edit the shared style" box with just the
+  fields that kind of piece uses (floors: medium/style/rendering/biome; walls: all six; props: the prop fields).
+  Prompt previews update as you type; saves (there and on the Style tab) send only fields that changed.
+- **Harmonize** (slider by Pixelate; set field `harmonize`, 0–1): pulls each floor/wall image's CIELAB mean and
+  spread toward its family's reference (floors and walls separately; the approved images, or all candidates while
+  none are approved). Props are left alone. Like Pixelate it's applied when cutting, so previews, the room and the
+  export follow it. Tests: `tests/test_harmonize.py`.
 - **Removing things = archiving** (nothing is deleted; `archive/` is git-ignored, empty it by hand when sure):
   - ✕ on a candidate, **Archive unapproved**, and **Remove piece** move images to `archive/dungeon/<set>/` (same relative paths).
   - **Archive set** moves the spec, images and state to `archive/sets/<set>_<stamp>/`. A Unity export stays in the project.

@@ -2,8 +2,8 @@
   "_doc": "A dungeon part set (biome). kind: tile (template-guided, exact iso geometry), wall_decor (a wall tile with something mounted on it), prop (free object, cut out and fitted to `footprint` tiles wide). shape: floor | wall | pillar. height in tile units (1 = tile/2 px). ids match content definitions where they exist (tile.*, feature kinds); prop.* are visual decor. Prompts are added after the dungeon style descriptors.",
   "id": "Stylized",
   "name": "Stylized",
-  "tile": 64,
-  "biome": "stylized fantasy, whimsical, ruins, ancient, magical, mystical, runes, moss, moonlit, cozy, cracked flagstones, mossy brick, polished marble, old beams, rope, vines. tuffs of grass",
+  "tile": 128,
+  "biome": "stylized fantasy, whimsical, ruins, ancient, magical, mystical, cozy",
   "pieces": [
     {
       "id": "tile.Stylized_floor",
@@ -188,13 +188,13 @@
     },
     {
       "id": "tile.Stylized_floor_area",
-      "board": "tile.crypt_floor",
       "kind": "tile",
+      "prompt": "smooth gray granite tiles, cool tones, evenly lit, 3x3 section of tiles, consistent edges, slightly imperfect tiles, different sized tiles, completely flat, no vignettes, cool, dry, even",
       "shape": "floor",
-      "method": "atlas",
-      "atlas": 4,
       "variants": 2,
-      "prompt": "cracked grey flagstones of varied sizes with dark mortar lines, a few worn, sunken and chipped stones"
+      "method": "atlas",
+      "atlas": 3,
+      "board": "tile.crypt_floor"
     },
     {
       "id": "tile.Stylized_wall",
@@ -330,9 +330,12 @@
     {
       "id": "tile.Stylized_floor_moss",
       "kind": "tile",
-      "prompt": "flat smooth stone tiles, mosaic squares, cool tones, evenly lit, small patches of moss growing in the cracks of the tiles",
+      "prompt": "smooth gray granite tiles, large patch of wet moss, cool tones, evenly lit, 3x3 section of tiles, consistent edges, slightly imperfect tiles, different sized tiles, completely flat, no vignettes",
       "shape": "floor",
-      "variants": 2
+      "height": 0,
+      "variants": 2,
+      "method": "atlas",
+      "atlas": 3
     }
   ]
 }

@@ -29,6 +29,20 @@
   .col { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:10px; }
   .side { position:sticky; top:58px; max-height:calc(100vh - 70px); overflow:auto; }
   .plist .grp { color:var(--accent); font-size:11px; text-transform:uppercase; letter-spacing:1px; margin:10px 0 4px; }
+  .plist .grp.gclick { cursor:pointer; } .plist .grp.gclick:hover, .plist .grp.sel { text-decoration:underline; }
+  .stylebox { margin-top:8px; border:1px solid var(--line); border-radius:6px; padding:4px 8px; }
+  .stylebox summary { cursor:pointer; color:var(--muted); font-size:12px; }
+  .stylebox summary:not([data-n="0"])::after { content:" · " attr(data-n) " unsaved"; color:var(--accent); } .stylebox[open] summary { margin-bottom:6px; }
+  .stylebox .sf { margin-bottom:6px; } .stylebox .sf label { font-size:11px; color:var(--accent); }
+  .stylebox .sf textarea { width:100%; } .stylebox .sf.dirty textarea { border-color:var(--accent); }
+  .grow { border:1px solid var(--line); border-radius:6px; padding:6px; margin:6px 0; background:var(--card); }
+  .grow .ghead { display:flex; gap:8px; align-items:center; } .grow .gsel { width:auto; flex:none; margin:0; }
+  .grow .gbadge { margin-left:auto; } .grow .gid { cursor:pointer; font-weight:600; } .grow .gid:hover { color:var(--accent); }
+  .grow textarea { width:100%; margin:4px 0; } .grow textarea.dirty { border-color:var(--accent); }
+  .strip { display:flex; gap:4px; flex-wrap:wrap; }
+  .strip img { width:72px; height:72px; object-fit:contain; background:#fff; border-radius:3px; border:2px solid transparent; cursor:pointer; }
+  .strip img.on { border-color:var(--ok); } .strip .none { color:var(--muted); font-size:12px; }
+  .gbar { display:flex; gap:6px; align-items:center; flex-wrap:wrap; position:sticky; top:0; background:var(--panel, #1d1924); padding:4px 0; z-index:2; }
   .pitem { display:flex; gap:8px; align-items:center; padding:4px; border-radius:5px; cursor:pointer; border:1px solid transparent; }
   .pitem:hover { background:var(--card); } .pitem.sel { border-color:var(--accent); background:var(--card); }
   .pitem img, .pitem .ph { width:40px; height:40px; object-fit:contain; image-rendering:pixelated; flex:none; background:#0003; border-radius:3px; }
@@ -121,6 +135,7 @@
         <textarea id="f_prompt" rows="2"></textarea>
         <div class="hint" style="margin-top:6px">Full prompt sent to FLUX:</div>
         <div class="prompt" id="fullPrompt"></div>
+        <details class="stylebox" id="pieceStyle"><summary>Edit the shared style for this kind of piece</summary><div class="sbody"></div></details>
         <div class="row" style="margin-top:8px">
           <label>count<input id="g_n" type="number" value="4" min="1" max="12"></label>
           <label>seed<input id="g_seed" type="number" value="1"></label>
@@ -137,6 +152,8 @@
         <div class="cands" id="cands"></div>
       </div>
     </div>
+
+    <div id="groupView" class="hidden"></div>
 
     <div id="styleView" class="hidden">
       <h2>Set</h2>
@@ -176,6 +193,9 @@
       <span><label class="hint" title="Downsample the generated art for a pixel-art look. Off = full resolution. Used by the candidate previews, this room and the Unity export.">Pixelate
         <input id="r_pixel" type="range" min="0" step="1" style="width:110px;vertical-align:middle"></label>
         <span id="r_pixelLbl" class="badge"></span>
+        <label class="hint" title="Pull every floor and wall image's colours toward the set's approved pieces (floors and walls separately; props untouched). Previews, room and export follow it.">Harmonize
+        <input id="r_harm" type="range" min="0" max="1" step="0.1" style="width:80px;vertical-align:middle"></label>
+        <span id="r_harmLbl" class="badge"></span>
       <button id="roomBtn">↻</button></span></div>
     <div class="hint" id="roomHint">Approved pieces in a mock room (back walls only).</div>
     <img id="room" alt="room preview">
@@ -236,7 +256,7 @@ function running(pid) { return JOBS.some(j => j.status !== "done" && j.status !=
 function renderList() {
   const order = ["Floors", "Walls & doors", "Wall decor", "Pillars", "Props", "Features & traps", "Retired (old geometry)"];
   const by = {}; D.spec.pieces.forEach(p => (by[group(p)] ||= []).push(p));
-  $("#plist").innerHTML = order.filter(g => by[g]).map(g => `<div class="grp">${g}</div>` + by[g].map(p => {
+  $("#plist").innerHTML = order.filter(g => by[g]).map(g => `<div class="grp gclick ${VIEW === "group" && GROUP === g ? "sel" : ""}" data-g="${esc(g)}" title="Open the ${esc(g)} board: all prompts and candidates">${g} ▸</div>` + by[g].map(p => {
     const s = pstate(p.id), a = s.approved.length, v = p.variants || 1;
     const cls = running(p.id) ? "run" : a >= v ? "ok" : (a || s.candidates.length) ? "part" : "none";
     const txt = running(p.id) ? "generating" : `${a}/${v}` + (s.candidates.length && a < v ? ` · ${s.candidates.length} cand` : "");
@@ -244,6 +264,7 @@ function renderList() {
     return `<div class="pitem ${p.id === SEL && VIEW === "pieces" ? "sel" : ""}" data-id="${esc(p.id)}">${img}<span class="nm" title="${esc(p.id)}">${esc(p.id)}</span><span class="badge ${cls}">${txt}</span></div>`;
   }).join("")).join("") + renderOrphans();
   document.querySelectorAll(".pitem").forEach(el => el.onclick = () => { SEL = el.dataset.id; TRY = null; setView("pieces"); });
+  document.querySelectorAll(".plist .grp.gclick").forEach(el => el.onclick = () => { GROUP = el.dataset.g; setView("group"); });
   document.querySelectorAll(".orphan button").forEach(b => b.onclick = async () => {
     const pid = b.closest(".orphan").dataset.id;
     try {
@@ -263,19 +284,153 @@ function renderOrphans() {
       <span class="badge part">${v.count} img</span><button data-a="restore">Restore</button><button data-a="archive" class="danger">Archive</button></div>`).join("");
 }
 
+// ---- group board: every piece of one group (Floors, Walls & doors, ...) on one page. Edit prompts side by side,
+// see all their candidates, approve by clicking, and generate just the ticked pieces.
+let GROUP = null, GSEL = new Set(), GPROMPT = {};
+const groupPieces = () => D.spec.pieces.filter(p => group(p) === GROUP);
+
+function renderGroup() {
+  const ps = groupPieces();
+  if (!ps.length) { $("#groupView").innerHTML = `<div class="hint">No pieces in ${esc(GROUP)}.</div>`; return; }
+  const fields = [...new Set(ps.flatMap(fieldsFor))];
+  $("#groupView").innerHTML = `<h2 style="margin-top:0">${esc(GROUP)} <span class="hint">· ${ps.length} pieces · click an image to approve / unapprove, double-click to zoom</span></h2>
+    <div class="gbar">
+      <button id="gAll">Select all</button><button id="gNone">None</button>
+      <label>count<input id="gN" type="number" value="4" min="1" max="12" style="width:52px"></label>
+      <button id="gGen" class="primary">Generate selected</button>
+      <button id="gSave">Save prompts</button>
+      <span class="hint" id="gMsg"></span>
+    </div>
+    <details class="stylebox" id="groupStyle"><summary>Edit the shared style for ${esc(GROUP.toLowerCase())}</summary><div class="sbody"></div></details>
+    <div id="gRows">${ps.map(p => `<div class="grow" data-id="${esc(p.id)}">
+      <div class="ghead"><input type="checkbox" class="gsel" ${GSEL.has(p.id) ? "checked" : ""}>
+        <span class="gid" title="open in the piece editor">${esc(p.id)}</span><span class="badge gbadge"></span></div>
+      <textarea class="gprompt ${p.id in GPROMPT ? "dirty" : ""}" rows="2">${esc(GPROMPT[p.id] ?? p.prompt ?? "")}</textarea>
+      <div class="strip"></div></div>`).join("")}</div>`;
+  renderStyleBox($("#groupStyle"), fields, null);
+  ps.forEach(p => renderGroupRow(p.id));
+  document.querySelectorAll(".grow").forEach(row => {
+    const id = row.dataset.id;
+    row.querySelector(".gsel").onchange = e => { e.target.checked ? GSEL.add(id) : GSEL.delete(id); groupMsg(); };
+    row.querySelector(".gid").onclick = () => { SEL = id; TRY = null; setView("pieces"); };
+    row.querySelector(".gprompt").oninput = e => {
+      if (e.target.value === (piece(id).prompt || "")) delete GPROMPT[id]; else GPROMPT[id] = e.target.value;
+      e.target.classList.toggle("dirty", id in GPROMPT); groupMsg();
+    };
+  });
+  $("#gAll").onclick = () => { ps.forEach(p => GSEL.add(p.id)); renderGroup(); };
+  $("#gNone").onclick = () => { GSEL.clear(); renderGroup(); };
+  $("#gSave").onclick = () => saveGroupPrompts().then(n => $("#gMsg").textContent = n ? `Saved ${n} prompt${n > 1 ? "s" : ""}.` : "No prompt changes.").catch(e => $("#gMsg").textContent = e.message);
+  $("#gGen").onclick = generateGroup;
+  groupMsg();
+}
+
+function groupMsg() {
+  const dirty = Object.keys(GPROMPT).filter(id => piece(id) && group(piece(id)) === GROUP).length;
+  $("#gMsg").textContent = `${[...GSEL].filter(id => piece(id) && group(piece(id)) === GROUP).length} selected` + (dirty ? ` · ${dirty} unsaved prompt${dirty > 1 ? "s" : ""}` : "");
+}
+
+// Badge + thumbnails for one row (also called when a job finishes, without touching what's being typed).
+function renderGroupRow(id) {
+  const row = document.querySelector(`.grow[data-id="${CSS.escape(id)}"]`), p = piece(id);
+  if (!row || !p) return;
+  const s = pstate(id), v = p.variants || 1, rest = s.candidates.filter(r => !s.approved.includes(r));
+  row.querySelector(".gbadge").textContent = running(id) ? "generating" : `${s.approved.length}/${v} approved · ${s.candidates.length} cand`;
+  row.querySelector(".gbadge").className = "badge gbadge " + (running(id) ? "run" : s.approved.length >= v ? "ok" : s.candidates.length ? "part" : "none");
+  const img = (rel, on) => `<img class="${on ? "on" : ""}" data-rel="${esc(rel)}" loading="lazy" src="/api/dun/img?set=${SET}&rel=${encodeURIComponent(rel)}" title="${on ? "approved: click to unapprove" : "click to approve"} · double-click to zoom">`;
+  row.querySelector(".strip").innerHTML = s.approved.map(r => img(r, true)).join("") + rest.map(r => img(r, false)).join("") ||
+    `<span class="none">No candidates yet.</span>`;
+  row.querySelectorAll(".strip img").forEach(el => {
+    let t = null;
+    el.onclick = () => { clearTimeout(t); t = setTimeout(async () => {  // wait out a double-click
+      const rel = el.dataset.rel, on = !pstate(id).approved.includes(rel);
+      try { D.state.pieces[id] = (await post("approve", {piece: id, rel, on})).piece; renderGroupRow(id); renderList(); refreshRoom(); }
+      catch (e) { $("#gMsg").textContent = e.message; }
+    }, 220); };
+    el.ondblclick = () => { clearTimeout(t); zoom(el.src); };
+  });
+}
+
+async function saveGroupPrompts() {
+  const ids = Object.keys(GPROMPT).filter(id => piece(id));
+  for (const id of ids) { D.spec = (await post("piece/save", {piece: {...piece(id), prompt: GPROMPT[id].trim()}})).spec; delete GPROMPT[id]; }
+  document.querySelectorAll(".grow textarea.dirty").forEach(t => { if (!(t.closest(".grow").dataset.id in GPROMPT)) t.classList.remove("dirty"); });
+  groupMsg();
+  return ids.length;
+}
+
+async function generateGroup() {
+  const ids = [...GSEL].filter(id => piece(id) && group(piece(id)) === GROUP);
+  if (!ids.length) { $("#gMsg").textContent = "Tick the pieces to generate first."; return; }
+  try {
+    await saveGroupPrompts();
+    const n = +$("#gN").value || 1;
+    for (const id of ids) await post("generate", {piece: id, n, seed: 1 + Math.floor(Math.random() * 99999)});
+    $("#gMsg").textContent = `Queued ${ids.length} piece${ids.length > 1 ? "s" : ""} × ${n}.`;
+    pollJobs(); ids.forEach(renderGroupRow);
+  } catch (e) { $("#gMsg").textContent = e.message; }
+}
+
 function setView(v) {
   VIEW = v;
   $("#pieceView").classList.toggle("hidden", v !== "pieces");
+  $("#groupView").classList.toggle("hidden", v !== "group");
   $("#styleView").classList.toggle("hidden", v !== "style");
   $("#addView").classList.toggle("hidden", v !== "add");
   $("#tabPieces").classList.toggle("on", v !== "style"); $("#tabStyle").classList.toggle("on", v === "style");
   renderList(); renderCenter();
 }
 
-function styleText(groups) { return groups.map(g => D.set_style[g].text).filter(t => t.trim()).join(", "); }
+// ---- shared style: the descriptors every piece's prompt is built from. Editable from the piece editor, the group
+// board and the Style tab; unsaved edits live in OVR (prompt previews use them) and only changed fields are saved,
+// so an older open page can't overwrite somebody else's edits.
+const STYLE_KIND = {medium: "group", style: "group", view: "group", rendering: "group", framing: "group", biome: "biome",
+                    prop_medium: "prop", prop_view: "prop", prop_framing: "prop"};
+const STYLE_LABEL = {biome: "biome (this set)", prop_medium: "prop medium", prop_view: "prop view", prop_framing: "prop framing"};
+let OVR = {};
+function savedStyle(f) { return STYLE_KIND[f] === "group" ? D.style.groups[f].text : f === "biome" ? D.set_style.biome.text : D.style[f] || ""; }
+const sv = f => f in OVR ? OVR[f] : savedStyle(f);
+function fieldsFor(p) {
+  if (p.kind === "prop") return ["prop_medium", "style", "rendering", ...(p.biome === false ? [] : ["biome"]), "prop_view", "prop_framing"];
+  if (p.shape === "floor") return ["medium", "style", "rendering", "biome"];
+  return ["medium", "style", "view", "rendering", "framing", "biome"];
+}
+function styleHint(f) { return STYLE_KIND[f] === "group" ? (D.style.groups[f].hint || "") : f === "biome" ? "Only this set. The other fields are shared by every set." : ""; }
+function renderStyleBox(box, fields, onEdit) {
+  const n = fields.filter(f => f in OVR).length;
+  box.querySelector("summary").dataset.n = n;
+  box.querySelector(".sbody").innerHTML = fields.map(f => `<div class="sf ${f in OVR ? "dirty" : ""}" data-f="${f}"><label title="${esc(styleHint(f))}">${STYLE_LABEL[f] || f}</label>
+      <textarea rows="2">${esc(sv(f))}</textarea></div>`).join("") +
+    `<div class="row"><button class="primary ssave">Save style</button><button class="sundo">Undo edits</button><span class="hint smsg"></span></div>`;
+  box.querySelectorAll(".sf textarea").forEach(t => t.oninput = () => {
+    const f = t.closest(".sf").dataset.f;
+    if (t.value === savedStyle(f)) delete OVR[f]; else OVR[f] = t.value;
+    t.closest(".sf").classList.toggle("dirty", f in OVR);
+    box.querySelector("summary").dataset.n = fields.filter(f => f in OVR).length;
+    onEdit && onEdit();
+  });
+  box.querySelector(".sundo").onclick = () => { fields.forEach(f => delete OVR[f]); renderStyleBox(box, fields, onEdit); onEdit && onEdit(); };
+  box.querySelector(".ssave").onclick = async () => {
+    try { const n = await saveStyle(fields); box.querySelector(".smsg").textContent = n ? `Saved ${n} field${n > 1 ? "s" : ""}.` : "Nothing changed."; renderStyleBox(box, fields, onEdit); }
+    catch (e) { box.querySelector(".smsg").textContent = e.message; }
+  };
+}
+async function saveStyle(fields) {
+  const ch = fields.filter(f => f in OVR && OVR[f] !== savedStyle(f));
+  if (!ch.length) { fields.forEach(f => delete OVR[f]); return 0; }
+  const groups = {}, body = {};
+  ch.forEach(f => { if (STYLE_KIND[f] === "group") groups[f] = OVR[f]; else if (STYLE_KIND[f] === "prop") body[f] = OVR[f]; });
+  if (Object.keys(groups).length || Object.keys(body).length) D.style = (await post("style", {groups, ...body})).style;
+  if (ch.includes("biome")) D.spec = (await post("set/update", {fields: {biome: OVR.biome}})).spec;
+  fields.forEach(f => delete OVR[f]);
+  await load();
+  return ch.length;
+}
+
+function styleText(groups) { return groups.map(sv).filter(t => t.trim()).join(", "); }
 function fullPrompt(p, text) {
   const all = ["medium", "style", "view", "rendering", "framing", "biome"], core = ["medium", "style", "rendering", "biome"];
-  if (p.kind === "prop") return `${D.style.prop_medium || D.set_style.medium.text}, ${styleText(p.biome === false ? ["style", "rendering"] : ["style", "rendering", "biome"])}, ${p.view || D.style.prop_view}, ${text}, ${D.style.prop_framing}`;
+  if (p.kind === "prop") return `${sv("prop_medium") || sv("medium")}, ${styleText(p.biome === false ? ["style", "rendering"] : ["style", "rendering", "biome"])}, ${p.view || sv("prop_view")}, ${text}, ${sv("prop_framing")}`;
   if (p.method === "atlas")
     return `${styleText(core)}, seamless tileable floor texture seen straight from above, ${text}, the pattern continues past every edge of the image, no border, no frame, no walls, flat even lighting`;
   if (p.shape === "floor" && (p.method || "warp") === "warp")
@@ -331,6 +486,7 @@ function syncFormVis() {
 
 function renderCenter() {
   if (VIEW === "style") return renderStyle();
+  if (VIEW === "group") return renderGroup();
   if (VIEW === "add") return renderCatalog();
   const p = piece(SEL);
   $("#noPiece").classList.toggle("hidden", !!p); $("#pieceEd").classList.toggle("hidden", !p);
@@ -346,6 +502,7 @@ function renderCenter() {
   $("#f_method").value = p.method || "warp"; $("#f_board").value = p.board || ""; $("#f_tint").value = (p.tint || []).join(",");
   $("#f_prompt").value = p.prompt || ""; $("#f_view").value = p.view || ""; $("#f_biome").value = p.biome === false ? "0" : "1"; $("#pErr").textContent = "";
   syncFormVis();
+  renderStyleBox($("#pieceStyle"), fieldsFor(p), syncFormVis);
   renderCands();
 }
 
@@ -386,7 +543,9 @@ function syncPixel() {
   $("#r_pixel").max = stops.length - 1; $("#r_pixel").value = Math.max(0, stops.indexOf(px));
   pixelLabel(px);
   document.body.classList.toggle("hires", !px);
+  $("#r_harm").value = D.spec.harmonize || 0; harmLabel(D.spec.harmonize || 0);
 }
+function harmLabel(k) { $("#r_harmLbl").textContent = +k ? `${Math.round(k * 100)}%` : "off"; }
 function pixelLabel(px) { $("#r_pixelLbl").textContent = px ? `${px} px tiles` : `off (${D.spec.tile * 8} px)`; }
 // Previews: pixel-art sizes drawn enlarged with crisp pixels; full resolution capped so the room stays small.
 const OUT = () => D.output_tile;
@@ -465,6 +624,11 @@ $("#r_pixel").onchange = async () => {
   } catch (e) { notice(e.message); syncPixel(); }
 };
 $("#roomBtn").onclick = refreshRoom;
+$("#r_harm").oninput = () => harmLabel($("#r_harm").value);
+$("#r_harm").onchange = async () => {
+  try { D.spec = (await post("set/update", {fields: {harmonize: +$("#r_harm").value}})).spec; await load(); }
+  catch (e) { notice(e.message); syncPixel(); }
+};
 
 async function savePiece() {
   const p = formPiece();
@@ -504,14 +668,22 @@ $("#archiveSetBtn").onclick = async () => {
     SET = r.sets[0]; localStorage.setItem("dun.set", SET); SEL = null; TRY = null; await load();
   } catch (e) { notice(e.message); }
 };
+// Style tab saves: only fields that differ from what the server has (an older open page can't clobber newer edits).
 $("#saveSetBtn").onclick = async () => {
-  try { D.spec = (await post("set/update", {fields: {name: $("#s_name").value, tile: $("#s_tile").value, biome: $("#s_biome").value}})).spec; await load(); setView("style"); }
+  const fields = {}, now = {name: D.spec.name || SET, tile: String(D.spec.tile), biome: D.spec.biome || D.style.groups.biome.text};
+  for (const [k, el] of [["name", "#s_name"], ["tile", "#s_tile"], ["biome", "#s_biome"]]) if ($(el).value !== now[k]) fields[k] = $(el).value;
+  try { if (Object.keys(fields).length) D.spec = (await post("set/update", {fields})).spec; delete OVR.biome; await load(); setView("style"); }
   catch (e) { $("#sErr").textContent = e.message; }
 };
 $("#saveStyleBtn").onclick = async () => {
-  const groups = {}; document.querySelectorAll("#groups textarea").forEach(t => groups[t.dataset.g] = t.value);
-  try { await post("style", {groups, prop_medium: $("#s_pmedium").value, prop_view: $("#s_pview").value, prop_framing: $("#s_pframe").value}); await load(); setView("style"); }
-  catch (e) { $("#sErr").textContent = e.message; }
+  const groups = {}, body = {};
+  document.querySelectorAll("#groups textarea").forEach(t => { if (t.value !== D.style.groups[t.dataset.g].text) groups[t.dataset.g] = t.value; });
+  for (const [k, el] of [["prop_medium", "#s_pmedium"], ["prop_view", "#s_pview"], ["prop_framing", "#s_pframe"]]) if ($(el).value !== (D.style[k] || "")) body[k] = $(el).value;
+  try {
+    if (Object.keys(groups).length || Object.keys(body).length) await post("style", {groups, ...body});
+    Object.keys(groups).concat(Object.keys(body)).forEach(f => delete OVR[f]);
+    await load(); setView("style");
+  } catch (e) { $("#sErr").textContent = e.message; }
 };
 $("#newSetBtn").onclick = async () => {
   const id = prompt("New set id (e.g. sewer, forge, ice_cave). Pieces are copied from the current set as a starting list:");
@@ -541,7 +713,7 @@ async function pollJobs() {
       if (j.kind === "dun_capture") { caps = true; if (j.error) $("#exportHint").textContent = j.error; }
     }
   }
-  if (reload && D) { const sel = SEL; D = await api("/api/dun/state?set=" + SET); SEL = sel; renderList(); if (VIEW === "pieces") renderCands(); }
+  if (reload && D) { const sel = SEL; D = await api("/api/dun/state?set=" + SET); SEL = sel; renderList(); if (VIEW === "pieces") renderCands(); if (VIEW === "group") groupPieces().forEach(p => renderGroupRow(p.id)); }
   if (caps) { capStamp = Date.now(); loadCaps(); }
   if (!reload && D) renderList();
 }

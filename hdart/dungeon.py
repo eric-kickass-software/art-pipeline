@@ -17,7 +17,7 @@ import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
 from . import ai_kit, comfy, iso
-from .locks import DUNGEON as LOCK
+from .locks import DUNGEON as LOCK, HARMONY as _REF_CACHE
 from .paths import REPO
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -482,6 +482,92 @@ def _load(name, rel):
     return Image.open(f).convert("RGB"), (np.load(mp) if mp.exists() else None)
 
 
+# ----------------------------------------------------------------------------- colour harmonizing
+# The set's `harmonize` setting (0..1, Studio > Dungeon slider) pulls every tile image's colour statistics (mean and
+# spread per CIELAB channel) toward its family's reference, so variants and pieces made in separate generations sit
+# together. Families: floors, and walls (everything else that isn't a prop). Reference = the family's approved
+# images (all its candidates while nothing is approved). Props are left alone: they're objects, not surfaces.
+
+_M = np.array([[0.4124, 0.3576, 0.1805], [0.2126, 0.7152, 0.0722], [0.0193, 0.1192, 0.9505]], np.float32)
+_WHITE = _M.sum(1)
+
+
+def _to_lab(rgb):
+    c = rgb / 255.0
+    c = np.where(c > 0.04045, ((c + 0.055) / 1.055) ** 2.4, c / 12.92)
+    xyz = c @ _M.T / _WHITE
+    f = np.where(xyz > 216 / 24389, np.cbrt(xyz), (24389 / 27 * xyz + 16) / 116)
+    return np.stack([116 * f[..., 1] - 16, 500 * (f[..., 0] - f[..., 1]), 200 * (f[..., 1] - f[..., 2])], -1)
+
+
+def _from_lab(lab):
+    fy = (lab[..., 0] + 16) / 116
+    f = np.stack([fy + lab[..., 1] / 500, fy, fy - lab[..., 2] / 200], -1)
+    xyz = np.where(f ** 3 > 216 / 24389, f ** 3, (116 * f - 16) / (24389 / 27)) * _WHITE
+    c = xyz @ np.linalg.inv(_M).T
+    c = np.where(c > 0.0031308, 1.055 * np.clip(c, 0, None) ** (1 / 2.4) - 0.055, 12.92 * c)
+    return np.clip(c * 255, 0, 255)
+
+
+def family(piece):
+    if piece["kind"] == "prop":
+        return None
+    return "floor" if piece.get("shape") == "floor" else "wall"
+
+
+def _paint_mask(img, mask):
+    """Pixels that are painted surface (not the white backdrop)."""
+    if mask is not None and mask.shape == img.size[::-1]:
+        return mask
+    return np.asarray(img).min(-1) < 232
+
+
+def _lab_stats(img, mask):
+    lab = _to_lab(np.asarray(img)[_paint_mask(img, mask)].astype(np.float32))
+    if len(lab) < 16:
+        return None
+    return lab.mean(0), lab.std(0)
+
+
+def _reference(name, spec, fam):
+    """(mean, std) in Lab over the family's approved images (else all its candidates), or None."""
+    s = state(name)
+    rels = []
+    for p in spec["pieces"]:
+        if family(p) == fam and not p.get("retired"):
+            ps = s["pieces"].get(p["id"], {})
+            rels += [(p["id"], r) for r in ps.get("approved", [])]
+    if not rels:
+        for p in spec["pieces"]:
+            if family(p) == fam and not p.get("retired"):
+                rels += [(p["id"], r) for r in s["pieces"].get(p["id"], {}).get("candidates", [])]
+    if not rels:
+        return None
+    key = (name, fam, tuple(sorted(r for _, r in rels)))
+    if key not in _REF_CACHE:
+        stats = [st for st in (_lab_stats(*_load(name, r)) for _, r in rels) if st]
+        _REF_CACHE[key] = (np.mean([m for m, _ in stats], 0), np.mean([d for _, d in stats], 0)) if stats else None
+    return _REF_CACHE[key]
+
+
+def harmonize(name, spec, piece, img, mask):
+    """`img` with its colours pulled toward the family reference by the set's `harmonize` strength."""
+    k = float(spec.get("harmonize") or 0)
+    fam = family(piece)
+    if k <= 0 or fam is None:
+        return img
+    ref = _reference(name, spec, fam)
+    rgb = np.asarray(img).copy()
+    paint = _paint_mask(img, mask)
+    if ref is None or paint.sum() < 16:
+        return img
+    lab = _to_lab(rgb[paint].astype(np.float32))  # painted pixels only, converted once
+    (mr, sr), ms, ss = ref, lab.mean(0), lab.std(0)
+    ratio = np.clip(sr / np.maximum(ss, 1e-3), 0.5, 2.0)  # never blow up a flat image or flatten a busy one
+    rgb[paint] = _from_lab((lab - ms) * (1 + k * (ratio - 1)) + ms + k * (mr - ms)).astype(np.uint8)
+    return Image.fromarray(rgb)
+
+
 def _sprite(img8, mask8, n8, w, h):
     """An 8x region -> (native RGBA, normal map RGBA). n8: screen-space normals at 8x."""
     rgba = downsample(img8, mask8, w, h)
@@ -546,6 +632,7 @@ def cells(name, pid, rel, tile=None):
     T = spec["tile"]
     tile = tile or T
     img, mask = _load(name, rel)
+    img = harmonize(name, spec, piece, img, mask)
     lay = layout(piece)
     out = {}
     if piece["kind"] == "prop":
@@ -760,7 +847,7 @@ def new_set(name, title=None, biome="", copy_from="crypt"):
 
 
 def update_set(name, fields):
-    """Set-level fields: name, biome, tile, pixel (px per tile; 0/empty = full resolution)."""
+    """Set-level fields: name, biome, tile, pixel (px per tile; 0/empty = full resolution), harmonize (0..1)."""
     with LOCK:
         spec = load_set(name)
         for k in ("name", "biome", "tile"):
@@ -774,6 +861,12 @@ def update_set(name, fields):
                 spec["pixel"] = px
             else:
                 spec.pop("pixel", None)
+        if "harmonize" in fields:
+            k = round(min(max(float(fields["harmonize"] or 0), 0.0), 1.0), 2)
+            if k:
+                spec["harmonize"] = k
+            else:
+                spec.pop("harmonize", None)
         return save_set(name, spec)
 
 
