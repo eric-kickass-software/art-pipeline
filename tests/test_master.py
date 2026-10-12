@@ -36,4 +36,14 @@ assert d.layout({"kind": "tile", "shape": "floor", "method": "repaint", "atlas":
 assert d.layout({"kind": "tile", "shape": "floor", "method": "repaint"}) == "single"
 assert d.layout({"kind": "tile", "shape": "floor", "method": "master"}) == "single"
 assert d.atlas_n({"method": "atlas"}) == 4 and d.atlas_n({"method": "repaint", "atlas": 2}) == 2 and d.atlas_n({"method": "master"}) == 1
+# even tone: a 3x3 slab tile with one dark slab -> slabs even out, joints stay dark, still wraps (edges unchanged in kind)
+rng = np.random.default_rng(3); S = 192; t = np.full((S, S, 3), 150.0) + rng.normal(0, 6, (S, S, 3))
+t[64:128, 64:128] *= 0.6; t[::64] = 50; t[:, ::64] = 50
+e = np.asarray(d.even_tone(Image.fromarray(np.clip(t, 0, 255).astype(np.uint8)), 1.0)).astype(float)
+slab = lambda a, y, x: a[y + 8:y + 56, x + 8:x + 56].mean()
+before, after = abs(slab(t, 64, 64) - slab(t, 0, 0)), abs(slab(e, 64, 64) - slab(e, 0, 0))
+assert after < before * 0.4, (before, after)
+assert e[::64].mean() < e[8:56, 8:56].mean() - 40  # joints still dark
+wrap = np.abs(e[0] - e[-1]).mean(), np.abs(t[0] - t[-1]).mean(); assert wrap[0] < wrap[1] + 15, wrap
+print(f"even tone: dark slab {before:.0f} -> {after:.0f} off the others")
 print("master tests passed")

@@ -132,6 +132,8 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
   **Use as master** / ★; **Archive**; **Edit** = repaint its interior from itself with a prompt + strength
   (`edit_candidate`, edges kept, same variation tag); masters also **Rescale** ×⅓ ×½ (exact repeats) ×¾ ×1.5 ×2
   (resampled + made seamless, optional re-detail) (`rescale_master`). ◀ ▶ / arrow keys, Esc closes.
+  Masters also get **Even tone** (`even_master`): stone-sized colour differences (a dark slab, a stain) pulled to the tile's mean, detail and edges kept, wraps (`even_tone`, FFT blur). New floor masters get it automatically (family `even_tone`, default 0.8, 0 = off): a master repeats every tile, so a stone that stands out repeats too.
+- **Breaking the every-tile repeat:** even tone, then **+ plain reroll** variations (the same surface redrawn, nothing added). Single cells cycle through the master and every approved 1×1 variant, and blocks (2×2 to 4×4) cover larger areas with no repeat.
 - **Floor family board** (piece list → FLOOR FAMILIES → a family, or **+ New floor family**): the master workflow on
   one page. A family = a master piece + one repaint piece per size (`<master>_v<N>`, made on first Fill); its settings
   live on the master as `family` (prompt versions, variation phrases, per-size targets and planner weights).

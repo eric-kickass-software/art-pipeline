@@ -327,6 +327,45 @@ def flatten_light(img, strength=1.0):
     return Image.fromarray(np.clip(a * gain[..., None], 0, 255).astype(np.uint8))
 
 
+def _periodic_blur(a, sigma):
+    """Gaussian blur of an (H, W[, C]) array that wraps around the edges (FFT), so a seamless image stays seamless."""
+    H, W = a.shape[:2]
+    fy, fx = np.fft.fftfreq(H)[:, None], np.fft.fftfreq(W)[None, :]
+    g = np.exp(-2 * (np.pi * sigma) ** 2 * (fx ** 2 + fy ** 2))
+    if a.ndim == 3:
+        g = g[..., None]
+    return np.real(np.fft.ifft2(np.fft.fft2(a, axes=(0, 1)) * g, axes=(0, 1)))
+
+
+def even_tone(img, strength=0.8, scale=0.08):
+    """Even out stone-sized differences in colour and brightness (one dark slab, a stained patch): the things the eye
+    spots repeating every tile. The colour averaged over `scale` x the tile width is pulled toward the tile's mean,
+    per channel; the detail inside each stone, the joints and the edges are kept. Wraps, so it stays seamless."""
+    a = np.asarray(img.convert("RGB")).astype(np.float64)
+    low = _periodic_blur(a, scale * a.shape[1])
+    gain = np.clip(a.reshape(-1, 3).mean(0) / np.maximum(low, 1.0), 0.5, 2.0)
+    return Image.fromarray(np.clip(a * (1 + strength * (gain - 1)), 0, 255).astype(np.uint8))
+
+
+EVEN_TONE = 0.8  # family default: a master tile repeats every tile, so a stone that stands out repeats too
+
+
+def _even(piece, img):
+    k = float((piece.get("family") or {}).get("even_tone", EVEN_TONE))
+    return even_tone(img, k) if k > 0 else img
+
+
+def even_master(name, pid, rel, strength=EVEN_TONE):
+    """A master candidate with stone-sized tone differences evened out (even_tone), as a new candidate."""
+    piece = resolved(load_set(name), pid)
+    if piece.get("method") != "master":
+        raise ValueError("even tone works on floor master tiles")
+    old = state(name)["pieces"].get(pid, {}).get("meta", {}).get(rel, {})
+    out = even_tone(Image.open(candidate_path(name, rel)).convert("RGB"), float(strength))
+    meta = {"seed": old.get("seed"), "prompt": old.get("prompt", piece.get("prompt", "")), "evened_from": rel, "even": float(strength)}
+    return _new_candidate(name, pid, out, meta, f"even{int(float(strength) * 100)}")
+
+
 def periodic_smooth(img):
     """Moisan's periodic + smooth decomposition: remove the smooth image that explains the jump between opposite
     edges, so the texture wraps without a step (fixes 'almost tileable' colour/brightness edges exactly)."""
@@ -387,14 +426,14 @@ def gen_master(piece, seed=1, lora=0.0, st=None):
     if tpl:
         init = template_render({**tpl, "seed": seed if tpl.get("reseed") else tpl.get("seed", 1)}, "floor", 1024)["rgb"]
         src = _i2i(init, prompt, seed, float(tpl.get("strength", 0.7)), lora).resize((MASTER_PX, MASTER_PX), Image.LANCZOS)
-        return make_seamless(src, prompt, seed, lora)
+        return _even(piece, make_seamless(src, prompt, seed, lora))
     big = 1152  # FLUX likes a darker rim at the image edge: generate larger, keep the middle
     p = comfy.run(comfy.build_txt2img(prompt, big, big, seed=seed, lora_strength=lora, prefix="hdart/dun_master"),
                   DUN / "tmp")[0]
     src = Image.open(p).convert("RGB")
     m = (big - 1024) // 2
     src = src.crop((m, m, m + 1024, m + 1024)).resize((MASTER_PX, MASTER_PX), Image.LANCZOS)
-    return make_seamless(src, prompt, seed, lora)
+    return _even(piece, make_seamless(src, prompt, seed, lora))
 
 
 def seam_preview(name, pid, rel, size=768):
@@ -1877,6 +1916,7 @@ def family_settings(master):
     f["variations"] = [v if isinstance(v, dict) else {"id": f"v{i + 1}", "text": v} for i, v in enumerate(f["variations"])]
     f["sizes"] = [int(n) for n in f.get("sizes", FAMILY_SIZES)]
     f["palette_lock"] = bool(f.get("palette_lock", True))
+    f["even_tone"] = float(f.get("even_tone", EVEN_TONE))
     f["targets"] = {str(n): int(v) for n, v in {"1": 3, "2": 2, "3": 1, "4": 1, **f.get("targets", {})}.items()}
     f["weights"] = {str(n): int(v) for n, v in {"2": DEFAULT_WEIGHT, "3": DEFAULT_WEIGHT, "4": DEFAULT_WEIGHT,
                                                 **f.get("weights", {})}.items()}

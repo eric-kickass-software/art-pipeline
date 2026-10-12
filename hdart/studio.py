@@ -273,6 +273,9 @@ def dungeon_post(action, b):
     if action == "edit":
         job = JOBS.add("dun_edit", b, f"{name} · {b['piece']} edit: {b.get('prompt', '')[:30]}")
         return {"job": job["id"]}
+    if action == "even":  # a master with stone-sized tone differences evened out (instant, no FLUX)
+        rel = dg.even_master(name, b["piece"], b["rel"], float(b.get("strength", dg.EVEN_TONE)))
+        return {"rel": rel, "piece": dg.state(name)["pieces"].get(b["piece"])}
     if action == "rescale":
         job = JOBS.add("dun_rescale", b, f"{name} · {b['piece']} ×{b['factor']}")
         return {"job": job["id"]}
