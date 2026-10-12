@@ -64,6 +64,9 @@
   .tabs button.on { border-color:var(--accent); color:var(--accent); background:var(--card); }
   .hidden { display:none !important; }
   .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+  #notice { display:flex; gap:10px; align-items:center; justify-content:space-between; padding:6px 12px; background:#3a2a1c; border-bottom:1px solid var(--accent); font-size:12px; }
+  .orphan { display:flex; flex-wrap:wrap; gap:4px; align-items:center; padding:4px 6px; border:1px dashed var(--line); border-radius:6px; margin:3px 0; font-size:12px; }
+  .orphan .nm { flex:1 1 100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 </style>
 </head>
 <body>
@@ -71,9 +74,11 @@
   <h1>Dungeon Forge</h1>
   <select id="setSel"></select>
   <button id="newSetBtn">+ New set</button>
+  <button id="archiveSetBtn" class="danger" title="Move this set (spec, generated images, state) to archive/sets/">Archive set</button>
   <a href="/">Studio</a> <a href="/workshop">Workshop</a>
   <button id="jobsBtn">Queue: idle</button>
 </header>
+<div id="notice" class="hidden"><span></span><button onclick="this.parentElement.classList.add('hidden')">✕</button></div>
 <div id="jobsPanel"><div class="row"><b>Queue</b><button id="clearJobs" style="margin-left:auto">Clear finished</button></div><div id="jobs"></div></div>
 <div id="zoom"><img alt=""></div>
 
@@ -122,11 +127,12 @@
           <label>LoRA<input id="g_lora" type="number" step="0.05" min="0" max="1.5" placeholder="auto"></label>
           <button id="genBtn" class="primary">Generate</button>
           <button id="saveBtn">Save piece</button>
-          <button id="delBtn" class="danger">Delete</button>
+          <button id="delBtn" class="danger" title="Remove the piece from the set; its images move to archive/">Remove piece</button>
         </div>
         <div class="hint" id="genHint"></div>
         <div class="err" id="pErr"></div>
-        <h2>Candidates <span class="hint" id="candHint"></span></h2>
+        <h2>Candidates <span class="hint" id="candHint"></span>
+          <button id="archUnapprBtn" style="float:right" title="Move every candidate that isn't approved to archive/">Archive unapproved</button></h2>
         <div class="cands" id="cands"></div>
       </div>
     </div>
@@ -194,9 +200,16 @@ async function api(path, body) {
 }
 const post = (a, b) => api("/api/dun/" + a, {set: SET, ...b});
 
+function notice(msg) { $("#notice span").textContent = msg; $("#notice").classList.remove("hidden"); }
+
 async function load() {
   try { D = await api("/api/dun/state?set=" + encodeURIComponent(SET)); }
-  catch (e) { if (SET !== "crypt") { SET = "crypt"; return load(); } throw e; }
+  catch (e) {  // say so instead of quietly switching sets
+    const sets = await api("/api/dun/sets").catch(() => []), next = sets.find(s => s !== SET);
+    if (!next) { notice(`Couldn't open set "${SET}": ${e.message}`); throw e; }
+    notice(`Couldn't open set "${SET}" (${e.message}). Showing "${next}" instead.`);
+    SET = next; localStorage.setItem("dun.set", SET); return load();
+  }
   $("#setSel").innerHTML = D.sets.map(s => `<option ${s === SET ? "selected" : ""}>${s}</option>`).join("");
   if (SEL && !piece(SEL)) SEL = null;
   renderList(); renderCenter(); refreshRoom(); loadCaps();
@@ -225,8 +238,25 @@ function renderList() {
     const txt = running(p.id) ? "generating" : `${a}/${v}` + (s.candidates.length && a < v ? ` · ${s.candidates.length} cand` : "");
     const img = a ? `<img src="${natUrl(p.id, s.approved[0], D.spec.tile, 1)}">` : `<div class="ph"></div>`;
     return `<div class="pitem ${p.id === SEL && VIEW === "pieces" ? "sel" : ""}" data-id="${esc(p.id)}">${img}<span class="nm" title="${esc(p.id)}">${esc(p.id)}</span><span class="badge ${cls}">${txt}</span></div>`;
-  }).join("")).join("");
+  }).join("")).join("") + renderOrphans();
   document.querySelectorAll(".pitem").forEach(el => el.onclick = () => { SEL = el.dataset.id; TRY = null; setView("pieces"); });
+  document.querySelectorAll(".orphan button").forEach(b => b.onclick = async () => {
+    const pid = b.closest(".orphan").dataset.id;
+    try {
+      if (b.dataset.a === "restore") { await post("piece/restore", {piece: pid}); SEL = pid; }
+      else if (confirm(`Archive the ${D.orphans[pid].count} images of ${pid}? They move to archive/dungeon/${SET}/.`)) await post("orphan/archive", {piece: pid});
+      await load(); if (SEL === pid) setView("pieces");
+    } catch (e) { notice(e.message); }
+  });
+}
+
+// Pieces with generated images that are no longer in the set (removed, or lost from the spec).
+function renderOrphans() {
+  const o = Object.entries(D.orphans || {});
+  if (!o.length) return "";
+  return `<div class="grp" title="These pieces have generated images but aren't in the set any more">Not in set (images kept)</div>` +
+    o.map(([id, v]) => `<div class="orphan" data-id="${esc(id)}" title="${esc(v.prompt)}"><span class="nm">${esc(id)}</span>
+      <span class="badge part">${v.count} img</span><button data-a="restore">Restore</button><button data-a="archive" class="danger">Archive</button></div>`).join("");
 }
 
 function setView(v) {
@@ -328,7 +358,7 @@ function renderCands() {
              <img class="nat" src="${natUrl(p.id, rel, T / 2, nScale)}" title="native ${T / 2} grid ×${nScale}"></div>
       </div>
       <div class="meta">seed ${m.seed ?? "?"}${m.denoise ? " · dn " + m.denoise : ""}${m.lora != null ? " · lora " + m.lora : ""}${m.on_base ? " · on base" : ""}${on ? ` · <b style="color:var(--ok)">variant ${ai}</b>` : ""}${m.prompt && m.prompt !== p.prompt ? `<br><i title="${esc(m.prompt)}">older prompt</i>` : ""}</div>
-      <div class="btns"><button data-a="approve" class="${on ? "on" : ""}">${on ? "✓ Approved" : "Approve"}</button><button data-a="try">${TRY === rel ? "Trying" : "Try"}</button><button data-a="seed" title="reuse this seed">Seed</button><button data-a="discard" class="danger">✕</button></div>
+      <div class="btns"><button data-a="approve" class="${on ? "on" : ""}">${on ? "✓ Approved" : "Approve"}</button><button data-a="try">${TRY === rel ? "Trying" : "Try"}</button><button data-a="seed" title="reuse this seed">Seed</button><button data-a="discard" class="danger" title="Archive this image (moves to archive/)">✕</button></div>
     </div>`;
   }).join("");
   document.querySelectorAll(".cand").forEach(el => {
@@ -432,8 +462,25 @@ $("#genBtn").onclick = async () => {
   } catch (e) { $("#pErr").textContent = e.message; }
 };
 $("#delBtn").onclick = async () => {
-  if (!confirm(`Remove ${SEL} from the set? (generated images stay on disk)`)) return;
-  D.spec = (await post("piece/delete", {piece: SEL})).spec; SEL = null; renderList(); renderCenter(); refreshRoom();
+  const n = new Set([...pstate(SEL).candidates, ...pstate(SEL).approved]).size;
+  if (!confirm(`Remove ${SEL} from the set?` + (n ? ` Its ${n} generated images move to archive/dungeon/${SET}/.` : ""))) return;
+  try { await post("piece/delete", {piece: SEL}); SEL = null; await load(); } catch (e) { $("#pErr").textContent = e.message; }
+};
+$("#archUnapprBtn").onclick = async () => {
+  const s = pstate(SEL), n = s.candidates.filter(r => !s.approved.includes(r)).length;
+  if (!n) { $("#pErr").textContent = "Nothing to archive: every candidate is approved."; return; }
+  if (!confirm(`Archive the ${n} unapproved candidates of ${SEL}? They move to archive/dungeon/${SET}/.`)) return;
+  try { D.state.pieces[SEL] = (await post("archive_unapproved", {piece: SEL})).piece; TRY = null; renderList(); renderCands(); refreshRoom(); }
+  catch (e) { $("#pErr").textContent = e.message; }
+};
+$("#archiveSetBtn").onclick = async () => {
+  if (!confirm(`Archive the whole set "${SET}"? Its spec, generated images and approvals move to archive/sets/. ` +
+               `Anything already exported to Unity stays there.`)) return;
+  try {
+    const r = await post("set/archive", {});
+    notice(`Archived "${SET}" → ${r.path}`);
+    SET = r.sets[0]; localStorage.setItem("dun.set", SET); SEL = null; TRY = null; await load();
+  } catch (e) { notice(e.message); }
 };
 $("#saveSetBtn").onclick = async () => {
   try { D.spec = (await post("set/update", {fields: {name: $("#s_name").value, tile: $("#s_tile").value, biome: $("#s_biome").value}})).spec; await load(); setView("style"); }

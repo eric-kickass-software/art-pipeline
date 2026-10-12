@@ -9,6 +9,7 @@ matching Prototype V's placeholders).
 """
 import json
 import math
+import shutil
 import time
 from pathlib import Path
 
@@ -16,10 +17,12 @@ import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
 from . import ai_kit, comfy, iso
+from .locks import DUNGEON as LOCK
 from .paths import REPO
 
 ROOT = Path(__file__).resolve().parent.parent
 DUN = ROOT / "sprites" / "dungeon"
+ARCHIVE = ROOT / "archive"  # git-ignored: archived sets, candidates and spec history, for removal by hand later
 STYLE = ROOT / "specs" / "dungeon_style.json"
 SCALE = 8  # generation is done at 8x the native pixel size
 ORDER = ("medium", "style", "view", "rendering", "framing", "biome")
@@ -351,7 +354,10 @@ def save_state(name, s):
 
 
 def piece_of(spec, pid):
-    return next(p for p in spec["pieces"] if p["id"] == pid)
+    p = next((p for p in spec["pieces"] if p["id"] == pid), None)
+    if p is None:
+        raise KeyError(f"piece {pid} is not in set {spec.get('id')}")
+    return p
 
 
 def generate(name, pid, n=3, seed=1, denoise=None, prompt=None, lora=None):
@@ -362,16 +368,14 @@ def generate(name, pid, n=3, seed=1, denoise=None, prompt=None, lora=None):
         piece["prompt"] = prompt
     out = set_dir(name) / "candidates" / pid
     out.mkdir(parents=True, exist_ok=True)
-    s = state(name)
-    ps = s["pieces"].setdefault(pid, {"candidates": [], "approved": []})
     st = set_style(spec)
     base = None
     if piece["kind"] == "wall_decor" and piece.get("of"):  # paint the decoration onto an approved base wall
-        appr = s["pieces"].get(piece["of"], {}).get("approved", [])
+        appr = state(name)["pieces"].get(piece["of"], {}).get("approved", [])
         if appr:
             bf = set_dir(name) / appr[0]
             base = (Image.open(bf).convert("RGB"), np.load(bf.with_suffix(".npy")))
-    made = []
+    made, meta = [], {}
     for k in range(n):
         sd = seed + k
         if piece["kind"] == "prop":
@@ -392,11 +396,15 @@ def generate(name, pid, n=3, seed=1, denoise=None, prompt=None, lora=None):
         np.save(f.with_suffix(".npy"), mask)
         rel = str(f.relative_to(set_dir(name))).replace("\\", "/")
         made.append(rel)
-        ps.setdefault("meta", {})[rel] = {"seed": sd, "prompt": piece["prompt"], "denoise": denoise, "lora": lora,
-                                          "on_base": base is not None}
-    ps["candidates"] = made + ps["candidates"]
-    ps["prompt"] = piece["prompt"]
-    save_state(name, s)
+        meta[rel] = {"seed": sd, "prompt": piece["prompt"], "denoise": denoise, "lora": lora,
+                     "on_base": base is not None}
+    with LOCK:  # re-read: approvals and archiving may have happened while this was generating
+        s = state(name)
+        ps = s["pieces"].setdefault(pid, {"candidates": [], "approved": []})
+        ps.setdefault("meta", {}).update(meta)
+        ps["candidates"] = made + ps["candidates"]
+        ps["prompt"] = piece["prompt"]
+        save_state(name, s)
     return made
 
 
@@ -584,14 +592,15 @@ def native(name, pid, rel, tile=None):
 
 
 def approve(name, pid, rel, on=True):
-    s = state(name)
-    ps = s["pieces"].setdefault(pid, {"candidates": [], "approved": []})
-    if on and rel not in ps["approved"]:
-        ps["approved"].append(rel)
-    if not on and rel in ps["approved"]:
-        ps["approved"].remove(rel)
-    save_state(name, s)
-    return ps
+    with LOCK:
+        s = state(name)
+        ps = s["pieces"].setdefault(pid, {"candidates": [], "approved": []})
+        if on and rel not in ps["approved"]:
+            ps["approved"].append(rel)
+        if not on and rel in ps["approved"]:
+            ps["approved"].remove(rel)
+        save_state(name, s)
+        return ps
 
 
 def export(name, tiles=(32, 64)):
@@ -670,16 +679,33 @@ def save_style(groups=None, prop_view=None, prop_framing=None, prop_medium=None)
     return st
 
 
+def _stamp():
+    return time.strftime("%Y%m%d-%H%M%S")
+
+
+def _backup_spec(path):
+    """Keep the last 40 versions of each set spec in archive/history/<set>/, so a lost piece can be recovered."""
+    if not path.exists():
+        return
+    hist = ARCHIVE / "history" / path.stem
+    hist.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(path, hist / f"{_stamp()}_{time.time_ns() % 1000000:06d}.json")
+    for old in sorted(hist.glob("*.json"))[:-40]:
+        old.unlink()
+
+
 def save_set(name, spec):
-    """Replace a set spec (ids must be unique). Keeps `_doc`."""
+    """Replace a set spec (ids must be unique). Keeps `_doc`; the previous version goes to archive/history/."""
     ids = [p["id"] for p in spec["pieces"]]
     if len(ids) != len(set(ids)):
         raise ValueError("duplicate piece ids")
-    path = SETS / f"{name}.json"
-    old = json.loads(path.read_text(encoding="utf-8")) if path.exists() else load_set("crypt")
-    out = {"_doc": old.get("_doc", ""), **{k: v for k, v in spec.items() if k != "_doc"}, "id": name}
-    path.write_text(json.dumps(out, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    return out
+    with LOCK:
+        path = SETS / f"{name}.json"
+        old = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        out = {"_doc": old.get("_doc", spec.get("_doc", "")), **{k: v for k, v in spec.items() if k != "_doc"}, "id": name}
+        _backup_spec(path)
+        path.write_text(json.dumps(out, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        return out
 
 
 def new_set(name, title=None, biome="", copy_from="crypt"):
@@ -687,63 +713,176 @@ def new_set(name, title=None, biome="", copy_from="crypt"):
     a `board` id so Prototype V (which asks for the crypt content ids) can show the new art."""
     if not name.replace("_", "").isalnum():
         raise ValueError("set id: letters, digits and _ only")
-    if (SETS / f"{name}.json").exists():
-        raise ValueError(f"set {name} exists")
-    src = load_set(copy_from)
-    pieces = []
-    for p in src["pieces"]:
-        q = dict(p)
-        q["board"] = p.get("board", p["id"])
-        q["id"] = p["id"].replace(f"{copy_from}_", f"{name}_")
-        if q.get("of"):
-            q["of"] = q["of"].replace(f"{copy_from}_", f"{name}_")
-        pieces.append(q)
-    return save_set(name, {"id": name, "name": title or name.title(), "tile": src.get("tile", 64),
-                           "biome": biome or set_style(src)["groups"]["biome"]["text"], "pieces": pieces})
+    with LOCK:
+        if (SETS / f"{name}.json").exists():
+            raise ValueError(f"set {name} exists")
+        src = load_set(copy_from)
+        pieces = []
+        for p in src["pieces"]:
+            q = dict(p)
+            q["board"] = p.get("board", p["id"])
+            q["id"] = p["id"].replace(f"{copy_from}_", f"{name}_")
+            if q.get("of"):
+                q["of"] = q["of"].replace(f"{copy_from}_", f"{name}_")
+            pieces.append(q)
+        return save_set(name, {"_doc": src.get("_doc", ""), "id": name, "name": title or name.title(),
+                               "tile": src.get("tile", 64),
+                               "biome": biome or set_style(src)["groups"]["biome"]["text"], "pieces": pieces})
 
 
 def update_set(name, fields):
     """Set-level fields: name, biome, tile."""
-    spec = load_set(name)
-    for k in ("name", "biome", "tile"):
-        if k in fields:
-            spec[k] = int(fields[k]) if k == "tile" else fields[k]
-    return save_set(name, spec)
+    with LOCK:
+        spec = load_set(name)
+        for k in ("name", "biome", "tile"):
+            if k in fields:
+                spec[k] = int(fields[k]) if k == "tile" else fields[k]
+        return save_set(name, spec)
 
 
 def upsert_piece(name, piece, old_id=None):
-    spec = load_set(name)
-    old_id = old_id or piece["id"]
-    clean = {k: v for k, v in piece.items() if v not in (None, "")}
-    i = next((k for k, p in enumerate(spec["pieces"]) if p["id"] == old_id), None)
-    if i is None:
-        spec["pieces"].append(clean)
-    else:
-        spec["pieces"][i] = clean
-    if old_id != piece["id"]:  # renamed: carry its candidates/approvals along
-        s = state(name)
-        if old_id in s["pieces"]:
-            s["pieces"][piece["id"]] = s["pieces"].pop(old_id)
-            save_state(name, s)
-    return save_set(name, spec)
+    with LOCK:
+        spec = load_set(name)
+        old_id = old_id or piece["id"]
+        clean = {k: v for k, v in piece.items() if v not in (None, "")}
+        i = next((k for k, p in enumerate(spec["pieces"]) if p["id"] == old_id), None)
+        if i is None:
+            spec["pieces"].append(clean)
+        else:
+            spec["pieces"][i] = clean
+        out = save_set(name, spec)  # first: it refuses duplicate ids, and then the state must not move either
+        if old_id != piece["id"]:  # renamed: carry its candidates/approvals along
+            s = state(name)
+            if old_id in s["pieces"]:
+                s["pieces"][piece["id"]] = s["pieces"].pop(old_id)
+                save_state(name, s)
+        return out
 
 
-def delete_piece(name, pid):
-    spec = load_set(name)
-    spec["pieces"] = [p for p in spec["pieces"] if p["id"] != pid]
-    return save_set(name, spec)
+# ----------------------------------------------------------------------------- archive (nothing is deleted here)
+# archive/dungeon/<set>/<rel>       archived candidates (png + npy mask), same relative path as under the set folder
+# archive/sets/<set>_<stamp>/       archived sets: spec.json + the set's sprites folder
+# archive/history/<set>/            previous versions of each set spec
+# Delete archive/ (or parts of it) by hand once you're sure.
+
+def _archive_candidate(name, rel):
+    src = candidate_path(name, rel)
+    dst = ARCHIVE / "dungeon" / name / rel
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    for f in (src, src.with_suffix(".npy")):
+        if f.exists():
+            shutil.move(str(f), str(dst.with_suffix(f.suffix)))
+
+
+def _drop(ps, rels):
+    for k in ("candidates", "approved"):
+        ps[k] = [r for r in ps.get(k, []) if r not in rels]
+    for r in rels:
+        ps.get("meta", {}).pop(r, None)
 
 
 def discard(name, pid, rel):
-    """Hide a candidate (the file stays on disk under candidates/)."""
-    s = state(name)
-    ps = s["pieces"].get(pid, {})
-    for k in ("candidates", "approved"):
-        if rel in ps.get(k, []):
-            ps[k].remove(rel)
-    ps.setdefault("discarded", []).append(rel)
-    save_state(name, s)
-    return ps
+    """Archive one candidate: its files move to archive/dungeon/<set>/ and it leaves the piece."""
+    with LOCK:
+        s = state(name)
+        ps = s["pieces"].setdefault(pid, {"candidates": [], "approved": []})
+        _archive_candidate(name, rel)
+        _drop(ps, {rel})
+        save_state(name, s)
+        return ps
+
+
+def archive_unapproved(name, pid):
+    """Archive every candidate of a piece that isn't approved. Returns the piece state and how many moved."""
+    with LOCK:
+        s = state(name)
+        ps = s["pieces"].setdefault(pid, {"candidates": [], "approved": []})
+        rels = {r for r in ps.get("candidates", []) if r not in ps.get("approved", [])}
+        for r in rels:
+            _archive_candidate(name, r)
+        _drop(ps, rels)
+        save_state(name, s)
+        return ps, len(rels)
+
+
+def _archive_piece_state(name, s, pid):
+    ps = s["pieces"].pop(pid, None) or {}
+    for r in set(ps.get("candidates", [])) | set(ps.get("approved", [])):
+        _archive_candidate(name, r)
+
+
+def delete_piece(name, pid):
+    """Remove a piece from the set and archive all of its generated images."""
+    with LOCK:
+        spec = load_set(name)
+        spec["pieces"] = [p for p in spec["pieces"] if p["id"] != pid]
+        out = save_set(name, spec)
+        s = state(name)
+        if pid in s["pieces"]:
+            _archive_piece_state(name, s, pid)
+            save_state(name, s)
+        return out
+
+
+def orphans(name):
+    """Pieces that have generated images but are no longer in the set spec: {id: {"count", "prompt"}}."""
+    ids = {p["id"] for p in load_set(name)["pieces"]}
+    out = {}
+    for pid, ps in state(name)["pieces"].items():
+        n = len(set(ps.get("candidates", [])) | set(ps.get("approved", [])))
+        if pid not in ids and n:
+            out[pid] = {"count": n, "prompt": ps.get("prompt", "")}
+    return out
+
+
+def restore_piece(name, pid):
+    """Put an orphan back into the set: from the style catalog when it came from there, else a plain floor tile or
+    prop, with the prompt its images were generated with."""
+    with LOCK:
+        spec = load_set(name)
+        if any(p["id"] == pid for p in spec["pieces"]):
+            return spec
+        ps = state(name)["pieces"].get(pid, {})
+        cat = next((dict(c) for c in style().get("catalog", []) if c["id"].replace("{set}", name) == pid), None)
+        if cat:
+            cat.pop("group", None)
+            cat["id"] = pid
+            if cat.get("of"):
+                cat["of"] = cat["of"].replace("{set}", name)
+            piece = cat
+        elif pid.startswith("prop."):
+            piece = {"id": pid, "kind": "prop", "footprint": 0.5}
+        else:
+            piece = {"id": pid, "kind": "tile", "shape": "floor", "variants": 2}
+        if ps.get("prompt"):
+            piece["prompt"] = ps["prompt"]
+        spec["pieces"].append(piece)
+        return save_set(name, spec)
+
+
+def archive_orphan(name, pid):
+    with LOCK:
+        s = state(name)
+        _archive_piece_state(name, s, pid)
+        save_state(name, s)
+
+
+def archive_set(name):
+    """Move a whole set (spec + generated images + state) to archive/sets/<set>_<stamp>/. Its Unity export, if any,
+    stays in the Hearthdelve project. Returns the archive folder."""
+    with LOCK:
+        others = [n for n in list_sets() if n != name]
+        if not others:
+            raise ValueError("can't archive the only set")
+        path = SETS / f"{name}.json"
+        if not path.exists():
+            raise ValueError(f"no set {name}")
+        dst = ARCHIVE / "sets" / f"{name}_{_stamp()}"
+        dst.mkdir(parents=True)
+        shutil.move(str(path), str(dst / "spec.json"))
+        if set_dir(name).exists():
+            shutil.move(str(set_dir(name)), str(dst / "sprites"))
+        return dst
 
 
 def candidate_path(name, rel):

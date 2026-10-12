@@ -7,3 +7,6 @@ __pycache__/
 /sprites/ai/candidates/tmp/
 /sprites/dungeon/tmp/
 /sprites/dungeon/_tmp_*
+
+# Archived sets, candidates and spec history (delete by hand when sure)
+/archive/

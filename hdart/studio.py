@@ -252,6 +252,16 @@ def dungeon_post(action, b):
         return {"piece": dg.approve(name, b["piece"], b["rel"], bool(b.get("on", True)))}
     if action == "discard":
         return {"piece": dg.discard(name, b["piece"], b["rel"])}
+    if action == "archive_unapproved":
+        ps, n = dg.archive_unapproved(name, b["piece"])
+        return {"piece": ps, "count": n}
+    if action == "piece/restore":
+        return {"spec": dg.restore_piece(name, b["piece"])}
+    if action == "orphan/archive":
+        dg.archive_orphan(name, b["piece"])
+        return {"ok": True}
+    if action == "set/archive":
+        return {"path": str(dg.archive_set(name)), "sets": dg.list_sets()}
     if action == "export":
         return {"path": str(dg.export(name))}
     if action == "capture":
@@ -271,7 +281,10 @@ def dungeon_get(path, q):
     if path == "state":
         spec = dg.load_set(name)
         return "application/json", json.dumps({"sets": dg.list_sets(), "spec": spec, "state": dg.state(name),
+                                               "orphans": dg.orphans(name),
                                                "style": dg.style(), "set_style": dg.set_style(spec)["groups"]}).encode()
+    if path == "sets":
+        return "application/json", json.dumps(dg.list_sets()).encode()
     if path == "img":  # raw 8x candidate
         return "image/png", dg.candidate_path(name, g("rel")).read_bytes()
     if path == "native":

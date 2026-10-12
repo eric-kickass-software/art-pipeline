@@ -98,6 +98,13 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
   pieces, and `.n.png` normal maps (exact face normals + bump from the paint). Loader: `Prototypes/VisualStyle/DungeonArt.cs`.
   Board wiring: `PrototypeBoard.cs` (walls joined by neighbours, atlas floors, doors/arches, decor, flickering torches).
 - **Axes:** piece +x = board −Y, piece +y = board −X (see `iso.py` / `DungeonArt.cs`).
+- **Removing things = archiving** (nothing is deleted; `archive/` is git-ignored, empty it by hand when sure):
+  - ✕ on a candidate, **Archive unapproved**, and **Remove piece** move images to `archive/dungeon/<set>/` (same relative paths).
+  - **Archive set** moves the spec, images and state to `archive/sets/<set>_<stamp>/`. A Unity export stays in the project.
+  - Every spec save keeps the previous version in `archive/history/<set>/` (last 40).
+  - Pieces with images that aren't in the spec show under **Not in set** in the list, with Restore / Archive.
+- **Concurrency:** spec and `state.json` writes go through one lock (`hdart/locks.py`, survives the per-request reloads).
+  Generation merges its results into the state at the end, so approvals made while it runs aren't lost.
 - **Prompting lessons:**
   - Don't say "tileset" for props (they get a floor slab), so props use `prop_medium`.
   - Small loose props need `biome: false`.
