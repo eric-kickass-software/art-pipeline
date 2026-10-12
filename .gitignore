@@ -12,3 +12,6 @@ __pycache__/
 
 # Throwaway test sets
 /specs/dungeon_sets/zz_*.json
+
+# Materials library downloads (re-downloadable; the material JSON files are in git)
+/library/cache/

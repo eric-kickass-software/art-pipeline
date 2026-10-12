@@ -165,6 +165,9 @@ class Jobs:
                                                       bool(a.get("redetail")), int(a.get("seed", 1)))
                 elif job["kind"] == "dun_build":
                     job["result"] = dg.build_walls(a["set"], a["piece"])
+                elif job["kind"] == "lib_import":
+                    from . import library
+                    job["result"] = library.import_material(a["source"], a["asset"], a.get("hit"))["id"]
                 elif job["kind"] == "dun_capture":
                     job["result"] = dg.capture(a["set"])
                 elif job["kind"] == "base":
@@ -276,6 +279,9 @@ def dungeon_post(action, b):
     if action == "trial":
         job = JOBS.add("dun_trial", b, f"{name} · {b['piece']} trial: {b.get('variation', '')[:30]}")
         return {"job": job["id"]}
+    if action == "family/material":  # use a library material on a family (template / palette / words)
+        return {"spec": dg.apply_material(name, b["piece"], b["material"], b.get("use", ["template", "words"]),
+                                          float(b.get("strength", 0.65)))}
     if action == "family/build":  # wall families: project the elevations onto the wall pieces
         job = JOBS.add("dun_build", b, f"{name} · {b['piece']} build walls")
         return {"job": job["id"]}
@@ -299,6 +305,34 @@ def dungeon_post(action, b):
         job = JOBS.add("dun_capture", b, f"{name} · Prototype V capture")
         return {"job": job["id"]}
     raise ValueError(f"unknown action {action}")
+
+
+def library_get(path, q):
+    """Materials library (hdart/library.py): list, search the CC0 libraries, cached maps."""
+    from . import library
+    g = lambda k, d=None: q.get(k, [d])[0]
+    if path == "list":
+        return "application/json", json.dumps(library.list_materials()).encode()
+    if path == "search":
+        return "application/json", json.dumps(library.search(g("q", ""), g("src", "all"))).encode()
+    if path == "img":  # a material's colour map (thumb = 256 px)
+        im = Image.open(library.image_path(g("id"), g("kind", "color"))).convert("RGB")
+        if g("size"):
+            im = im.resize((int(g("size")), int(g("size"))))
+        buf = io.BytesIO()
+        im.save(buf, "PNG")
+        return "image/png", buf.getvalue()
+    raise ValueError(f"unknown library path {path}")
+
+
+def library_post(action, b):
+    from . import library
+    if action == "import":  # downloads: through the job queue
+        job = JOBS.add("lib_import", b, f"library · import {b['source']} {b['asset']}")
+        return {"job": job["id"]}
+    if action == "save":
+        return {"material": library.save(b["material"])}
+    raise ValueError(f"unknown library action {action}")
 
 
 def dungeon_get(path, q):
@@ -398,6 +432,14 @@ def serve(renders, spec, palettes, port=4321, open_browser=True):
                     self.send_header("Content-Type", "text/html; charset=utf-8")
                     self.end_headers()
                     self.wfile.write(body)
+                elif u.path.startswith("/api/lib/"):
+                    ctype, data = library_get(u.path[9:], q)
+                    self.send_response(200)
+                    self.send_header("Content-Type", ctype)
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
                 elif u.path.startswith("/api/dun/"):
                     ctype, data = dungeon_get(u.path[9:], q)
                     self.send_response(200)
@@ -454,6 +496,8 @@ def serve(renders, spec, palettes, port=4321, open_browser=True):
                     self._json(workshop_post(st, u.path[8:], body))
                 elif u.path.startswith("/api/dun/"):
                     self._json(dungeon_post(u.path[9:], body))
+                elif u.path.startswith("/api/lib/"):
+                    self._json(library_post(u.path[9:], body))
                 elif u.path == "/api/characters/save":
                     from . import workshop
                     self._json(workshop.save_character(body["name"], body["appearance"], body.get("note", "")))

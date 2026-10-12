@@ -2074,6 +2074,36 @@ def template_preview(name, master_id):
     return Image.fromarray(np.tile(np.asarray(f), (2, 2, 1)))
 
 
+def apply_material(name, master_id, mid, use=("template", "words"), strength=0.65):
+    """Use a library material on a family: its texture as the layout template, its palette on the family's procedural
+    template, its words in the master prompt. Records the material on the family (floor and wall families can share
+    one). Returns the set spec."""
+    from . import library
+    mat = library.load(mid)
+    with LOCK:
+        spec = load_set(name)
+        m = piece_of(spec, master_id)
+        fam = dict(m.get("family") or {})
+        tpl = dict(fam.get("template") or {})
+        if "template" in use:
+            tpl = {"pattern": "image", "material": mat["id"], "repeats": mat.get("repeats", 1), "strength": strength, "seed": 1}
+        if "palette" in use:
+            if tpl.get("pattern") in (None, "none", "image"):
+                tpl = {"pattern": "running_bond", "strength": strength, "seed": 1}
+            tpl["palette"] = mat["palette"]
+        if tpl:
+            fam["template"] = tpl
+        if "words" in use and mat.get("descriptors"):
+            prompts = list(fam.get("prompts") or [m.get("prompt", "")])
+            base = prompts[0] if prompts else ""
+            extra = f"{mat['name'].lower()}, {mat['descriptors']}"
+            prompts[0] = base if extra in base else (f"{base}, {extra}" if base.strip() else extra)
+            fam["prompts"] = prompts
+            m["prompt"] = prompts[0]
+        fam["material"] = mat["id"]
+        return upsert_piece(name, {**m, "family": fam})
+
+
 def family_info(name, spec, master):
     """What the family board needs about a family: kind, settings, its pieces by size, material, built state."""
     if master.get("method") == "wall_master":

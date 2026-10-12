@@ -154,6 +154,26 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
 - **Style editing in place:** the piece editor and the group boards have an "Edit the shared style" box with just the
   fields that kind of piece uses (floors: medium/style/rendering/biome; walls: all six; props: the prop fields).
   Prompt previews update as you type; saves (there and on the Style tab) send only fields that changed.
+- **Layout templates** (`hdart/patterns.py`; family board → *Layout template*): running / stack / English bond,
+  basketweave, ashlar, flagstone, cobble, square and hex tiles, planks. Sizes in tile units (`across` = units per
+  tile, a whole number; `course`, `mortar`, `bevel`, `jitter`), a palette (stone tones + joint), and every pattern
+  repeats exactly once per tile (coordinates come from the pixel index within its tile), so it's seamless and to
+  scale by construction. Masters with a template start from it (img2img at `strength`, default 0.7; FLUX keeps the
+  layout and paints the surface), then the usual seamless pass. Tests: `tests/test_patterns.py`.
+- **Blockout** (preview toolbar): the room with the families' templates instead of generated art: the floor template
+  tile, the wall template projected onto runs/post/doorway with a flat door fill (`blockout_include`, cached files
+  under `candidates/<piece>/_blockout/`). Judge layout, scale (scale guides) and colours before generating.
+- **Materials library** (`hdart/library.py`; left panel → *Materials library*): CC0 materials from **ambientCG**
+  (`ambientcg.com/api/v2`) and **Poly Haven** (`api.polyhaven.com`), no keys. *Import…* searches both; an import
+  keeps the 1K colour + height maps in `library/cache/` (git-ignored, re-downloaded on demand) and writes
+  `library/materials/<id>.json` (in git): source + licence, tags, editable descriptors, physical size, `repeats` per
+  tile (1 tile ≈ 1.5 m, `TILE_METERS`), and a palette (k-means stone tones of the raised parts, joint = the lowest 15%
+  of the height map). Use on a family: *texture as template* (`pattern: "image"`, the seamless map at `repeats` per
+  tile), *palette* (on a procedural template), *words* (into the master prompt); or *New floor/wall family from it*.
+  Floor and wall families can share a material. Downloads only from those hosts; from ambientCG zips only the colour
+  and displacement maps are extracted, to fixed names. Findings: Poly Haven `dimensions` are mm but can be wrong
+  (brick_4 says 0.5 m, measures ~2.6 m): adjust *repeats per tile* against the hero in the blockout. Fine materials
+  (small setts) simplify at strength 0.65: use ~0.5 and the material's own words. Tests: `tests/test_library.py`.
 - **Wall families** (sidebar → Wall families, **+ New wall family**): the floor family idea for walls.
   - **Master = a front-view elevation** (`kind: "elevation"`, method `wall_master`): 512 × 1248 px = one tile wide,
     3 units tall (1 unit = `iso._KZ` tiles), repeating sideways every tile, because the game drops runs anywhere

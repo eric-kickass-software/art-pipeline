@@ -54,6 +54,15 @@
   body.famview .layout { grid-template-columns: 230px minmax(360px, 1fr) minmax(380px, 1.3fr); }
   body.famview #famPanel .famstage { height:calc(100vh - 190px); min-height:360px; }
   .outrow { justify-content:space-between; margin-bottom:6px; }
+  #libPanel { position:fixed; inset:0; background:rgba(8,6,12,.78); z-index:71; display:flex; align-items:center; justify-content:center; }
+  #libPanel.hidden { display:none; } .libbody { flex:1; min-height:0; overflow:auto; }
+  .liblist { display:flex; flex-direction:column; gap:3px; margin:4px 0; } .libitem { display:flex; gap:6px; align-items:center; cursor:pointer; padding:2px; border-radius:4px; }
+  .libitem:hover { background:var(--card); } .libitem img { width:30px; height:30px; border-radius:3px; object-fit:cover; } .libitem span { font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .libgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:8px; }
+  .libcard { background:var(--card); border-radius:6px; padding:6px; font-size:11px; } .libcard img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:4px; }
+  .libcard .tags { color:var(--muted); height:28px; overflow:hidden; } .libcard button { width:100%; margin-top:4px; }
+  .libmat { display:flex; gap:14px; } .libmat > img { width:360px; height:360px; object-fit:cover; border-radius:6px; flex:none; }
+  .libmat .side { flex:1; display:flex; flex-direction:column; gap:8px; font-size:12px; } .libmat .side textarea { width:100%; }
   #imgPanel { position:fixed; inset:0; background:rgba(8,6,12,.78); z-index:70; display:flex; align-items:center; justify-content:center; }
   #imgPanel.hidden { display:none; }
   .ipbox { background:var(--panel); border:1px solid var(--line); border-radius:8px; width:min(1280px, 96vw); height:min(860px, 94vh); display:flex; flex-direction:column; padding:10px; gap:8px; }
@@ -84,6 +93,7 @@
   .fammatrix .vact { width:56px; text-align:center; } .fammatrix .vact button { padding:2px 6px; margin:1px; }
   .fammatrix .untagged td { opacity:.75; }
   .fammatrix.wallm .mcell img, #famDoors .mcell img { object-fit:contain; background:#16121c; }
+  .swatch { display:inline-block; width:18px; height:18px; border-radius:3px; vertical-align:middle; border:1px solid rgba(0,0,0,.4); }
   .tplrow { display:flex; gap:10px; align-items:flex-start; } .tplrow img { width:150px; max-height:190px; object-fit:contain; border-radius:4px; background:#16121c; flex:none; }
   .tplform { flex:1; } .tplform .row { gap:6px; flex-wrap:wrap; margin:3px 0; } .tplform input[type=color] { width:30px; height:24px; padding:0; border:none; background:none; }
   .fampal { display:flex; flex-wrap:wrap; gap:4px; }
@@ -147,6 +157,9 @@
 <div id="notice" class="hidden"><span></span><button onclick="this.parentElement.classList.add('hidden')">✕</button></div>
 <div id="jobsPanel"><div class="row"><b>Queue</b><button id="clearJobs" style="margin-left:auto">Clear finished</button></div><div id="jobs"></div></div>
 <div id="zoom"><img alt=""></div>
+<div id="libPanel" class="hidden"><div class="ipbox">
+  <div class="iphead"><b id="libTitle"></b><span style="margin-left:auto"></span><button id="libClose" title="close (Esc)">✕</button></div>
+  <div id="libBody" class="libbody"></div></div></div>
 <div id="imgPanel" class="hidden"><div class="ipbox">
   <div class="iphead"><b id="ipTitle"></b><span class="hint" id="ipCount"></span>
     <span style="margin-left:auto"></span><button id="ipPrev" title="previous (←)">◀</button><button id="ipNext" title="next (→)">▶</button><button id="ipClose" title="close (Esc)">✕</button></div>
@@ -165,6 +178,10 @@
         <button id="sp_save" title="Save the set's name and grid">Save</button></div>
       <div class="hint">Shared descriptors (every floor, wall and door prompt starts with these; the biome is this set's):</div>
       <div id="spStyle" class="stylebox" style="border:none;padding:0"><summary style="display:none"></summary><div class="sbody"></div></div>
+    </details>
+    <details id="libSide" class="stylebox setpanel" open><summary>Materials library</summary>
+      <div id="libList" class="liblist"></div>
+      <div class="row"><button id="libImportBtn" style="width:100%" title="Search ambientCG and Poly Haven (CC0) and import materials">Import from ambientCG / Poly Haven…</button></div>
     </details>
     <div id="plist" class="plist"></div>
     <div class="row"><button id="addPieceBtn" class="primary" style="width:100%">+ Add piece / prop</button></div>
@@ -317,6 +334,7 @@ async function load() {
   $("#setSel").innerHTML = D.sets.map(s => `<option ${s === SET ? "selected" : ""}>${s}</option>`).join("");
   syncPixel();
   renderSetPanel();
+  if (!LIB.length) renderLibrary();
   // Start on a floor family (or the walls board) instead of an empty editor; keep the view when it still exists.
   const fams = Object.keys(D.families || {});
   if (VIEW === "family" && !famInfo()) { FAM = fams[0] || null; if (!FAM) { VIEW = "group"; GROUP = "Walls"; } }
@@ -369,6 +387,84 @@ function renderOrphans() {
     o.map(([id, v]) => `<div class="orphan" data-id="${esc(id)}" title="${esc(v.prompt)}"><span class="nm">${esc(id)}</span>
       <span class="badge part">${v.count} img</span><button data-a="restore">Restore</button><button data-a="archive" class="danger">Archive</button></div>`).join("");
 }
+
+// ---- materials library (hdart/library.py): CC0 materials from ambientCG / Poly Haven, used by families.
+let LIB = [];
+async function renderLibrary() {
+  try { LIB = await api("/api/lib/list"); } catch { LIB = []; }
+  $("#libList").innerHTML = LIB.length ? LIB.map(m => `<div class="libitem" data-id="${esc(m.id)}" title="${esc(m.name)} · ${esc(m.source)}"><img src="/api/lib/img?id=${encodeURIComponent(m.id)}&size=64" alt=""><span>${esc(m.name)}</span></div>`).join("")
+    : `<div class="hint">No materials yet: import some (brick, flagstone, plaster, wood…).</div>`;
+  document.querySelectorAll("#libList .libitem").forEach(el => el.onclick = () => openMaterial(el.dataset.id));
+}
+function libOpen(title) { $("#libTitle").textContent = title; $("#libPanel").classList.remove("hidden"); }
+function libClose() { $("#libPanel").classList.add("hidden"); }
+
+function openImport() {
+  libOpen("Import materials (CC0: ambientCG, Poly Haven)");
+  $("#libBody").innerHTML = `<div class="gbar"><input id="libQ" placeholder="e.g. bricks, flagstone, cobblestone, plaster, wood planks" style="flex:1">
+      <select id="libSrc" style="width:auto"><option value="all">both</option><option value="ambientcg">ambientCG</option><option value="polyhaven">Poly Haven</option></select>
+      <button id="libGo" class="primary">Search</button><span class="hint" id="libMsg"></span></div><div id="libRes" class="libgrid"></div>`;
+  const go = async () => {
+    $("#libMsg").textContent = "searching…"; $("#libRes").innerHTML = "";
+    let hits;
+    try { hits = await api(`/api/lib/search?q=${encodeURIComponent($("#libQ").value)}&src=${$("#libSrc").value}`); } catch (e) { $("#libMsg").textContent = e.message; return; }
+    const have = new Set(LIB.map(m => m.id));
+    $("#libMsg").textContent = `${hits.length} found`;
+    $("#libRes").innerHTML = hits.map((h, i) => `<div class="libcard"><img src="${esc(h.thumb || "")}" alt="" loading="lazy">
+      <b>${esc(h.name)}</b> <span class="hint">${h.source} · ${h.size_m ? h.size_m.map(v => v.toFixed(1)).join(" × ") + " m" : "size ?"}</span>
+      <div class="tags">${esc((h.tags || []).slice(0, 8).join(", "))}</div>
+      <button data-i="${i}" class="${have.has(`${h.source}_${h.asset}`.toLowerCase().replace(/[^a-z0-9_]+/g, "_")) ? "" : "primary"}">${have.has(`${h.source}_${h.asset}`.toLowerCase().replace(/[^a-z0-9_]+/g, "_")) ? "In library (import again)" : "Import"}</button></div>`).join("");
+    $("#libRes").querySelectorAll("button").forEach(b => b.onclick = async () => {
+      const h = hits[+b.dataset.i];
+      try { await api("/api/lib/import", {source: h.source, asset: h.asset, hit: h}); b.textContent = "importing…"; b.disabled = true; pollJobs(); } catch (e) { b.textContent = e.message; }
+    });
+  };
+  $("#libGo").onclick = go; $("#libQ").onkeydown = e => { if (e.key === "Enter") go(); };
+  $("#libQ").focus();
+}
+
+function openMaterial(id) {
+  const m = LIB.find(x => x.id === id); if (!m) return;
+  const fam = FAM && famInfo() ? FAM : null;
+  libOpen(`${m.name} · ${m.source} (${m.license})`);
+  $("#libBody").innerHTML = `<div class="libmat"><img src="/api/lib/img?id=${encodeURIComponent(id)}" alt="">
+    <div class="side">
+      <div><a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.url)}</a> · imported ${esc(m.imported || "")}</div>
+      <div>size ${m.size_m ? m.size_m.map(v => v.toFixed(2)).join(" × ") + " m" : "unknown"} ·
+        <label title="Whole repeats of the texture per tile (1 tile ≈ 1.5 m). Metadata can be off: judge it against the hero in the blockout.">repeats per tile<input id="libRep" type="number" min="1" max="12" value="${m.repeats || 1}" style="width:52px"></label></div>
+      <div><span class="hint">palette</span> ${(m.palette.stones || []).map(c => `<span class="swatch" style="background:${c}"></span>`).join("")} <span class="hint">joint</span> <span class="swatch" style="background:${m.palette.mortar}"></span></div>
+      <div class="hint">tags: ${esc((m.tags || []).join(", "))}</div>
+      <label class="hint">descriptors (added to a family's prompt by "words")</label><textarea id="libDesc" rows="3">${esc(m.descriptors || "")}</textarea>
+      <div class="row"><button id="libSave">Save</button><span class="hint" id="libMsg2"></span></div>
+      <h3>Use it</h3>
+      ${fam ? `<div class="row"><span class="hint">on ${esc(fam)}:</span><button data-use="template">texture as template</button><button data-use="palette">palette</button><button data-use="words">words</button><button data-use="template,words" class="primary">template + words</button></div>` : `<div class="hint">Open a family to apply this material to it.</div>`}
+      <div class="row"><button data-new="floor">New floor family from it</button><button data-new="wall">New wall family from it</button></div>
+      <div class="hint">Floor and wall families can share a material: same texture scale, palette and words on both.</div>
+    </div></div>`;
+  const save = async () => { const mm = {...m, descriptors: $("#libDesc").value, repeats: +$("#libRep").value}; await api("/api/lib/save", {material: mm}); await renderLibrary(); return mm; };
+  $("#libSave").onclick = async () => { try { await save(); $("#libMsg2").textContent = "Saved."; } catch (e) { $("#libMsg2").textContent = e.message; } };
+  $("#libBody").querySelectorAll("[data-use]").forEach(b => b.onclick = async () => {
+    try { await save(); await post("family/material", {piece: fam, material: id, use: b.dataset.use.split(",")}); await load(); libClose(); if (VIEW === "family") renderFamily(); }
+    catch (e) { $("#libMsg2").textContent = e.message; }
+  });
+  $("#libBody").querySelectorAll("[data-new]").forEach(b => b.onclick = async () => {
+    const wall = b.dataset.new === "wall", slug = m.name.toLowerCase().replace(/\W+/g, "_").replace(/^_|_$/g, "").slice(0, 24) || "mat";
+    let piece;
+    if (wall) piece = {id: `tile.${SET}_${slug}_wall_master`, kind: "elevation", shape: "elevation", method: "wall_master", variants: 1, prompt: m.name.toLowerCase(), family: {prompts: [m.name.toLowerCase()]}};
+    else {
+      const board = (D.spec.pieces.find(q => q.method === "master") || D.spec.pieces.find(q => q.shape === "floor" && (q.board || q.id).endsWith("_floor")) || {}).board || `tile.${SET}_floor`;
+      piece = {id: `tile.${SET}_${slug}_master`, kind: "tile", shape: "floor", method: "master", board, variants: 1, prompt: m.name.toLowerCase(), family: {prompts: [m.name.toLowerCase()]}};
+    }
+    try {
+      await save(); await post("piece/save", {piece}); await post("family/material", {piece: piece.id, material: id, use: ["template", "words"]});
+      FAM = piece.id; await load(); libClose(); setView("family");
+    } catch (e) { $("#libMsg2").textContent = e.message; }
+  });
+}
+$("#libClose").onclick = libClose;
+$("#libPanel").onclick = e => { if (e.target.id === "libPanel") libClose(); };
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#libPanel").classList.contains("hidden")) libClose(); });
+$("#libImportBtn").onclick = openImport;
 
 // ---- set & style panel (left column): set name, grid and the shared descriptors, saved in place.
 function renderSetPanel() {
@@ -657,13 +753,14 @@ async function renderTemplateForm() {
     <div class="row"><span class="hint">stones</span>${pal.stones.map((c, i) => `<input type="color" class="tplStone" data-i="${i}" value="${c}">`).join("")}
       <button id="tplAddStone" title="another stone tone">+</button>${pal.stones.length > 1 ? `<button id="tplDelStone" title="remove the last tone">−</button>` : ""}
       <span class="hint">joint</span><input type="color" id="tplMortar" value="${pal.mortar}"></div>` : ""}
-    ${t.pattern === "image" ? `<div class="hint">From the materials library (${esc(t.material || "")}): ${t.repeats ?? 1} repeat(s) per tile.</div>` : ""}`;
+    ${t.pattern === "image" ? `<div class="row"><span class="hint">materials library: ${esc(t.material || "")}</span>
+      <label title="Whole repeats of the texture per tile (1 tile ≈ 1.5 m): judge it against the hero in the blockout">repeats per tile<input id="tplRepeats" type="number" min="1" max="12" value="${t.repeats ?? 1}" style="width:52px"></label></div>` : ""}`;
   $("#tplImg").classList.toggle("hidden", !on);
   if (on) $("#tplImg").src = `/api/dun/template?set=${SET}&piece=${encodeURIComponent(FAM)}&_=${Date.now()}`;
   const collect = () => {
     const pattern = $("#tplPattern").value;
     if (pattern === "none") return {pattern: "none"};
-    if (pattern === "image") return {...t, strength: +$("#tplStrength").value, seed: +$("#tplSeed").value};
+    if (pattern === "image") return {...t, strength: +$("#tplStrength").value, seed: +$("#tplSeed").value, repeats: +($("#tplRepeats")?.value || t.repeats || 1)};
     const params = {};
     document.querySelectorAll("#tplForm .tplP").forEach(i => params[i.dataset.k] = +i.value);
     const stones = [...document.querySelectorAll("#tplForm .tplStone")].map(i => i.value);
@@ -1376,6 +1473,7 @@ async function pollJobs() {
     if ((j.status === "done" || j.status === "failed") && !seenDone.has(j.id)) {
       seenDone.add(j.id);
       if (["dun", "dun_trial", "dun_edit", "dun_rescale", "dun_build"].includes(j.kind)) reload = true;
+      if (j.kind === "lib_import") { renderLibrary(); if (j.error) notice(j.error); }
       if (j.kind === "dun_capture") { caps = true; if (j.error) $("#exportHint").textContent = j.error; }
     }
   }

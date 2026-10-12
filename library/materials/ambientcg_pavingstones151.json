@@ -1,0 +1,43 @@
+{
+  "id": "ambientcg_pavingstones151",
+  "name": "Paving Stones 151",
+  "source": "ambientcg",
+  "asset": "PavingStones151",
+  "license": "CC0",
+  "url": "https://ambientcg.com/view?id=PavingStones151",
+  "tags": [
+    "arch",
+    "arches",
+    "beige",
+    "cobblestone",
+    "european",
+    "gray",
+    "grid",
+    "mosaic",
+    "old",
+    "paving",
+    "pedestrian",
+    "rough",
+    "stone",
+    "stones",
+    "street",
+    "urban"
+  ],
+  "descriptors": "arch, arches, beige, cobblestone, european, gray, grid, mosaic",
+  "size_m": [
+    5.4,
+    5.4
+  ],
+  "palette": {
+    "stones": [
+      "#7b7366",
+      "#6b645a",
+      "#8a8172",
+      "#544f48"
+    ],
+    "mortar": "#7e7569",
+    "variation": 0.06
+  },
+  "repeats": 1,
+  "imported": "2026-10-12"
+}

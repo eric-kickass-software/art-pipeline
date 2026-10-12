@@ -1,0 +1,38 @@
+{
+  "id": "polyhaven_brick_4",
+  "name": "Brick 4",
+  "source": "polyhaven",
+  "asset": "brick_4",
+  "license": "CC0",
+  "url": "https://polyhaven.com/a/brick_4",
+  "tags": [
+    "brick",
+    "city",
+    "damp",
+    "dirty",
+    "man made",
+    "moss",
+    "outdoor",
+    "red",
+    "urban",
+    "wall",
+    "wet"
+  ],
+  "descriptors": "brick, city, damp, dirty, man made, moss, outdoor, red",
+  "size_m": [
+    0.5,
+    0.5
+  ],
+  "palette": {
+    "stones": [
+      "#8f6143",
+      "#a36c50",
+      "#9d8464",
+      "#775032"
+    ],
+    "mortar": "#99906a",
+    "variation": 0.06
+  },
+  "repeats": 3,
+  "imported": "2026-10-12"
+}
