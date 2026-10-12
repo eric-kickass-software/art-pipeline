@@ -1,0 +1,64 @@
+GIMP Palette
+Name: Hearthdelve sprite index
+Columns: 5
+#
+109  69  60	skin 0
+175 129 108	skin 1
+242 199 165	skin 2
+255 218 186	skin 3
+255 225 198	skin 4
+ 55  14   8	hair 0
+ 88  40  22	hair 1
+122  74  43	hair 2
+169 114  76	hair 3
+216 160 118	hair 4
+ 27  20  33	eyes 0
+ 42  27  23	eyes 1
+ 61  42  32	eyes 2
+ 90  61  42	eyes 3
+ 90  61  45	eyes 4
+ 14  29  69	cloth1 0
+ 34  59 112	cloth1 1
+ 62  95 154	cloth1 2
+ 94 140 192	cloth1 3
+134 189 230	cloth1 4
+ 97  81  68	cloth2 0
+157 140 118	cloth2 1
+216 204 173	cloth2 2
+237 226 197	cloth2 3
+255 246 219	cloth2 4
+ 50  18  12	leather 0
+ 80  42  26	leather 1
+110  74  47	leather 2
+160 117  82	leather 3
+210 165 126	leather 4
+ 58  60  69	metal 0
+ 98 100 111	metal 1
+140 143 153	metal 2
+177 182 191	metal 3
+216 222 230	metal 4
+ 56  22  12	wood 0
+ 91  50  29	wood 1
+125  86  52	wood 2
+171 127  86	wood 3
+217 173 128	wood 4
+ 98  48  10	accent 0
+157 105  33	accent 1
+217 176  70	accent 2
+238 200 101	accent 3
+255 223 134	accent 4
+ 20  14  24	dark 0
+ 27  20  36	dark 1
+ 36  26  42	dark 2
+ 46  34  51	dark 3
+ 58  43  62	dark 4
+ 39  28 108	magic 0
+ 75  62 174	magic 1
+122 108 240	magic 2
+161 135 254	magic 3
+189 157 255	magic 4
+201 195 207	white 0
+227 221 230	white 1
+244 240 242	white 2
+255 255 255	white 3
+255 255   2	white 4

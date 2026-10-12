@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dungeon Forge</title>
+<style>
+  :root { --bg:#16131c; --panel:#211c29; --card:#2a2333; --line:#3a3146; --text:#e8e2ef; --muted:#9a90a8; --accent:#e0b874;
+          --ok:#6fcf8a; --warn:#e8b04a; --bad:#e8786a; --info:#9cc4ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:13px/1.45 system-ui, sans-serif; }
+  header { display:flex; gap:8px; align-items:center; padding:8px 14px; background:var(--panel); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
+  header h1 { font-size:15px; margin:0 10px 0 0; color:var(--accent); }
+  header select { width:auto; }
+  header a { color:var(--accent); } #jobsBtn { margin-left:auto; }
+  textarea, input, select { width:100%; background:#2c2536; color:var(--text); border:1px solid var(--line); border-radius:4px; padding:5px 6px; font:inherit; }
+  textarea { resize:vertical; }
+  button { background:#352c41; color:var(--text); border:1px solid var(--line); border-radius:4px; padding:5px 10px; cursor:pointer; font:inherit; }
+  button:hover { border-color:var(--accent); } button.primary { background:#5a4523; border-color:#8a6a30; }
+  button.on { background:#3d5a2f; border-color:var(--ok); } button:disabled { opacity:.5; cursor:not-allowed; }
+  button.danger:hover { border-color:var(--bad); }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin:12px 0 6px; }
+  .hint { color:var(--muted); font-size:12px; margin:2px 0 4px; }
+  .row { display:flex; gap:8px; align-items:center; margin:6px 0; flex-wrap:wrap; }
+  .row > label { color:var(--muted); display:flex; flex-direction:column; gap:2px; font-size:12px; }
+  .row > label input, .row > label select { width:96px; }
+  .err { color:var(--bad); white-space:pre-wrap; }
+  .layout { display:grid; grid-template-columns: 270px minmax(460px, 1fr) minmax(380px, 560px); gap:12px; padding:12px; align-items:start; }
+  .col { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:10px; }
+  .side { position:sticky; top:58px; max-height:calc(100vh - 70px); overflow:auto; }
+  .plist .grp { color:var(--accent); font-size:11px; text-transform:uppercase; letter-spacing:1px; margin:10px 0 4px; }
+  .pitem { display:flex; gap:8px; align-items:center; padding:4px; border-radius:5px; cursor:pointer; border:1px solid transparent; }
+  .pitem:hover { background:var(--card); } .pitem.sel { border-color:var(--accent); background:var(--card); }
+  .pitem img, .pitem .ph { width:40px; height:40px; object-fit:contain; image-rendering:pixelated; flex:none; background:#0003; border-radius:3px; }
+  .pitem .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+  .badge { font-size:10px; padding:0 6px; border-radius:8px; background:#000a; }
+  .badge.ok { color:var(--ok); } .badge.part { color:var(--warn); } .badge.none { color:var(--muted); }
+  .badge.run { color:var(--info); }
+  .prompt { font-family: ui-monospace, Consolas, monospace; font-size:11.5px; color:#c9c0d6; background:#1b1722; padding:8px; border-radius:4px; white-space:pre-wrap; }
+  .cands { display:grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap:10px; margin-top:8px; }
+  .cand { background:var(--card); border:2px solid transparent; border-radius:6px; padding:6px; }
+  .cand.on { border-color:var(--ok); } .cand.trying { outline:2px dashed var(--info); }
+  .cand .views { display:flex; gap:6px; align-items:flex-end; }
+  .cand .raw { width:120px; height:120px; object-fit:contain; background:#fff; border-radius:3px; flex:none; }
+  .cand .views > div { min-width:0; } .cand .nat { max-width:100%; image-rendering:pixelated; background: repeating-conic-gradient(#1d1924 0 25%, #26202f 0 50%) 50%/12px 12px; border-radius:3px; }
+  .cand .meta { color:var(--muted); font-size:11px; margin:4px 0; }
+  .cand .btns { display:flex; gap:4px; } .cand .btns button { flex:1; padding:3px; font-size:12px; }
+  #room { width:100%; image-rendering:pixelated; border-radius:4px; display:block; background:#16121c; }
+  .caps { display:grid; grid-template-columns: 1fr 1fr; gap:6px; }
+  .caps img { width:100%; border-radius:3px; cursor:zoom-in; display:block; }
+  .caps figure { margin:0; } .caps figcaption { color:var(--muted); font-size:10px; }
+  #zoom { position:fixed; inset:0; background:#000d; display:none; z-index:50; align-items:center; justify-content:center; cursor:zoom-out; }
+  #zoom.on { display:flex; } #zoom img { max-width:96vw; max-height:94vh; image-rendering:pixelated; }
+  #jobsPanel { position:fixed; top:48px; right:14px; width:380px; max-height:60vh; overflow:auto; background:var(--panel); border:1px solid var(--line);
+               border-radius:6px; padding:8px; z-index:30; display:none; box-shadow:0 10px 30px #000a; }
+  #jobsPanel.on { display:block; }
+  .job { padding:4px 0; border-bottom:1px solid var(--line); font-size:12px; display:flex; justify-content:space-between; gap:6px; }
+  .job .s { color:var(--muted); } .job .s.running { color:var(--info); } .job .s.done { color:var(--ok); } .job .s.failed { color:var(--bad); }
+  .chips { display:flex; flex-wrap:wrap; gap:4px; margin:4px 0; }
+  .chip { font-size:11px; padding:2px 7px; border-radius:10px; background:#2f2838; border:1px solid var(--line); cursor:pointer; }
+  .chip:hover { border-color:var(--accent); } .chip.have { opacity:.4; cursor:default; }
+  .catgrp { color:var(--accent); font-size:11px; text-transform:uppercase; margin-top:8px; }
+  .tabs { display:flex; gap:4px; margin-bottom:8px; }
+  .tabs button.on { border-color:var(--accent); color:var(--accent); background:var(--card); }
+  .hidden { display:none !important; }
+  .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Dungeon Forge</h1>
+  <select id="setSel"></select>
+  <button id="newSetBtn">+ New set</button>
+  <a href="/">Studio</a> <a href="/workshop">Workshop</a>
+  <button id="jobsBtn">Queue: idle</button>
+</header>
+<div id="jobsPanel"><div class="row"><b>Queue</b><button id="clearJobs" style="margin-left:auto">Clear finished</button></div><div id="jobs"></div></div>
+<div id="zoom"><img alt=""></div>
+
+<div class="layout">
+  <!-- pieces -->
+  <div class="col side">
+    <div class="tabs"><button id="tabPieces" class="on">Pieces</button><button id="tabStyle">Style &amp; set</button></div>
+    <div id="plist" class="plist"></div>
+    <div class="row"><button id="addPieceBtn" class="primary" style="width:100%">+ Add piece / prop</button></div>
+  </div>
+
+  <!-- editor -->
+  <div class="col" id="center">
+    <div id="pieceView">
+      <div class="hint" id="noPiece">Pick a piece on the left.</div>
+      <div id="pieceEd" class="hidden">
+        <div class="row" style="justify-content:space-between"><h2 style="margin:0" id="pTitle"></h2><span id="pBadge" class="badge"></span></div>
+        <div class="row">
+          <label>id<input id="f_id" style="width:220px"></label>
+          <label>kind<select id="f_kind"><option>tile</option><option>wall_decor</option><option>prop</option></select></label>
+          <label class="t-only">shape<select id="f_shape"><option value="floor">floor</option><option value="run">thin wall run</option><option value="post">wall post</option><option value="mesh">mesh (Blender)</option><option value="pillar">pillar</option><option value="wall">thick block (old)</option></select></label>
+          <label class="r-only">length (cells)<select id="f_length"><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
+          <label class="r-only">opening<select id="f_opening"><option value="">none</option><option value="door">door</option></select></label>
+          <label class="m-only">mesh<select id="f_mesh"><option>archway</option></select></label>
+          <label class="t-only">height<input id="f_height" type="number" step="0.1" min="0" max="4"></label>
+          <label class="p-only">footprint<input id="f_footprint" type="number" step="0.05" min="0.1" max="2"></label>
+          <label>variants<input id="f_variants" type="number" min="1" max="8"></label>
+        </div>
+        <div class="row">
+          <label class="d-only">painted on (of)<select id="f_of" style="width:200px"></select></label>
+          <label class="f-only">floor method<select id="f_method"><option value="warp">single tile (warp)</option><option value="atlas">large area (atlas)</option><option value="template">template img2img</option></select></label>
+          <label class="a-only">atlas<select id="f_atlas"><option value="2">2×2</option><option value="3">3×3</option><option value="4">4×4</option></select></label>
+          <label>board id<input id="f_board" style="width:200px" placeholder="(same as id)"></label>
+          <label class="t-only">tint<input id="f_tint" style="width:110px" placeholder="r,g,b"></label>
+          <label class="p-only">view override<input id="f_view" style="width:300px" placeholder="(shared prop view)" title="e.g. 'seen from above, lying flat' for things on the ground"></label>
+          <label class="p-only" title="Small loose props: the biome's scene words make FLUX paint a floor or a room around them">use biome<select id="f_biome"><option value="1">yes</option><option value="0">no</option></select></label>
+        </div>
+        <label class="hint">Piece prompt (added after the style descriptors)</label>
+        <textarea id="f_prompt" rows="2"></textarea>
+        <div class="hint" style="margin-top:6px">Full prompt sent to FLUX:</div>
+        <div class="prompt" id="fullPrompt"></div>
+        <div class="row" style="margin-top:8px">
+          <label>count<input id="g_n" type="number" value="4" min="1" max="12"></label>
+          <label>seed<input id="g_seed" type="number" value="1"></label>
+          <label class="nf-only">denoise<input id="g_denoise" type="number" step="0.02" min="0.2" max="1" placeholder="auto"></label>
+          <label>LoRA<input id="g_lora" type="number" step="0.05" min="0" max="1.5" placeholder="auto"></label>
+          <button id="genBtn" class="primary">Generate</button>
+          <button id="saveBtn">Save piece</button>
+          <button id="delBtn" class="danger">Delete</button>
+        </div>
+        <div class="hint" id="genHint"></div>
+        <div class="err" id="pErr"></div>
+        <h2>Candidates <span class="hint" id="candHint"></span></h2>
+        <div class="cands" id="cands"></div>
+      </div>
+    </div>
+
+    <div id="styleView" class="hidden">
+      <h2>Set</h2>
+      <div class="row">
+        <label>name<input id="s_name" style="width:180px"></label>
+        <label>grid (tile px)<select id="s_tile"><option>32</option><option>64</option><option>128</option></select></label>
+      </div>
+      <label class="hint">Biome (this set's look, replaces the shared biome descriptor)</label>
+      <textarea id="s_biome" rows="2"></textarea>
+      <div id="ideas"></div>
+      <div class="row"><button id="saveSetBtn" class="primary">Save set</button></div>
+      <h2>Shared dungeon descriptors</h2>
+      <div class="hint">Used by every set. CFG 1: no negative prompts, describe what you want.</div>
+      <div id="groups"></div>
+      <label class="hint">Prop medium (replaces "medium" for props: no "tileset", or FLUX puts props on a floor slab)</label><input id="s_pmedium">
+      <label class="hint">Prop view</label><input id="s_pview">
+      <label class="hint">Prop framing</label><input id="s_pframe">
+      <div class="row"><button id="saveStyleBtn" class="primary">Save descriptors</button></div>
+      <div class="err" id="sErr"></div>
+    </div>
+
+    <div id="addView" class="hidden">
+      <h2>Add from catalog</h2>
+      <div class="hint">One click adds the piece to this set with a starter prompt. Edit and generate from there.</div>
+      <div id="catalog"></div>
+      <h2>Or a blank piece</h2>
+      <div class="row">
+        <button data-blank="prop">Prop</button><button data-blank="floor">Floor tile</button>
+        <button data-blank="wall">Wall run</button><button data-blank="door">Door</button><button data-blank="arch">Archway</button><button data-blank="decor">Wall decor</button><button data-blank="area">Floor area</button><button data-blank="pillar">Pillar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- preview -->
+  <div class="col side">
+    <div class="row" style="justify-content:space-between"><h2 style="margin:0">Room preview</h2>
+      <span><select id="r_tile" style="width:auto"><option value="64">64 grid</option><option value="32">32 grid</option></select>
+      <button id="roomBtn">↻</button></span></div>
+    <div class="hint" id="roomHint">Approved pieces in a mock room (back walls only).</div>
+    <img id="room" alt="room preview">
+    <div class="row">
+      <button id="exportBtn">Export to Unity</button>
+      <button id="captureBtn" class="primary">Capture in Prototype V</button>
+    </div>
+    <div class="hint" id="exportHint">Export writes Assets/StreamingAssets/Art/Dungeon/&lt;set&gt;. Capture exports, then runs Unity in batch mode (about a minute; the project must not be open in the editor).</div>
+    <h2>Prototype V</h2>
+    <div class="caps" id="caps"></div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let SET = localStorage.getItem("dun.set") || "crypt";
+let D = null, SEL = null, TRY = null, VIEW = "pieces", JOBS = [], seenDone = new Set(), capStamp = Date.now();
+
+async function api(path, body) {
+  const r = await fetch(path, body ? {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)} : {});
+  const j = await r.json();
+  if (j.error) throw new Error(j.error);
+  return j;
+}
+const post = (a, b) => api("/api/dun/" + a, {set: SET, ...b});
+
+async function load() {
+  try { D = await api("/api/dun/state?set=" + encodeURIComponent(SET)); }
+  catch (e) { if (SET !== "crypt") { SET = "crypt"; return load(); } throw e; }
+  $("#setSel").innerHTML = D.sets.map(s => `<option ${s === SET ? "selected" : ""}>${s}</option>`).join("");
+  if (SEL && !piece(SEL)) SEL = null;
+  renderList(); renderCenter(); refreshRoom(); loadCaps();
+}
+const piece = id => D.spec.pieces.find(p => p.id === id);
+const pstate = id => D.state.pieces[id] || {candidates: [], approved: []};
+const natUrl = (pid, rel, tile, scale) => `/api/dun/native?set=${SET}&piece=${encodeURIComponent(pid)}&rel=${encodeURIComponent(rel)}&tile=${tile}&scale=${scale}`;
+
+function group(p) {
+  if (p.retired) return "Retired (old geometry)";
+  if (p.id.startsWith("feature.")) return "Features & traps";
+  if (p.kind === "prop") return "Props";
+  if (p.kind === "wall_decor") return "Wall decor";
+  if (p.shape === "floor") return "Floors";
+  if (p.shape === "pillar") return "Pillars";
+  return "Walls & doors";
+}
+function running(pid) { return JOBS.some(j => j.status !== "done" && j.status !== "failed" && j.label.startsWith(`${SET} · ${pid} `)); }
+
+function renderList() {
+  const order = ["Floors", "Walls & doors", "Wall decor", "Pillars", "Props", "Features & traps", "Retired (old geometry)"];
+  const by = {}; D.spec.pieces.forEach(p => (by[group(p)] ||= []).push(p));
+  $("#plist").innerHTML = order.filter(g => by[g]).map(g => `<div class="grp">${g}</div>` + by[g].map(p => {
+    const s = pstate(p.id), a = s.approved.length, v = p.variants || 1;
+    const cls = running(p.id) ? "run" : a >= v ? "ok" : (a || s.candidates.length) ? "part" : "none";
+    const txt = running(p.id) ? "generating" : `${a}/${v}` + (s.candidates.length && a < v ? ` · ${s.candidates.length} cand` : "");
+    const img = a ? `<img src="${natUrl(p.id, s.approved[0], D.spec.tile, 1)}">` : `<div class="ph"></div>`;
+    return `<div class="pitem ${p.id === SEL && VIEW === "pieces" ? "sel" : ""}" data-id="${esc(p.id)}">${img}<span class="nm" title="${esc(p.id)}">${esc(p.id)}</span><span class="badge ${cls}">${txt}</span></div>`;
+  }).join("")).join("");
+  document.querySelectorAll(".pitem").forEach(el => el.onclick = () => { SEL = el.dataset.id; TRY = null; setView("pieces"); });
+}
+
+function setView(v) {
+  VIEW = v;
+  $("#pieceView").classList.toggle("hidden", v !== "pieces");
+  $("#styleView").classList.toggle("hidden", v !== "style");
+  $("#addView").classList.toggle("hidden", v !== "add");
+  $("#tabPieces").classList.toggle("on", v !== "style"); $("#tabStyle").classList.toggle("on", v === "style");
+  renderList(); renderCenter();
+}
+
+function styleText(groups) { return groups.map(g => D.set_style[g].text).filter(t => t.trim()).join(", "); }
+function fullPrompt(p, text) {
+  const all = ["medium", "style", "view", "rendering", "framing", "biome"], core = ["medium", "style", "rendering", "biome"];
+  if (p.kind === "prop") return `${D.style.prop_medium || D.set_style.medium.text}, ${styleText(p.biome === false ? ["style", "rendering"] : ["style", "rendering", "biome"])}, ${p.view || D.style.prop_view}, ${text}, ${D.style.prop_framing}`;
+  if (p.method === "atlas")
+    return `${styleText(core)}, seamless tileable floor texture seen straight from above, ${text}, the pattern continues past every edge of the image, no border, no frame, no walls, flat even lighting`;
+  if (p.shape === "floor" && (p.method || "warp") === "warp")
+    return `${styleText(core)}, top-down orthographic view of a single square dungeon floor tile, ${text}, the tile fills the entire image edge to edge, flat even lighting`;
+  return `${styleText(all)}, ${text}`;
+}
+
+function formPiece() {
+  const num = id => $(id).value === "" ? undefined : Number($(id).value);
+  const kind = $("#f_kind").value, p = {id: $("#f_id").value.trim(), kind, prompt: $("#f_prompt").value.trim()};
+  const old0 = piece(SEL) || {};
+  if (kind === "tile") {
+    p.shape = $("#f_shape").value; p.height = num("#f_height");
+    if (["run", "mesh"].includes(p.shape)) p.length = +$("#f_length").value;
+    if (p.shape === "run" && $("#f_opening").value) p.opening = $("#f_opening").value;
+    if (p.shape === "mesh") p.mesh = $("#f_mesh").value;
+    if (["run", "post", "mesh"].includes(p.shape)) p.thickness = old0.thickness ?? 0.25;
+    for (const k of ["door_height", "door_width", "opening_width", "spring"]) if (old0[k] != null) p[k] = old0[k];
+  }
+  else { p.footprint = num("#f_footprint"); if ($("#f_view").value.trim()) p.view = $("#f_view").value.trim(); if ($("#f_biome").value === "0") p.biome = false; }
+  p.variants = num("#f_variants") || 1;
+  if (kind === "wall_decor") p.of = $("#f_of").value;
+  if (kind === "tile" && p.shape === "floor" && $("#f_method").value !== "warp") p.method = $("#f_method").value;
+  if (p.method === "atlas") p.atlas = +$("#f_atlas").value;
+  if ($("#f_board").value.trim()) p.board = $("#f_board").value.trim();
+  if ($("#f_tint").value.trim()) p.tint = $("#f_tint").value.split(",").map(Number);
+  const old = piece(SEL); if (old && old.denoise && kind !== "prop") p.denoise = old.denoise;
+  return p;
+}
+
+function syncFormVis() {
+  const kind = $("#f_kind").value, shape = kind === "wall_decor" ? "wall" : $("#f_shape").value;
+  document.querySelectorAll(".t-only").forEach(e => e.classList.toggle("hidden", kind === "prop"));
+  document.querySelectorAll(".p-only").forEach(e => e.classList.toggle("hidden", kind !== "prop"));
+  document.querySelectorAll(".d-only").forEach(e => e.classList.toggle("hidden", kind !== "wall_decor"));
+  document.querySelectorAll(".f-only").forEach(e => e.classList.toggle("hidden", !(kind === "tile" && shape === "floor")));
+  document.querySelectorAll(".a-only").forEach(e => e.classList.toggle("hidden", !(kind === "tile" && shape === "floor" && $("#f_method").value === "atlas")));
+  document.querySelectorAll(".r-only").forEach(e => e.classList.toggle("hidden", !(kind === "tile" && (shape === "run" || shape === "mesh"))));
+  document.querySelectorAll(".m-only").forEach(e => e.classList.toggle("hidden", !(kind === "tile" && shape === "mesh")));
+  if (kind === "wall_decor") document.querySelectorAll(".t-only").forEach(e => e.classList.add("hidden"));
+  const warp = kind === "tile" && shape === "floor" && $("#f_method").value === "warp";
+  document.querySelectorAll(".nf-only").forEach(e => e.classList.toggle("hidden", kind === "prop" || warp));
+  $("#f_shape").disabled = kind === "wall_decor";
+  $("#f_opening").parentElement.classList.toggle("hidden", !(kind === "tile" && shape === "run"));
+  const p = formPiece();
+  $("#fullPrompt").textContent = fullPrompt(p, p.prompt);
+  const base = kind === "wall_decor" && p.of && pstate(p.of).approved.length;
+  $("#genHint").textContent = kind === "prop" ? "Prop: clean prompt on white → background removed → cropped and scaled to the footprint (tiles wide) → downsampled."
+    : warp ? "Floor: a top-down square tile is generated, then warped exactly onto the 2:1 diamond."
+    : kind === "wall_decor" ? (base ? `Painted over the approved ${p.of} (img2img, denoise ~0.6) so the stone matches.` : `No approved ${p.of} yet: approve the base wall first for matching stone (falls back to the geometry template).`)
+    : "Tile: FLUX paints over an exact iso geometry template (img2img) and the result is clamped to its outline.";
+}
+
+function renderCenter() {
+  if (VIEW === "style") return renderStyle();
+  if (VIEW === "add") return renderCatalog();
+  const p = piece(SEL);
+  $("#noPiece").classList.toggle("hidden", !!p); $("#pieceEd").classList.toggle("hidden", !p);
+  if (!p) return;
+  const s = pstate(p.id);
+  $("#pTitle").textContent = p.id;
+  $("#pBadge").textContent = `${s.approved.length}/${p.variants || 1} approved`;
+  $("#f_id").value = p.id; $("#f_kind").value = p.kind; $("#f_shape").value = p.shape || "floor";
+  $("#f_length").value = p.length || 1; $("#f_opening").value = p.opening || ""; $("#f_mesh").value = p.mesh || "archway";
+  $("#f_atlas").value = p.atlas || 4;
+  $("#f_height").value = p.height ?? ""; $("#f_footprint").value = p.footprint ?? ""; $("#f_variants").value = p.variants || 1;
+  $("#f_of").innerHTML = D.spec.pieces.filter(q => q.kind === "tile" && (q.shape === "run" && !q.opening && (q.length || 1) === 1 || q.shape === "wall") && !q.retired).map(q => `<option ${q.id === p.of ? "selected" : ""}>${esc(q.id)}</option>`).join("");
+  $("#f_method").value = p.method || "warp"; $("#f_board").value = p.board || ""; $("#f_tint").value = (p.tint || []).join(",");
+  $("#f_prompt").value = p.prompt || ""; $("#f_view").value = p.view || ""; $("#f_biome").value = p.biome === false ? "0" : "1"; $("#pErr").textContent = "";
+  syncFormVis();
+  renderCands();
+}
+
+function renderCands() {
+  const p = piece(SEL), s = pstate(p.id), T = D.spec.tile, meta = s.meta || {};
+  $("#candHint").textContent = s.candidates.length ? `· click Approve on up to ${p.variants || 1} (the order = variant order) · Try = show in the room preview` : "· none yet, hit Generate";
+  const nScale = p.kind === "prop" ? 3 : 2;
+  $("#cands").innerHTML = s.candidates.map(rel => {
+    const on = s.approved.includes(rel), m = meta[rel] || {}, ai = s.approved.indexOf(rel);
+    return `<div class="cand ${on ? "on" : ""} ${TRY === rel ? "trying" : ""}" data-rel="${esc(rel)}">
+      <div class="views">
+        <img class="raw" src="/api/dun/img?set=${SET}&rel=${encodeURIComponent(rel)}" title="generated (8×)">
+        <div><img class="nat" src="${natUrl(p.id, rel, T, nScale)}" title="native ${T} grid ×${nScale}"><br>
+             <img class="nat" src="${natUrl(p.id, rel, T / 2, nScale)}" title="native ${T / 2} grid ×${nScale}"></div>
+      </div>
+      <div class="meta">seed ${m.seed ?? "?"}${m.denoise ? " · dn " + m.denoise : ""}${m.lora != null ? " · lora " + m.lora : ""}${m.on_base ? " · on base" : ""}${on ? ` · <b style="color:var(--ok)">variant ${ai}</b>` : ""}${m.prompt && m.prompt !== p.prompt ? `<br><i title="${esc(m.prompt)}">older prompt</i>` : ""}</div>
+      <div class="btns"><button data-a="approve" class="${on ? "on" : ""}">${on ? "✓ Approved" : "Approve"}</button><button data-a="try">${TRY === rel ? "Trying" : "Try"}</button><button data-a="seed" title="reuse this seed">Seed</button><button data-a="discard" class="danger">✕</button></div>
+    </div>`;
+  }).join("");
+  document.querySelectorAll(".cand").forEach(el => {
+    const rel = el.dataset.rel;
+    el.querySelector(".raw").onclick = () => zoom(el.querySelector(".raw").src);
+    el.querySelectorAll("button").forEach(b => b.onclick = async () => {
+      const a = b.dataset.a;
+      try {
+        if (a === "approve") { const on = !pstate(SEL).approved.includes(rel); D.state.pieces[SEL] = (await post("approve", {piece: SEL, rel, on})).piece; TRY = null; renderList(); renderCands(); refreshRoom(); }
+        if (a === "try") { TRY = TRY === rel ? null : rel; renderCands(); refreshRoom(); }
+        if (a === "seed") { $("#g_seed").value = (meta[rel] || {}).seed ?? 1; $("#g_n").value = 1; }
+        if (a === "discard") { D.state.pieces[SEL] = (await post("discard", {piece: SEL, rel})).piece; if (TRY === rel) TRY = null; renderList(); renderCands(); refreshRoom(); }
+      } catch (e) { $("#pErr").textContent = e.message; }
+    });
+  });
+}
+
+function refreshRoom() {
+  const t = $("#r_tile").value;
+  let url = `/api/dun/room?set=${SET}&tile=${t}&scale=${t == 32 ? 4 : 2}&_=${Date.now()}`;
+  if (TRY && SEL) url += `&piece=${encodeURIComponent(SEL)}&rel=${encodeURIComponent(TRY)}`;
+  $("#roomHint").textContent = TRY ? `Trying a candidate of ${SEL} in the room (not approved yet).` : "Approved pieces in a mock room (back walls only, props in set order).";
+  $("#room").src = url;
+}
+
+async function loadCaps() {
+  const caps = await fetch("/api/dun/captures").then(r => r.json()).catch(() => []);
+  const want = ["v05_close_post_revealed.png", "v04_close_post.png", "v02_overview_post.png", "v08_pixelperfect_post.png"];
+  $("#caps").innerHTML = want.filter(f => caps.includes(f)).map(f => `<figure><img src="/api/dun/capture?f=${f}&_=${capStamp}"><figcaption>${f.replace(".png", "")}</figcaption></figure>`).join("") || `<div class="hint">No captures yet.</div>`;
+  document.querySelectorAll("#caps img").forEach(i => i.onclick = () => zoom(i.src));
+}
+function zoom(src) { $("#zoom img").src = src; $("#zoom").classList.add("on"); }
+$("#zoom").onclick = () => $("#zoom").classList.remove("on");
+$("#room").onclick = () => zoom($("#room").src);
+
+function renderStyle() {
+  $("#s_name").value = D.spec.name || SET; $("#s_tile").value = D.spec.tile; $("#s_biome").value = D.spec.biome || D.style.groups.biome.text;
+  const ideas = D.style.descriptor_ideas || {};
+  $("#ideas").innerHTML = Object.entries(ideas).map(([k, v]) => `<div class="chips"><span class="hint" style="width:44px">${k}</span>${v.map(t => `<span class="chip" data-t="${esc(t)}">${esc(t)}</span>`).join("")}</div>`).join("");
+  document.querySelectorAll("#ideas .chip").forEach(c => c.onclick = () => { const b = $("#s_biome"); b.value = b.value.trim() ? b.value.trim() + ", " + c.dataset.t : c.dataset.t; });
+  $("#groups").innerHTML = Object.entries(D.style.groups).filter(([g]) => g !== "biome").map(([g, v]) =>
+    `<label class="hint">${g}</label><textarea rows="2" data-g="${g}">${esc(v.text)}</textarea><div class="hint">${esc(v.hint || "")}</div>`).join("");
+  $("#s_pmedium").value = D.style.prop_medium || ""; $("#s_pview").value = D.style.prop_view; $("#s_pframe").value = D.style.prop_framing; $("#sErr").textContent = "";
+}
+
+function renderCatalog() {
+  const have = new Set(D.spec.pieces.map(p => p.id)), groups = {};
+  (D.style.catalog || []).forEach(c => (groups[c.group] ||= []).push(c));
+  $("#catalog").innerHTML = Object.entries(groups).map(([g, items]) => `<div class="catgrp">${g}</div><div class="chips">` + items.map((c, i) => {
+    const id = c.id.replaceAll("{set}", SET);
+    return `<span class="chip ${have.has(id) ? "have" : ""}" data-g="${esc(g)}" data-i="${i}" title="${esc(c.prompt)}">${esc(id.replace(/^(prop|tile|feature)\./, ""))}</span>`;
+  }).join("") + `</div>`).join("");
+  document.querySelectorAll("#catalog .chip:not(.have)").forEach(el => el.onclick = async () => {
+    const c = {...groups[el.dataset.g][+el.dataset.i]}; delete c.group;
+    c.id = c.id.replaceAll("{set}", SET); if (c.of) c.of = c.of.replaceAll("{set}", SET);
+    if (c.of && !piece(c.of)) c.of = (D.spec.pieces.find(q => q.kind === "tile" && (q.shape === "run" && !q.opening && (q.length || 1) === 1 || q.shape === "wall") && !q.retired) || {}).id;
+    await addPiece(c);
+  });
+}
+
+async function addPiece(p) {
+  let id = p.id, k = 2; while (piece(id)) id = `${p.id}_${k++}`; p.id = id;
+  const r = await post("piece/save", {piece: p}); D.spec = r.spec; SEL = id; setView("pieces");
+}
+document.querySelectorAll("[data-blank]").forEach(b => b.onclick = () => {
+  const wall = (D.spec.pieces.find(q => q.kind === "tile" && (q.shape === "run" && !q.opening && (q.length || 1) === 1 || q.shape === "wall") && !q.retired) || {}).id;
+  const t = {prop: {id: "prop.new", kind: "prop", footprint: 0.5, prompt: "an old wooden ..."},
+             floor: {id: `tile.${SET}_floor_new`, kind: "tile", shape: "floor", variants: 2, prompt: "flagstones ..."},
+             wall: {id: `tile.${SET}_wall_run_new`, board: `tile.${SET}_wall`, kind: "tile", shape: "run", length: 3, height: 2, thickness: 0.25, variants: 2, prompt: "a thin wall of ..."},
+             door: {id: `tile.${SET}_door_new`, board: `tile.${SET}_door`, kind: "tile", shape: "run", opening: "door", length: 1, height: 2, thickness: 0.25, prompt: "a thin stone wall with ... door set into it"},
+             arch: {id: `tile.${SET}_arch_new`, board: `tile.${SET}_arch`, kind: "tile", shape: "mesh", mesh: "archway", length: 1, height: 2, thickness: 0.25, prompt: "a thin wall with an open stone archway ..."},
+             area: {id: `tile.${SET}_floor_area_new`, board: `tile.${SET}_floor`, kind: "tile", shape: "floor", method: "atlas", atlas: 4, variants: 2, prompt: "flagstones ..."},
+             decor: {id: `tile.${SET}_wall_decor`, kind: "wall_decor", shape: "wall", height: 2, of: wall, prompt: "the same stone wall block with ... on the front faces"},
+             pillar: {id: `tile.${SET}_pillar_new`, kind: "tile", shape: "pillar", height: 1.5, prompt: "a carved stone pillar ..."}}[b.dataset.blank];
+  addPiece(t);
+});
+
+// ---- actions
+["#f_kind", "#f_shape", "#f_method", "#f_of", "#f_prompt", "#f_view", "#f_biome", "#f_length", "#f_opening", "#f_atlas"].forEach(s => $(s).addEventListener("input", syncFormVis));
+$("#tabPieces").onclick = () => setView("pieces");
+$("#tabStyle").onclick = () => setView("style");
+$("#addPieceBtn").onclick = () => setView("add");
+$("#setSel").onchange = () => { SET = $("#setSel").value; localStorage.setItem("dun.set", SET); SEL = null; TRY = null; load(); };
+$("#r_tile").onchange = refreshRoom; $("#roomBtn").onclick = refreshRoom;
+
+async function savePiece() {
+  const p = formPiece();
+  const r = await post("piece/save", {piece: p, old_id: SEL});
+  D.spec = r.spec;
+  if (p.id !== SEL) { D.state.pieces[p.id] = D.state.pieces[SEL]; delete D.state.pieces[SEL]; SEL = p.id; }
+  renderList();
+}
+$("#saveBtn").onclick = async () => { try { await savePiece(); $("#pErr").textContent = ""; renderCenter(); } catch (e) { $("#pErr").textContent = e.message; } };
+$("#genBtn").onclick = async () => {
+  try {
+    await savePiece();
+    await post("generate", {piece: SEL, n: +$("#g_n").value || 1, seed: +$("#g_seed").value || 1,
+                            denoise: $("#g_denoise").value, lora: $("#g_lora").value});
+    $("#g_seed").value = (+$("#g_seed").value || 1) + (+$("#g_n").value || 1);  // next press = fresh seeds
+    $("#pErr").textContent = ""; pollJobs(); renderList();
+  } catch (e) { $("#pErr").textContent = e.message; }
+};
+$("#delBtn").onclick = async () => {
+  if (!confirm(`Remove ${SEL} from the set? (generated images stay on disk)`)) return;
+  D.spec = (await post("piece/delete", {piece: SEL})).spec; SEL = null; renderList(); renderCenter(); refreshRoom();
+};
+$("#saveSetBtn").onclick = async () => {
+  try { D.spec = (await post("set/update", {fields: {name: $("#s_name").value, tile: $("#s_tile").value, biome: $("#s_biome").value}})).spec; await load(); setView("style"); }
+  catch (e) { $("#sErr").textContent = e.message; }
+};
+$("#saveStyleBtn").onclick = async () => {
+  const groups = {}; document.querySelectorAll("#groups textarea").forEach(t => groups[t.dataset.g] = t.value);
+  try { await post("style", {groups, prop_medium: $("#s_pmedium").value, prop_view: $("#s_pview").value, prop_framing: $("#s_pframe").value}); await load(); setView("style"); }
+  catch (e) { $("#sErr").textContent = e.message; }
+};
+$("#newSetBtn").onclick = async () => {
+  const id = prompt("New set id (e.g. sewer, forge, ice_cave). Pieces are copied from the current set as a starting list:");
+  if (!id) return;
+  const biome = prompt("Biome descriptors for it:", "flooded sewer, slimy green brick, murky water, rusted pipes, dark fantasy") || "";
+  try { await api("/api/dun/set/new", {id, biome, from: SET}); SET = id; localStorage.setItem("dun.set", SET); SEL = null; await load(); setView("style"); }
+  catch (e) { alert(e.message); }
+};
+$("#exportBtn").onclick = async () => {
+  try { const r = await post("export", {}); $("#exportHint").textContent = "Exported → " + r.path; } catch (e) { $("#exportHint").textContent = e.message; }
+};
+$("#captureBtn").onclick = async () => { await post("capture", {}); $("#exportHint").textContent = "Capture queued: export + Unity batch run. Screens appear below when it's done."; pollJobs(); };
+
+// ---- jobs
+$("#jobsBtn").onclick = () => $("#jobsPanel").classList.toggle("on");
+$("#clearJobs").onclick = async () => { await api("/api/ws/jobs/clear", {}); pollJobs(); };
+async function pollJobs() {
+  try { JOBS = (await api("/api/ws/jobs")).jobs; } catch { return; }
+  const active = JOBS.filter(j => j.status === "queued" || j.status === "running");
+  $("#jobsBtn").textContent = active.length ? `Queue: ${active.length} (${active[0].label})` : "Queue: idle";
+  $("#jobs").innerHTML = JOBS.slice().reverse().map(j => `<div class="job"><span>${esc(j.label)}${j.error ? `<div class="err">${esc(j.error)}</div>` : ""}</span><span class="s ${j.status}">${j.status}</span></div>`).join("") || `<div class="hint">Nothing queued.</div>`;
+  let reload = false, caps = false;
+  for (const j of JOBS) {
+    if ((j.status === "done" || j.status === "failed") && !seenDone.has(j.id)) {
+      seenDone.add(j.id);
+      if (j.kind === "dun") reload = true;
+      if (j.kind === "dun_capture") { caps = true; if (j.error) $("#exportHint").textContent = j.error; }
+    }
+  }
+  if (reload && D) { const sel = SEL; D = await api("/api/dun/state?set=" + SET); SEL = sel; renderList(); if (VIEW === "pieces") renderCands(); }
+  if (caps) { capStamp = Date.now(); loadCaps(); }
+  if (!reload && D) renderList();
+}
+(async () => {
+  try { JOBS = (await api("/api/ws/jobs")).jobs; JOBS.forEach(j => { if (j.status === "done" || j.status === "failed") seenDone.add(j.id); }); } catch {}
+  await load();
+  setInterval(pollJobs, 1500);
+})();
+</script>
+</body>
+</html>

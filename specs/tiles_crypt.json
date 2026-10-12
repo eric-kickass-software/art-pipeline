@@ -1,0 +1,28 @@
+{
+  "_doc": "Biome tile set for blender/render_tiles.py. Tile ids match the content pack (tiles/crypt_tiles.json). One world unit = one tile; heights are in tile units. `texture` names a file in textures/<biome>/.",
+  "biome": "crypt",
+  "textureDir": "textures/crypt",
+  "colors": 14,
+  "_pixelDoc": "texturePixels: size each texture is shrunk to by `hdart pixel-textures` (about one texel per screen pixel at 32x16 tiles), with texColors colours each.",
+  "pixelTextureDir": "textures/crypt_px",
+  "texturePixels": { "floor": 24, "wall": 48, "pillar": 32, "door": 24, "rubble": 16, "bone": 24 },
+  "texColors": 6,
+  "light": { "dir": [-0.55, 0.7, 0.45], "ambient": 0.3 },
+  "_rampDoc": "Designed ramps (dark -> light). Shaded luminance is gradient-mapped onto the ramp of each pixel's material, so the biome reads as one limited palette (cf. the reference art in Architecture 9.1). Tiles pick a ramp per texture key in `ramps`; default is stone.",
+  "ramps": {
+    "stone": ["#140f1c", "#231a2e", "#33294a", "#43405e", "#555a72", "#6b7a86", "#8a9c9a", "#b4c4b2"],
+    "wood":  ["#1a0f14", "#2e1a1a", "#4a2a22", "#6a3d2a", "#8a5636", "#a8743f", "#c49453", "#e0b874"],
+    "bone":  ["#231a2e", "#43405e", "#6b6a74", "#938c88", "#b5ab98", "#d4c9ad", "#e8e0c4", "#f6f1dc"]
+  },
+  "tiles": [
+    { "id": "tile.crypt_floor",  "kind": "floor",  "texture": "floor",  "variants": 4 },
+    { "id": "tile.crypt_wall",   "kind": "wall",   "texture": "wall",   "height": 2.0, "variants": 2 },
+    { "id": "tile.crypt_wall_low", "kind": "wall", "texture": "wall",   "height": 0.45, "variants": 2,
+      "_doc": "cutaway version used for walls between the camera and the room" },
+    { "id": "tile.crypt_pillar", "kind": "pillar", "texture": "pillar", "floor": "floor", "height": 1.5, "variants": 1 },
+    { "id": "tile.crypt_rubble", "kind": "rubble", "texture": "rubble", "floor": "floor", "variants": 3 },
+    { "id": "tile.crypt_door",   "kind": "door",   "texture": "door",   "frame": "wall", "floor": "floor", "height": 2.0, "ramps": { "texture": "wood" },
+      "states": ["closed", "open"], "orientations": ["ne", "nw"] },
+    { "id": "tile.crypt_bones",  "kind": "decal",  "texture": "bone",   "floor": "floor", "variants": 2, "ramps": { "texture": "bone" } }
+  ]
+}

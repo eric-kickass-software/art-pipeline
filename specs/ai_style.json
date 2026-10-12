@@ -1,0 +1,98 @@
+{
+  "_doc": "Prompt descriptors for the AI sprite Workshop. Every generation = the groups below joined in order (medium, style, proportions, view, rendering, framing, world) + the build or part text. Edit them in the Workshop's Style tab. FLUX.2-klein distilled runs at CFG 1, so there are NO negative prompts: say what you want ('hard edges', 'clean outlines'), not what you don't. Research notes: vault 'Hearthdelve - Sprite Prompting'.",
+  "groups": {
+    "medium": {
+      "text": "Adventurer, warrior, young adult, mature, grown, sword and sorcery, cloak and daggers",
+      "hint": "What it is. 'pixel art sprite' is the pixel LoRA's trigger. '16-bit' = SNES-era richness; 'modern pixel art' = cleaner, more colours; '8-bit' = blocky, few colours."
+    },
+    "style": {
+      "text": "in the style of Octopath Traveler HD-2D sprites and Final Fantasy VI, hand-pixelled",
+      "hint": "Style references. Game names steer strongly; swap for e.g. 'Sea of Stars', 'Triangle Strategy', 'Chrono Trigger'."
+    },
+    "proportions": {
+      "text": "chibi, super deformed, about 2.5 heads tall, oversized head, small body, short stubby legs",
+      "hint": "Models drift to realistic proportions unless pushed. 'super deformed' + 'oversized head' matter most."
+    },
+    "view": {
+      "text": "full body, three-quarter view facing left, standing idle pose, arms relaxed at the sides, feet together",
+      "hint": "Keep identical for every generation so parts line up. The back base is made by editing the front one."
+    },
+    "rendering": {
+      "text": "clean dark outlines, cel shading with two-tone shadows, hard edges, crisp pixels, limited palette",
+      "hint": "Line and shading language. Useful extras: 'selective outlines', 'dithering', 'high contrast', 'muted earthy colours'."
+    },
+    "framing": {
+      "text": "single character, centered, game asset, isolated on a pure flat white background",
+      "hint": "Plain white background is required: the cutter uses it to find the sprite. If FLUX adds a ground shadow, reword this (e.g. \"floating\", \"isolated\")."
+    },
+    "world": {
+      "text": "dark fantasy adventurer",
+      "hint": "Tone of the setting, e.g. 'gritty dungeon delver', 'weathered, battle-worn', 'storybook fantasy'."
+    }
+  },
+  "base": {
+    "text": "plain grey shorts, barefoot, neutral expression",
+    "hint": "Shared mannequin clothing. Keep it plain so outfits, hair and hats can be swapped. Each build below adds sex, body, bald head and top."
+  },
+  "builds": {
+    "male": "male adventurer, bald head, average athletic build, plain grey sleeveless undershirt",
+    "female": "female adventurer, bald head, average athletic build, plain grey tank top",
+    "slim": "legacy first test mannequin (child-like, unisex): bald head, plain grey sleeveless undershirt"
+  },
+  "_buildsDoc": "One mannequin per build; parts are generated and approved per build. Add more any time, e.g. \"male_broad\": \"male, bald head, broad-shouldered stocky build, plain grey undershirt\".",
+  "back_view": "Show this exact same character from behind, in a three-quarter back view facing up and to the left. Same size, same position, same pixel art style.",
+  "part_suffix": "Keep exactly the same character, pose, framing, size and pixel art style. Change nothing else.",
+  "slot_verbs": {
+    "hair": "Give the character",
+    "facial": "Give the character",
+    "face": "Give the character",
+    "head": "Put on the character's head:",
+    "torso": "Dress the character in",
+    "legs": "Dress the character's legs in",
+    "feet": "Put on the character's feet:",
+    "hands": "Put on the character's hands:",
+    "back": "Give the character, worn on the back,",
+    "mainhand": "Put in the character's right hand:",
+    "offhand": "Put in the character's left hand or arm:"
+  },
+  "descriptor_ideas": {
+    "materials": [
+      "worn leather",
+      "riveted steel",
+      "tarnished brass",
+      "embroidered trim",
+      "tattered cloth",
+      "fur collar",
+      "gold filigree",
+      "patched linen",
+      "chainmail"
+    ],
+    "condition": [
+      "battle-worn",
+      "weathered",
+      "ornate",
+      "simple",
+      "noble",
+      "ragged",
+      "pristine"
+    ],
+    "hair": [
+      "messy fringe",
+      "side-swept bangs",
+      "twin braids",
+      "wild spiky",
+      "sleek and long",
+      "tied back",
+      "undercut"
+    ],
+    "faces": [
+      "determined",
+      "gentle smile",
+      "stern glare",
+      "wide-eyed",
+      "smirk",
+      "tired",
+      "scarred cheek"
+    ]
+  }
+}

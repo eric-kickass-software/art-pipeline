@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sprite Workshop</title>
+<style>
+  :root { --bg:#16131c; --panel:#211c29; --card:#2a2333; --line:#3a3146; --text:#e8e2ef; --muted:#9a90a8; --accent:#e0b874;
+          --ok:#6fcf8a; --warn:#e8b04a; --bad:#e8786a; --info:#9cc4ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:13px/1.45 system-ui, sans-serif; }
+  header { display:flex; gap:6px; align-items:center; padding:8px 14px; background:var(--panel); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
+  header h1 { font-size:15px; margin:0 14px 0 0; color:var(--accent); }
+  header button.tab { background:none; border:none; color:var(--muted); padding:6px 10px; cursor:pointer; border-radius:4px; font-size:13px; }
+  header button.tab.on { color:var(--text); background:var(--card); }
+  #jobsBtn { margin-left:auto; } header a { color:var(--accent); margin-left:10px; }
+  main { padding:14px; }
+  section { display:none; } section.on { display:block; }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin:14px 0 8px; }
+  textarea, input, select { width:100%; background:#2c2536; color:var(--text); border:1px solid var(--line); border-radius:4px; padding:5px 6px; font:inherit; }
+  textarea { resize:vertical; }
+  button { background:#352c41; color:var(--text); border:1px solid var(--line); border-radius:4px; padding:5px 10px; cursor:pointer; font:inherit; }
+  button:hover { border-color:var(--accent); } button.primary { background:#5a4523; border-color:#8a6a30; }
+  button.on { background:#3d5a2f; border-color:var(--ok); } button:disabled { opacity:.5; cursor:not-allowed; }
+  .hint { color:var(--muted); font-size:12px; margin:2px 0 4px; }
+  .row { display:flex; gap:8px; align-items:center; margin:6px 0; flex-wrap:wrap; }
+  .row > label { color:var(--muted); }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:10px 12px; margin-bottom:10px; }
+  .err { color:var(--bad); white-space:pre-wrap; }
+  .chips { display:flex; flex-wrap:wrap; gap:4px; margin:4px 0; }
+  .chip { font-size:11px; padding:2px 7px; border-radius:10px; background:#2f2838; border:1px solid var(--line); cursor:pointer; }
+  .chip:hover { border-color:var(--accent); }
+  /* board */
+  table.board { border-collapse:separate; border-spacing:4px; }
+  table.board th { color:var(--muted); font-weight:500; text-align:left; padding:2px 6px; position:sticky; top:48px; background:var(--bg); z-index:2; }
+  table.board td.pname { color:var(--text); padding-right:10px; white-space:nowrap; }
+  table.board tr.slot td { color:var(--accent); font-size:11px; text-transform:uppercase; letter-spacing:1px; padding-top:10px; }
+  .cell { width:96px; height:76px; border-radius:6px; background:var(--card); border:2px solid transparent; position:relative; cursor:pointer; overflow:hidden; }
+  .cell img { width:100%; height:100%; object-fit:contain; image-rendering:pixelated; background:#ffffff10; }
+  .cell .st { position:absolute; left:3px; bottom:2px; font-size:10px; padding:0 5px; border-radius:7px; background:#000a; }
+  .cell input { position:absolute; right:2px; top:2px; width:auto; }
+  .cell.sel { border-color:var(--accent); }
+  .st.missing { color:var(--muted); } .st.pick, .st.candidates { color:var(--info); } .st.needs-back, .st.needs-cut, .st.raw, .st.cut { color:var(--warn); }
+  .st.approved { color:var(--ok); } .st.redo-back { color:var(--bad); } .st.unreviewed { color:#d9a35b; } .st.rejected { color:var(--bad); }
+  .cell.running { outline:2px dashed var(--info); }
+  /* drawer */
+  #drawer { position:fixed; top:48px; right:0; bottom:0; width:min(1120px, 96vw); background:var(--bg); border-left:1px solid var(--line);
+            box-shadow:-10px 0 30px #0008; z-index:15; overflow:auto; padding:12px 14px; display:none; }
+  #drawer.on { display:block; }
+  .cands { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0; }
+  .cand { background:var(--card); border:2px solid transparent; border-radius:6px; padding:4px; text-align:center; width:140px; }
+  .cand.on { border-color:var(--ok); }
+  .cand img { width:130px; height:130px; image-rendering:pixelated; background:#fff; display:block; border-radius:3px; }
+  .cand button { width:100%; margin-top:4px; padding:2px; font-size:12px; }
+  .editor { display:grid; grid-template-columns: 520px 1fr; gap:12px; }
+  #cv { width:512px; height:512px; image-rendering:pixelated; cursor:crosshair; border-radius:4px; background:#fff; display:block; }
+  .tools { display:flex; flex-wrap:wrap; gap:4px; }
+  .tools button { padding:4px 8px; font-size:12px; }
+  .qa { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+  .qa figure { margin:0; background:var(--card); border-radius:6px; padding:6px; }
+  .qa img { width:100%; image-rendering:pixelated; display:block; background: repeating-conic-gradient(#1d1924 0 25%, #26202f 0 50%) 50%/16px 16px; }
+  .qa figcaption { color:var(--muted); font-size:11px; margin-top:4px; }
+  #jobsPanel { position:fixed; top:48px; right:14px; width:380px; max-height:60vh; overflow:auto; background:var(--panel); border:1px solid var(--line);
+               border-radius:6px; padding:8px; z-index:30; display:none; box-shadow:0 10px 30px #000a; }
+  #jobsPanel.on { display:block; }
+  .job { padding:4px 0; border-bottom:1px solid var(--line); font-size:12px; display:flex; justify-content:space-between; gap:6px; }
+  .job .s { color:var(--muted); } .job .s.running { color:var(--info); } .job .s.done { color:var(--ok); } .job .s.failed { color:var(--bad); }
+  .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+  .bcands .cand { width:200px; } .bcands .cand img { width:190px; height:190px; }
+  .prompt { font-family: ui-monospace, Consolas, monospace; font-size:12px; color:#c9c0d6; background:#1b1722; padding:8px; border-radius:4px; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sprite Workshop</h1>
+  <button class="tab on" data-t="board">Board</button>
+  <button class="tab" data-t="base">Mannequins</button>
+  <button class="tab" data-t="style">Style</button>
+  <button class="tab" data-t="sets">Sets</button>
+  <button id="jobsBtn">Queue: idle</button>
+  <a href="/">Sprite Studio →</a>
+</header>
+<div id="jobsPanel"><div class="row"><b>Generation queue</b><button id="jobsClear" style="margin-left:auto">Clear finished</button></div><div id="jobsList"></div></div>
+<main>
+  <div id="err" class="err"></div>
+
+  <!-- BOARD -->
+  <section id="board" class="on">
+    <div class="card">
+      <div class="row"><b>Coverage</b><span class="hint">Every part × mannequin. Click a cell to open it; tick cells (or use the shortcuts) and queue candidates for all of them.</span></div>
+      <div class="row">
+        <label>Candidates</label><input id="qN" type="number" value="3" min="1" max="8" style="width:60px">
+        <label>Seed</label><input id="qSeed" type="number" value="5" style="width:80px">
+        <label>Pixel LoRA</label><input id="qLora" type="number" value="0.6" step="0.1" style="width:70px">
+        <select id="qPick" style="width:auto"></select><button id="qSelect">Select</button>
+        <button id="qNone">Clear selection</button>
+        <button class="primary" id="qGo">Queue candidates for selected</button>
+        <span class="hint" id="qCount"></span>
+      </div>
+      <div class="hint">After you approve a front, its back view is queued automatically (using the front as a reference).
+        Legend: <span class="st missing">missing</span> · <span class="st pick">pick a candidate</span> · <span class="st needs-back">needs back</span> ·
+        <span class="st needs-cut">needs cut</span> · <span class="st unreviewed">unreviewed</span> · <span class="st approved">approved</span> ·
+        <span class="st redo-back">redo back</span> (made before backs became the card's reverse side)</div>
+    </div>
+    <table class="board" id="boardTable"></table>
+  </section>
+
+  <!-- MANNEQUINS -->
+  <section id="base">
+    <div class="row"><label>Build</label><select id="bBuild" style="max-width:220px"></select>
+      <label>Candidates</label><input id="bN" type="number" value="4" min="1" max="8" style="max-width:70px">
+      <label>Seed</label><input id="bSeed" type="number" value="1" style="max-width:90px"></div>
+    <div class="row"><label>Description</label><textarea id="bDesc" rows="2" style="flex:1"></textarea></div>
+    <div class="card"><h2 style="margin-top:0">Front · ¾ facing left</h2><button class="primary" data-bgen="front">Queue front candidates</button>
+      <div class="cands bcands" id="bFront"></div></div>
+    <div class="card"><h2 style="margin-top:0">Back · the reverse side of the approved front (same silhouette, mirrored)</h2><button class="primary" data-bgen="back">Queue back candidates</button>
+      <div class="cands bcands" id="bBack"></div></div>
+    <p class="hint">A new front base means that build's parts must be regenerated (they're drawn onto the base).</p>
+  </section>
+
+  <!-- STYLE -->
+  <section id="style">
+    <p class="hint">Every generation is built from these descriptor groups, in order. No negative prompts (the model runs at CFG 1): phrase everything as what you want.</p>
+    <div class="grid2"><div id="groups"></div>
+      <div>
+        <div class="card"><h2 style="margin-top:0">Mannequin clothing (all builds)</h2><textarea id="baseText" rows="2"></textarea><div class="hint" id="baseHint"></div></div>
+        <div class="card"><h2 style="margin-top:0">Builds</h2><div id="builds"></div>
+          <div class="row"><input id="newBuild" placeholder="new build id, e.g. male_broad" style="flex:1"><button id="addBuild">Add build</button></div></div>
+        <div class="card"><h2 style="margin-top:0">Full mannequin prompt</h2><div class="row"><select id="previewBuild"></select></div><div class="prompt" id="fullPrompt"></div></div>
+        <div class="card"><h2 style="margin-top:0">Descriptor ideas</h2><div id="ideas"></div></div>
+        <button class="primary" id="saveStyle">Save style</button><span class="hint" id="styleStatus"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- SETS -->
+  <section id="sets">
+    <div class="card"><h2 style="margin-top:0">Save a set</h2>
+      <p class="hint">A snapshot of the approved parts per build. The Studio (and the bake for Unity) can use a set.</p>
+      <div class="row"><input id="setName" placeholder="e.g. Crypt Delvers v1" style="max-width:320px">
+        <label><input type="checkbox" id="setUnrev" style="width:auto"> include unreviewed</label>
+        <button class="primary" id="setSave">Save set</button></div></div>
+    <div id="setList"></div>
+  </section>
+</main>
+
+<!-- EDITOR DRAWER -->
+<div id="drawer">
+  <div class="row"><b id="dTitle" style="font-size:15px"></b><span id="dStatus" class="st"></span>
+    <button id="dClose" style="margin-left:auto">Close ✕</button></div>
+  <div class="card">
+    <div class="hint" id="dVerb"></div>
+    <textarea id="dText" rows="2"></textarea>
+    <div class="chips" id="dChips"></div>
+    <div class="row"><button data-face="front" class="on">Front</button><button data-face="back">Back</button>
+      <span class="hint" style="margin-left:8px">Candidates</span><input id="dN" type="number" value="3" min="1" max="8" style="width:60px">
+      <span class="hint">Seed</span><input id="dSeed" type="number" value="5" style="width:80px">
+      <button class="primary" id="dGen">Queue candidates</button></div>
+    <div class="cands" id="dCands"></div>
+  </div>
+  <div class="card" id="dEditorCard">
+    <div class="editor">
+      <div>
+        <canvas id="cv" width="512" height="512"></canvas>
+        <div class="row tools">
+          <button data-tool="keep" class="on" title="paint to force-keep">✚ Keep</button>
+          <button data-tool="remove" title="paint to force-remove">✖ Remove</button>
+          <button data-tool="wandkeep" title="click: keep similar connected colours">✨ Wand keep</button>
+          <button data-tool="wandremove" title="click: remove similar connected colours">✨ Wand remove</button>
+          <button data-tool="select" title="paint a region to fix with a prompt">◌ Fix selection</button>
+          <button data-tool="erase" title="clear your edits/selection under the brush">⌫ Unpaint</button>
+        </div>
+        <div class="row"><label>Brush</label><input id="tSize" type="range" min="2" max="48" value="10" style="width:120px">
+          <label>Wand tolerance</label><input id="tTol" type="range" min="4" max="160" value="40" style="width:120px">
+          <label><input type="checkbox" id="tBase" style="width:auto"> show base</label></div>
+        <div class="row"><button id="tUndo">Undo</button><button id="tReset">Reset my edits</button>
+          <button class="primary" id="tSave">Save cut</button></div>
+        <div class="row"><label>Auto sensitivity</label><input id="aTh" type="range" min="25" max="160" value="70" style="width:120px">
+          <label>Min speck</label><input id="aSp" type="range" min="4" max="300" value="24" style="width:120px">
+          <button id="aCut">Re-run auto cut</button></div>
+        <div class="card" style="margin-top:6px"><b>Fix selection with a prompt</b>
+          <div class="hint">Paint the area with ◌, describe the correction. FLUX regenerates, only the selection is taken, and the result appears as a new candidate.</div>
+          <div class="row"><input id="fixText" placeholder="e.g. make the left hand grip the shield strap" style="flex:1">
+            <input id="fixSeed" type="number" value="7" style="width:70px"><button id="fixGo">Queue fix</button></div></div>
+      </div>
+      <div>
+        <div class="row"><label>Grid</label><select id="qaRes" style="width:90px"><option>32</option><option selected>64</option><option>128</option><option>256</option></select>
+          <span class="hint">Preview of the saved cut</span></div>
+        <div class="qa" id="qa"><p class="hint">Save the cut to see the native-grid result.</p></div>
+        <div class="card" style="margin-top:10px">
+          <button class="primary" id="dApprove">Approve part → kit</button> <button id="dReject">Reject</button>
+          <div class="hint">Approve writes the part for every grid size and rebuilds the Studio kit. Needs both facings cut.</div></div>
+      </div>
+    </div>
+  </div>
+  <p class="hint" id="dNoApproved">Approve a candidate to cut it.</p>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let S = null, B = null, jobs = [];
+const api = async (path, body) => {
+  const r = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json(); if (j.error) throw new Error(j.error); return j;
+};
+const img = (rel) => `/api/ws/img?path=${encodeURIComponent(rel)}`;
+const err = (m) => $("err").textContent = m || "";
+const guard = (fn) => async (...a) => { err(""); try { await fn(...a); } catch (e) { err(e.message); } };
+async function refresh() { S = await api("/api/ws/state"); B = await api("/api/ws/board", {}); renderAll(); }
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === t));
+  document.querySelectorAll("section").forEach(s => s.classList.toggle("on", s.id === t.dataset.t));
+});
+
+// ------------------------------------------------------------------ jobs
+$("jobsBtn").onclick = () => $("jobsPanel").classList.toggle("on");
+$("jobsClear").onclick = guard(async () => { await api("/api/ws/jobs/clear", {}); pollJobs(); });
+let lastDone = 0;
+async function pollJobs() {
+  try {
+    jobs = (await api("/api/ws/jobs")).jobs;
+    const active = jobs.filter(j => j.status === "queued" || j.status === "running");
+    const run = jobs.find(j => j.status === "running");
+    $("jobsBtn").textContent = active.length ? `Queue: ${active.length} (${run ? run.label : "starting"})` : "Queue: idle";
+    $("jobsList").innerHTML = jobs.slice().reverse().map(j => `<div class="job"><span>${j.label}</span><span class="s ${j.status}" title="${j.error || ""}">${j.status}</span></div>`).join("") || `<p class="hint">Nothing queued.</p>`;
+    const done = jobs.filter(j => j.status === "done" || j.status === "failed").length;
+    if (done !== lastDone) { lastDone = done; const f = jobs.filter(j => j.status === "failed").pop(); if (f) err(`${f.label}: ${f.error}`); await refresh(); }
+    markRunning(active);
+  } catch (e) { }
+}
+setInterval(pollJobs, 2000);
+function markRunning(active) {
+  document.querySelectorAll(".cell").forEach(c => c.classList.toggle("running",
+    active.some(j => j.label.startsWith(`${c.dataset.part} · ${c.dataset.build}`))));
+}
+async function queue(list) { await api("/api/ws/jobs", { jobs: list }); pollJobs(); }
+
+// ------------------------------------------------------------------ board
+const selected = new Set();
+function renderBoard() {
+  const slots = [...new Set(B.parts.map(p => p.split(".")[0]))];
+  let html = `<tr><th></th>${B.builds.map(b => `<th>${b}<br><span class="hint">${B.bases[b].front && B.bases[b].back ? (B.bases[b].card ? "mannequin ✓" : "<a href='#' data-gobase='" + b + "' style='color:var(--bad)'>redo mannequin back</a>") : "<a href='#' data-gobase='" + b + "' style='color:var(--warn)'>needs mannequin</a>"}</span></th>`).join("")}</tr>`;
+  for (const slot of slots) {
+    html += `<tr class="slot"><td colspan="${B.builds.length + 1}">${slot}</td></tr>`;
+    for (const p of B.parts.filter(x => x.startsWith(slot + "."))) {
+      html += `<tr><td class="pname">${p.slice(slot.length + 1)}</td>` + B.builds.map(b => {
+        const c = B.cells[`${p}|${b}`], key = `${p}|${b}`;
+        return `<td><div class="cell ${selected.has(key) ? "sel" : ""}" data-part="${p}" data-build="${b}">
+          ${c.thumb ? `<img loading="lazy" src="${img(c.thumb)}">` : ""}<span class="st ${c.status}">${c.status}</span>
+          <input type="checkbox" ${selected.has(key) ? "checked" : ""}></div></td>`;
+      }).join("") + "</tr>";
+    }
+  }
+  $("boardTable").innerHTML = html;
+  document.querySelectorAll(".cell").forEach(cell => {
+    const key = `${cell.dataset.part}|${cell.dataset.build}`;
+    cell.querySelector("input").onclick = (ev) => { ev.stopPropagation(); ev.target.checked ? selected.add(key) : selected.delete(key); cell.classList.toggle("sel", ev.target.checked); count(); };
+    cell.onclick = () => openDrawer(cell.dataset.part, cell.dataset.build);
+  });
+  document.querySelectorAll("[data-gobase]").forEach(a => a.onclick = (ev) => { ev.preventDefault(); $("bBuild").value = a.dataset.gobase;
+    document.querySelector('[data-t="base"]').click(); renderBase(); });
+  $("qPick").innerHTML = B.builds.map(b => `<option value="missing|${b}">all missing for ${b}</option>`).join("") +
+    `<option value="redo-back|*">all "redo back"</option>` +
+    `<option value="missing|*">all missing (every build)</option><option value="pick|*">everything waiting for a pick</option>`;
+  count(); markRunning(jobs.filter(j => j.status === "queued" || j.status === "running"));
+}
+function count() { $("qCount").textContent = selected.size ? `${selected.size} selected` : ""; }
+$("qSelect").onclick = () => { const [st, b] = $("qPick").value.split("|");
+  for (const k of Object.keys(B.cells)) { const [p, bb] = k.split("|"); if ((b === "*" || b === bb) && B.cells[k].status === st) selected.add(k); }
+  renderBoard(); };
+$("qNone").onclick = () => { selected.clear(); renderBoard(); };
+$("qGo").onclick = guard(async () => {
+  const list = [...selected].map(k => { const [p, b] = k.split("|");
+    if (!(B.bases[b].front && B.bases[b].back)) throw new Error(`Approve the ${b} mannequin (front + back) first.`);
+    const facing = B.cells[k].status === "redo-back" ? "back" : "front";
+    return { kind: "part", part: p, build: b, facing, text: B.text[p] || "", n: +$("qN").value, seed: +$("qSeed").value,
+             lora: +$("qLora").value, label: `${p} · ${b} · ${facing}` }; });
+  if (!list.length) throw new Error("Select some cells first.");
+  await queue(list); selected.clear(); renderBoard();
+});
+
+// ------------------------------------------------------------------ drawer / editor
+const D = { part: null, build: null, face: "front" };
+function partState() { return S.state.parts[D.part]?.builds?.[D.build] || { front: {}, back: {}, cut: { thresh: 70, speck: 24 }, status: "missing" }; }
+function openDrawer(part, build) { Object.assign(D, { part, build, face: "front" }); $("drawer").classList.add("on"); renderDrawer(true); }
+$("dClose").onclick = () => $("drawer").classList.remove("on");
+document.querySelectorAll("[data-face]").forEach(b => b.onclick = () => { D.face = b.dataset.face; renderDrawer(true); });
+function renderDrawer(reloadCut) {
+  if (!$("drawer").classList.contains("on")) return;
+  const pb = partState(), slot = D.part.split(".")[0];
+  $("dTitle").textContent = `${D.part} · ${D.build}`;
+  const cell = B.cells[`${D.part}|${D.build}`]; $("dStatus").textContent = cell?.status || ""; $("dStatus").className = "st " + (cell?.status || "");
+  $("dVerb").textContent = `Prompt: "${S.style.slot_verbs[slot] || "Give the character"} …your text…" + keep everything else + pixel style. Describe ONE thing to add.`;
+  if (document.activeElement !== $("dText")) $("dText").value = S.state.parts[D.part]?.text || B.text[D.part] || "";
+  $("dChips").innerHTML = Object.values(S.style.descriptor_ideas).flat().map(x => `<span class="chip">+ ${x}</span>`).join("");
+  $("dChips").querySelectorAll(".chip").forEach(c => c.onclick = () => { const t = $("dText"); t.value = (t.value.trim() ? t.value.trim() + ", " : "") + c.textContent.slice(2); });
+  document.querySelectorAll("[data-face]").forEach(b => b.classList.toggle("on", b.dataset.face === D.face));
+  const f = pb[D.face] || {};
+  $("dCands").innerHTML = (f.candidates || []).map(c => `<div class="cand ${c === f.approved ? "on" : ""}"><img loading="lazy" src="${img(c)}">
+    <button data-ap="${c}">${c === f.approved ? "✓ approved" : "Approve"}</button></div>`).join("") || `<p class="hint">No ${D.face} candidates yet.</p>`;
+  $("dCands").querySelectorAll("[data-ap]").forEach(b => b.onclick = guard(async () => {
+    await api("/api/ws/part/approve_raw", { part: D.part, build: D.build, facing: D.face, file: b.dataset.ap, n: +$("dN").value });
+    await refresh(); renderDrawer(true); pollJobs(); }));
+  const has = !!f.approved;
+  $("dEditorCard").style.display = has ? "" : "none"; $("dNoApproved").style.display = has ? "none" : "";
+  $("aTh").value = pb.cut?.thresh ?? 70; $("aSp").value = pb.cut?.speck ?? 24;
+  $("dApprove").disabled = !(pb.front?.approved && pb.back?.approved);
+  if (has && reloadCut) loadCut();
+}
+$("dGen").onclick = guard(async () => {
+  if (!(B.bases[D.build].front && B.bases[D.build].back)) throw new Error(`Approve the ${D.build} mannequin first.`);
+  await queue([{ kind: "part", part: D.part, build: D.build, facing: D.face, text: $("dText").value, n: +$("dN").value,
+                 seed: +$("dSeed").value, label: `${D.part} · ${D.build} · ${D.face}` }]);
+  $("dSeed").value = +$("dSeed").value + +$("dN").value;
+});
+$("dApprove").onclick = guard(async () => { await api("/api/ws/part/approve", { part: D.part, build: D.build }); await refresh(); renderDrawer(false); });
+$("dReject").onclick = guard(async () => { await api("/api/ws/part/reject", { part: D.part, build: D.build }); await refresh(); renderDrawer(false); });
+
+// ---- cut canvas
+const cv = $("cv"), cx = cv.getContext("2d");
+const W = 512;
+let IMG = null, BASE = null, AUTO = null, EDITS = null, SEL = null, tool = "keep", undo = [];
+function pixelsOf(src) { return new Promise(res => { const im = new Image(); im.onload = () => {
+  const c = document.createElement("canvas"); c.width = W; c.height = W; const x = c.getContext("2d"); x.imageSmoothingEnabled = false;
+  x.drawImage(im, 0, 0, W, W); res(x.getImageData(0, 0, W, W).data); }; im.src = src; }); }
+async function loadCut() {
+  const d = await api("/api/ws/cut/data", { part: D.part, build: D.build, facing: D.face });
+  [IMG, BASE] = await Promise.all([pixelsOf(d.image), pixelsOf(d.base)]);
+  const a = await pixelsOf(d.auto), e = await pixelsOf(d.edits);
+  AUTO = new Uint8Array(W * W); EDITS = new Uint8Array(W * W); SEL = new Uint8Array(W * W);
+  for (let i = 0; i < W * W; i++) { AUTO[i] = a[i * 4] > 127 ? 1 : 0; EDITS[i] = e[i * 4] > 190 ? 1 : (e[i * 4] > 60 ? 2 : 0); }
+  undo = []; draw(); $("qa").innerHTML = `<p class="hint">Save the cut to see the native-grid result.</p>`;
+}
+function draw() {
+  if (!IMG) return;
+  const out = cx.createImageData(W, W), o = out.data, showBase = $("tBase").checked, src = showBase ? BASE : IMG;
+  for (let i = 0; i < W * W; i++) {
+    const keep = (AUTO[i] || EDITS[i] === 1) && EDITS[i] !== 2;
+    let r = src[i * 4], g = src[i * 4 + 1], b = src[i * 4 + 2];
+    if (!keep && !showBase) { r = r * 0.28 + 20; g = g * 0.28 + 16; b = b * 0.28 + 30; }
+    if (EDITS[i] === 1) { r = r * 0.6 + 40; g = g * 0.6 + 100; b = b * 0.6 + 40; }
+    if (EDITS[i] === 2) { r = r * 0.5 + 120; g = g * 0.5; b = b * 0.5; }
+    if (SEL[i]) { r = r * 0.5 + 20; g = g * 0.5 + 110; b = b * 0.5 + 128; }
+    o[i * 4] = r; o[i * 4 + 1] = g; o[i * 4 + 2] = b; o[i * 4 + 3] = 255;
+  }
+  cx.putImageData(out, 0, 0);
+}
+$("tBase").onchange = draw;
+document.querySelectorAll("[data-tool]").forEach(b => b.onclick = () => { tool = b.dataset.tool;
+  document.querySelectorAll("[data-tool]").forEach(x => x.classList.toggle("on", x === b)); });
+function snapshot() { undo.push([EDITS.slice(), SEL.slice()]); if (undo.length > 40) undo.shift(); }
+$("tUndo").onclick = () => { const u = undo.pop(); if (u) { [EDITS, SEL] = u; draw(); } };
+$("tReset").onclick = () => { snapshot(); EDITS.fill(0); SEL.fill(0); draw(); };
+function pos(ev) { const r = cv.getBoundingClientRect(); return [Math.floor((ev.clientX - r.left) * W / r.width), Math.floor((ev.clientY - r.top) * W / r.height)]; }
+function paint(x, y) {
+  const rad = +$("tSize").value;
+  for (let dy = -rad; dy <= rad; dy++) for (let dx = -rad; dx <= rad; dx++) {
+    if (dx * dx + dy * dy > rad * rad) continue;
+    const X = x + dx, Y = y + dy; if (X < 0 || Y < 0 || X >= W || Y >= W) continue;
+    const i = Y * W + X;
+    if (tool === "keep") EDITS[i] = 1; else if (tool === "remove") EDITS[i] = 2;
+    else if (tool === "select") SEL[i] = 1; else if (tool === "erase") { EDITS[i] = 0; SEL[i] = 0; }
+  }
+}
+function wand(x, y, val) {
+  const tol = +$("tTol").value, i0 = (y * W + x) * 4, r0 = IMG[i0], g0 = IMG[i0 + 1], b0 = IMG[i0 + 2];
+  const seen = new Uint8Array(W * W), st = [y * W + x];
+  while (st.length) { const i = st.pop(); if (seen[i]) continue; seen[i] = 1;
+    const d = Math.abs(IMG[i * 4] - r0) + Math.abs(IMG[i * 4 + 1] - g0) + Math.abs(IMG[i * 4 + 2] - b0);
+    if (d > tol) continue; EDITS[i] = val;
+    const X = i % W, Y = (i / W) | 0;
+    if (X > 0) st.push(i - 1); if (X < W - 1) st.push(i + 1); if (Y > 0) st.push(i - W); if (Y < W - 1) st.push(i + W); }
+}
+let down = false;
+cv.onmousedown = (ev) => { if (!IMG) return; snapshot(); const [x, y] = pos(ev);
+  if (tool === "wandkeep" || tool === "wandremove") { wand(x, y, tool === "wandkeep" ? 1 : 2); draw(); return; }
+  down = true; paint(x, y); draw(); };
+cv.onmousemove = (ev) => { if (!down) return; const [x, y] = pos(ev); paint(x, y); draw(); };
+window.addEventListener("mouseup", () => down = false);
+function editsPng() {
+  const c = document.createElement("canvas"); c.width = W; c.height = W; const x = c.getContext("2d"), d = x.createImageData(W, W);
+  for (let i = 0; i < W * W; i++) { const v = EDITS[i] === 1 ? 255 : (EDITS[i] === 2 ? 128 : 0); d.data[i * 4] = d.data[i * 4 + 1] = d.data[i * 4 + 2] = v; d.data[i * 4 + 3] = 255; }
+  x.putImageData(d, 0, 0); return c.toDataURL("image/png");
+}
+function selPng() {
+  const c = document.createElement("canvas"); c.width = W; c.height = W; const x = c.getContext("2d"), d = x.createImageData(W, W);
+  for (let i = 0; i < W * W; i++) { const v = SEL[i] ? 255 : 0; d.data[i * 4] = d.data[i * 4 + 1] = d.data[i * 4 + 2] = v; d.data[i * 4 + 3] = 255; }
+  x.putImageData(d, 0, 0); return c.toDataURL("image/png");
+}
+function showQa(q) {
+  const f = (src, cap) => `<figure><img src="${src}"><figcaption>${cap}</figcaption></figure>`;
+  $("qa").innerHTML = f(q.channels, `${q.res}px colour channels: ` + Object.entries(q.stats.channels).map(([k, v]) => `${k} ${v}`).join(", ")) +
+    f(q.composite, `${q.res}px on the mannequin`) + f(q.layer, "cut layer (512)") + f(q.mask, "kept (pink)");
+}
+$("tSave").onclick = guard(async () => { showQa(await api("/api/ws/cut/save", { part: D.part, build: D.build, facing: D.face, edits: editsPng(), res: +$("qaRes").value })); await refresh(); });
+$("qaRes").onchange = $("tSave").onclick;
+$("aCut").onclick = guard(async () => {
+  await api("/api/ws/part/cut", { part: D.part, build: D.build, facing: D.face, thresh: +$("aTh").value, speck: +$("aSp").value });
+  await loadCut(); showQa(await api("/api/ws/cut/save", { part: D.part, build: D.build, facing: D.face, edits: editsPng(), res: +$("qaRes").value }));
+});
+$("fixGo").onclick = guard(async () => {
+  if (!SEL.some(v => v)) throw new Error("Paint the area to fix with ◌ Fix selection first.");
+  if (!$("fixText").value.trim()) throw new Error("Describe the correction.");
+  const f = partState()[D.face];
+  await queue([{ kind: "fix", target: "part", part: D.part, build: D.build, facing: D.face, image: f.approved, mask: selPng(),
+                 prompt: $("fixText").value, seed: +$("fixSeed").value, label: `${D.part} · ${D.build} · ${D.face} fix` }]);
+  $("fixSeed").value = +$("fixSeed").value + 1;
+});
+
+// ------------------------------------------------------------------ mannequins
+function renderBase() {
+  const sel = $("bBuild"), keep = sel.value; sel.innerHTML = Object.keys(S.style.builds).map(b => `<option>${b}</option>`).join(""); if (keep) sel.value = keep;
+  const b = sel.value, bs = S.state.builds[b] || { front: {}, back: {} };
+  if (document.activeElement !== $("bDesc")) $("bDesc").value = bs.description || S.style.builds[b] || "";
+  for (const f of ["front", "back"]) {
+    const data = bs[f] || {};
+    $(f === "front" ? "bFront" : "bBack").innerHTML = (data.candidates || []).map(c => `<div class="cand ${c === data.approved ? "on" : ""}">
+      <img loading="lazy" src="${img(c)}"><button data-bap="${c}" data-f="${f}">${c === data.approved ? "✓ approved" : "Approve"}</button></div>`).join("") || `<p class="hint">No candidates yet.</p>`;
+  }
+  document.querySelectorAll("[data-bap]").forEach(btn => btn.onclick = guard(async () => {
+    await api("/api/ws/base/approve", { build: $("bBuild").value, facing: btn.dataset.f, file: btn.dataset.bap }); await refresh(); }));
+}
+$("bBuild").onchange = renderBase;
+document.querySelectorAll("[data-bgen]").forEach(btn => btn.onclick = guard(async () => {
+  const f = btn.dataset.bgen, b = $("bBuild").value;
+  await queue([{ kind: "base", build: b, facing: f, n: +$("bN").value, seed: +$("bSeed").value, description: $("bDesc").value, label: `mannequin · ${b} · ${f}` }]);
+  $("bSeed").value = +$("bSeed").value + +$("bN").value;
+}));
+
+// ------------------------------------------------------------------ style
+const ORDER = ["medium", "style", "proportions", "view", "rendering", "framing", "world"];
+let styleDrawn = false;
+function renderStyle(force) {
+  if (styleDrawn && !force) return; styleDrawn = true;
+  const st = S.style;
+  $("groups").innerHTML = ORDER.map(g => `<div class="card"><h2 style="margin-top:0">${g}</h2>
+    <textarea data-g="${g}" rows="2">${st.groups[g].text}</textarea><div class="hint">${st.groups[g].hint}</div></div>`).join("");
+  $("baseText").value = st.base.text; $("baseHint").textContent = st.base.hint;
+  $("builds").innerHTML = Object.entries(st.builds).map(([k, v]) => `<div class="row"><label style="min-width:60px">${k}</label><textarea data-build="${k}" rows="2" style="flex:1">${v}</textarea></div>`).join("");
+  $("previewBuild").innerHTML = Object.keys(st.builds).map(b => `<option>${b}</option>`).join("");
+  $("ideas").innerHTML = Object.entries(st.descriptor_ideas).map(([k, list]) => `<div class="hint">${k}</div><div class="chips">${list.map(x => `<span class="chip">${x}</span>`).join("")}</div>`).join("");
+  document.querySelectorAll("#groups textarea, #baseText, #builds textarea").forEach(t => t.oninput = previewPrompt);
+  $("previewBuild").onchange = previewPrompt; previewPrompt();
+}
+function currentStyle() {
+  const groups = {}; document.querySelectorAll("#groups textarea").forEach(t => groups[t.dataset.g] = t.value);
+  const builds = {}; document.querySelectorAll("#builds textarea").forEach(t => builds[t.dataset.build] = t.value);
+  return { groups, builds, base: $("baseText").value };
+}
+function previewPrompt() { const c = currentStyle(), b = $("previewBuild").value;
+  $("fullPrompt").textContent = ORDER.map(g => c.groups[g]).filter(x => x.trim()).join(", ") + ", " + (c.builds[b] || "") + ", " + c.base; }
+$("saveStyle").onclick = guard(async () => { await api("/api/ws/style", currentStyle()); await refresh(); renderStyle(true); $("styleStatus").textContent = " saved"; });
+$("addBuild").onclick = () => { const id = $("newBuild").value.trim(); if (!id) return;
+  S.style.builds[id] = "describe this build: sex, body, bald head, plain grey top"; renderStyle(true); };
+
+// ------------------------------------------------------------------ sets
+function renderSets() {
+  $("setList").innerHTML = S.sets.map(s => `<div class="card"><b>${s.name}</b> <span class="hint">${s.created} · builds: ${s.builds.join(", ") || "-"} · ${Object.keys(s.parts).length} parts</span>
+    <div class="chips">${Object.entries(s.parts).map(([p, bs]) => `<span class="chip">${p} (${bs.join("/")})</span>`).join("")}</div>
+    <button data-use="${s.name}">Use in Studio</button></div>`).join("") || `<p class="hint">No sets yet.</p>`;
+  document.querySelectorAll("[data-use]").forEach(btn => btn.onclick = guard(async () => { await api("/api/set/use", { name: btn.dataset.use }); }));
+}
+$("setSave").onclick = guard(async () => { await api("/api/ws/set/save", { name: $("setName").value, include_unreviewed: $("setUnrev").checked }); await refresh(); });
+
+function renderAll() { renderBoard(); renderBase(); renderStyle(); renderSets(); renderDrawer(false); }
+refresh().then(pollJobs).catch(e => err(e.message));
+</script>
+</body>
+</html>

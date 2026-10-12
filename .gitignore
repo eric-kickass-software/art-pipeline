@@ -1,0 +1,9 @@
+# Scratch output and the venv
+/work/
+/.venv/
+__pycache__/
+/sprites/ai/candidates/_tmp_*
+/sprites/ai/candidates/**/tmp/
+/sprites/ai/candidates/tmp/
+/sprites/dungeon/tmp/
+/sprites/dungeon/_tmp_*

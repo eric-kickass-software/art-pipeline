@@ -1,0 +1,123 @@
+{
+  "_doc": "Prompts for `hdart ai-kit`: every part is an edit of the base mannequin (see hdart/ai_kit.py). Write what to ADD; the tool appends 'keep the same character, pose, framing... change nothing else'. Colours in prompts only guide the shapes and shading: parts are recoloured from the palette ramps afterwards. Optional per part: seed, lora (pixel LoRA strength for the edit, default 0.6).",
+  "parts": {
+    "face.neutral": {
+      "prompt": "Give the character large anime eyes with a calm neutral expression"
+    },
+    "face.kind": {
+      "prompt": "Give the character large anime eyes and a warm gentle smile"
+    },
+    "face.stern": {
+      "prompt": "Give the character narrowed eyes, furrowed brows and a stern frown"
+    },
+    "face.wide": {
+      "prompt": "Give the character very large round surprised anime eyes and a small open mouth"
+    },
+    "hair.short": {
+      "prompt": "Give the character short messy brown hair with a fringe"
+    },
+    "hair.long": {
+      "prompt": "Give the character long flowing silver hair with a fringe, reaching the waist"
+    },
+    "hair.ponytail": {
+      "prompt": "Give the character red hair tied in a high ponytail with a fringe"
+    },
+    "hair.spiky": {
+      "prompt": "Give the character short spiky dark brown hair"
+    },
+    "hair.bun": {
+      "prompt": "Give the character black hair tied in a neat bun with a fringe"
+    },
+    "hair.mohawk": {
+      "prompt": "Give the character a tall green mohawk, sides shaved"
+    },
+    "hair.braid": {
+      "prompt": "give her a thick single braid down her left shoulder, with a fringe at the end.",
+      "seed": 18
+    },
+    "facial.beard": {
+      "prompt": "Give the character a full thick brown beard"
+    },
+    "facial.mustache": {
+      "prompt": "Give the character a curled brown mustache"
+    },
+    "head.hood": {
+      "prompt": "Put a green cloth hood with a short shoulder mantle on the character"
+    },
+    "head.helmet": {
+      "prompt": "Put a steel knight helmet with an open face and a nose guard on the character"
+    },
+    "head.wizard_hat": {
+      "prompt": "Put a tall pointed purple wizard hat with a bent tip and a gold band on the character"
+    },
+    "head.cap": {
+      "prompt": "Put a brown leather cap with a feather on the character"
+    },
+    "head.circlet": {
+      "prompt": "Put a thin gold circlet with a small blue gem on the character's forehead"
+    },
+    "torso.tunic": {
+      "prompt": "Dress the character in a red tunic with gold trim, short sleeves, a leather belt with a pouch"
+    },
+    "torso.robe": {
+      "prompt": "Dress the character in a long blue mage robe with white trim, wide sleeves and a sash, covering the legs"
+    },
+    "torso.plate": {
+      "prompt": "Dress the character in steel plate armour with layered shoulder pauldrons and a tabard"
+    },
+    "torso.vest": {
+      "prompt": "Dress the character in a white shirt with rolled sleeves and a laced brown leather vest"
+    },
+    "torso.coat": {
+      "prompt": "Dress the character in a long dark green travelling coat with brass buttons and a high collar"
+    },
+    "legs.pants": {
+      "prompt": "Give the character brown trousers"
+    },
+    "legs.shorts": {
+      "prompt": "Give the character dark blue shorts"
+    },
+    "legs.greaves": {
+      "prompt": "Give the character steel leg greaves"
+    },
+    "feet.boots": {
+      "prompt": "Give the character brown leather boots with folded cuffs"
+    },
+    "feet.shoes": {
+      "prompt": "Give the character simple brown leather shoes"
+    },
+    "hands.gloves": {
+      "prompt": "Give the character brown leather gloves"
+    },
+    "hands.gauntlets": {
+      "prompt": "Give the character steel gauntlets"
+    },
+    "back.cape": {
+      "prompt": "Give the character a long red cape hanging behind them, fastened at the shoulders"
+    },
+    "back.quiver": {
+      "prompt": "Give the character a leather quiver full of arrows on their back"
+    },
+    "mainhand.sword": {
+      "prompt": "Put a steel sword in the character's right hand, held point up"
+    },
+    "mainhand.staff": {
+      "prompt": "Put a tall wooden staff with a glowing blue crystal on top in the character's right hand"
+    },
+    "mainhand.dagger": {
+      "prompt": "Put a small dagger in the character's right hand"
+    },
+    "mainhand.mace": {
+      "prompt": "Put a spiked steel mace in the character's right hand"
+    },
+    "offhand.shield": {
+      "prompt": "Put a round wooden shield with a steel rim and boss on the character's left arm"
+    },
+    "offhand.tome": {
+      "prompt": "Put a thick leather-bound spell book in the character's left hand"
+    },
+    "offhand.lantern": {
+      "prompt": "Put a small glowing brass lantern in the character's left hand"
+    }
+  }
+}

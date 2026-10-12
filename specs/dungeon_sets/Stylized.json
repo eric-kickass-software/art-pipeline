@@ -1,0 +1,331 @@
+{
+  "_doc": "A dungeon part set (biome). kind: tile (template-guided, exact iso geometry), wall_decor (a wall tile with something mounted on it), prop (free object, cut out and fitted to `footprint` tiles wide). shape: floor | wall | pillar. height in tile units (1 = tile/2 px). ids match content definitions where they exist (tile.*, feature kinds); prop.* are visual decor. Prompts are added after the dungeon style descriptors.",
+  "id": "Stylized",
+  "name": "Stylized",
+  "tile": 64,
+  "biome": "stylized fantasy, whimsical, ruins, ancient, magical, mystical, runes, moss, moonlit, cozy, cracked flagstones, mossy brick, polished marble, old beams, rope, vines. tuffs of grass",
+  "pieces": [
+    {
+      "id": "tile.Stylized_floor",
+      "kind": "tile",
+      "shape": "floor",
+      "variants": 4,
+      "denoise": 0.75,
+      "prompt": "cracked grey flagstones with dark mortar lines",
+      "board": "tile.crypt_floor_tile"
+    },
+    {
+      "id": "tile.Stylized_wall_block",
+      "kind": "tile",
+      "shape": "wall",
+      "height": 2.0,
+      "variants": 2,
+      "prompt": "solid crypt wall block of rough grey stone bricks, top cap of flat stones",
+      "board": "tile.crypt_wall_block",
+      "retired": true
+    },
+    {
+      "id": "tile.Stylized_wall_block.torch",
+      "kind": "wall_decor",
+      "shape": "wall",
+      "height": 2.0,
+      "variants": 2,
+      "of": "tile.Stylized_wall_block",
+      "prompt": "solid crypt wall block of rough grey stone bricks with a burning torch in an iron sconce mounted on the front faces, warm orange glow",
+      "board": "tile.crypt_wall_block.torch",
+      "retired": true
+    },
+    {
+      "id": "tile.Stylized_pillar",
+      "kind": "tile",
+      "shape": "pillar",
+      "height": 1.5,
+      "variants": 1,
+      "prompt": "a carved stone pillar standing on a stone floor tile, weathered column with a square base and capital",
+      "board": "tile.crypt_pillar"
+    },
+    {
+      "id": "tile.Stylized_rubble",
+      "kind": "tile",
+      "shape": "floor",
+      "variants": 2,
+      "denoise": 0.8,
+      "prompt": "grey flagstones half covered by broken stone rubble and gravel",
+      "board": "tile.crypt_rubble"
+    },
+    {
+      "id": "tile.Stylized_door_block",
+      "kind": "tile",
+      "shape": "wall",
+      "height": 1.8,
+      "variants": 1,
+      "prompt": "a stone wall block with a closed arched wooden dungeon door with iron bands set into it",
+      "board": "tile.crypt_door_block",
+      "retired": true
+    },
+    {
+      "id": "feature.trap",
+      "kind": "tile",
+      "shape": "floor",
+      "variants": 1,
+      "tint": [
+        110,
+        100,
+        96
+      ],
+      "prompt": "grey flagstones with a rusty steel spike trap in the middle: rows of sharp spikes poking out of holes",
+      "board": "feature.trap"
+    },
+    {
+      "id": "feature.chest",
+      "kind": "prop",
+      "footprint": 0.62,
+      "prompt": "a closed wooden treasure chest with iron bands and a gold lock",
+      "board": "feature.chest"
+    },
+    {
+      "id": "feature.key",
+      "kind": "prop",
+      "footprint": 0.3,
+      "prompt": "an ornate old iron key lying on the ground, glowing faintly blue",
+      "board": "feature.key"
+    },
+    {
+      "id": "prop.lever",
+      "kind": "prop",
+      "footprint": 0.35,
+      "prompt": "a dungeon floor lever: an iron lever handle in a stone base",
+      "board": "prop.lever"
+    },
+    {
+      "id": "prop.barrel",
+      "kind": "prop",
+      "footprint": 0.5,
+      "prompt": "an old wooden barrel with iron bands",
+      "board": "prop.barrel"
+    },
+    {
+      "id": "prop.crate",
+      "kind": "prop",
+      "footprint": 0.55,
+      "prompt": "a battered wooden storage crate",
+      "board": "prop.crate"
+    },
+    {
+      "id": "prop.table",
+      "kind": "prop",
+      "footprint": 0.85,
+      "prompt": "a rough wooden table with a candle on it",
+      "board": "prop.table"
+    },
+    {
+      "id": "prop.chair",
+      "kind": "prop",
+      "footprint": 0.4,
+      "prompt": "a simple wooden chair",
+      "board": "prop.chair"
+    },
+    {
+      "id": "prop.bones",
+      "kind": "prop",
+      "footprint": 0.6,
+      "prompt": "a small heap of old pale grey-white dusty bones and a skull, just the bones",
+      "biome": false,
+      "variants": 2,
+      "board": "prop.bones"
+    },
+    {
+      "id": "prop.brazier",
+      "kind": "prop",
+      "footprint": 0.45,
+      "prompt": "an iron brazier on three legs with burning coals and flames",
+      "board": "prop.brazier"
+    },
+    {
+      "id": "tile.Stylized_wall_block_banner",
+      "kind": "wall_decor",
+      "shape": "wall",
+      "height": 2.0,
+      "of": "tile.Stylized_wall_block",
+      "prompt": "the same stone wall block with a tattered red heraldic banner hanging on the front faces",
+      "board": "tile.crypt_wall_block_banner",
+      "retired": true
+    },
+    {
+      "id": "feature.trap_plate",
+      "kind": "tile",
+      "shape": "floor",
+      "prompt": "flagstones with a slightly raised square stone pressure plate in the middle",
+      "board": "feature.trap_plate"
+    },
+    {
+      "id": "prop.stool",
+      "kind": "prop",
+      "footprint": 0.3,
+      "prompt": "a small three-legged wooden stool",
+      "board": "prop.stool"
+    },
+    {
+      "id": "prop.bookshelf",
+      "kind": "prop",
+      "footprint": 0.7,
+      "prompt": "a tall wooden bookshelf full of old dusty books",
+      "board": "prop.bookshelf"
+    },
+    {
+      "id": "prop.sarcophagus",
+      "kind": "prop",
+      "footprint": 0.95,
+      "prompt": "a carved stone sarcophagus with a lid",
+      "board": "prop.sarcophagus"
+    },
+    {
+      "id": "prop.candelabra",
+      "kind": "prop",
+      "footprint": 0.3,
+      "prompt": "a tall iron standing candelabra with three burning candles",
+      "board": "prop.candelabra"
+    },
+    {
+      "id": "tile.Stylized_floor_area",
+      "board": "tile.crypt_floor",
+      "kind": "tile",
+      "shape": "floor",
+      "method": "atlas",
+      "atlas": 4,
+      "variants": 2,
+      "prompt": "cracked grey flagstones of varied sizes with dark mortar lines, a few worn, sunken and chipped stones"
+    },
+    {
+      "id": "tile.Stylized_wall",
+      "kind": "tile",
+      "shape": "run",
+      "length": 1,
+      "height": 2.0,
+      "thickness": 0.25,
+      "variants": 2,
+      "prompt": "a thin crypt wall of rough grey stone bricks with dark mortar, flat stone coping along the top",
+      "board": "tile.crypt_wall"
+    },
+    {
+      "id": "tile.Stylized_wall_run2",
+      "board": "tile.crypt_wall",
+      "kind": "tile",
+      "shape": "run",
+      "length": 2,
+      "height": 2.0,
+      "thickness": 0.25,
+      "variants": 2,
+      "prompt": "a thin crypt wall of rough grey stone bricks with dark mortar, flat stone coping along the top, a few cracked and mossy bricks"
+    },
+    {
+      "id": "tile.Stylized_wall_run3",
+      "board": "tile.crypt_wall",
+      "kind": "tile",
+      "shape": "run",
+      "length": 3,
+      "height": 2.0,
+      "thickness": 0.25,
+      "variants": 2,
+      "prompt": "a thin crypt wall of rough grey stone bricks with dark mortar, flat stone coping along the top, a carved stone skull relief in the middle, cobwebs in a corner"
+    },
+    {
+      "id": "tile.Stylized_wall_run4",
+      "board": "tile.crypt_wall",
+      "kind": "tile",
+      "shape": "run",
+      "length": 4,
+      "height": 2.0,
+      "thickness": 0.25,
+      "variants": 1,
+      "prompt": "a thin crypt wall of rough grey stone bricks with dark mortar, flat stone coping along the top, some bricks crumbled away, roots creeping over the stones, a faded painted rune"
+    },
+    {
+      "id": "tile.Stylized_wall_post",
+      "board": "tile.crypt_wall.post",
+      "kind": "tile",
+      "shape": "post",
+      "height": 2.0,
+      "thickness": 0.25,
+      "variants": 1,
+      "prompt": "a square stone pillar post of rough grey stone bricks, flat stone cap"
+    },
+    {
+      "id": "tile.Stylized_wall.torch",
+      "kind": "wall_decor",
+      "of": "tile.Stylized_wall",
+      "variants": 2,
+      "prompt": "the same thin stone wall with a burning torch in an iron sconce mounted on its front face, warm orange glow",
+      "board": "tile.crypt_wall.torch"
+    },
+    {
+      "id": "tile.Stylized_wall_banner",
+      "kind": "wall_decor",
+      "of": "tile.Stylized_wall",
+      "variants": 1,
+      "prompt": "the same thin stone wall with a tattered red heraldic banner hanging on its front face",
+      "board": "tile.crypt_wall_banner"
+    },
+    {
+      "id": "tile.Stylized_door",
+      "kind": "tile",
+      "shape": "run",
+      "opening": "door",
+      "length": 1,
+      "height": 2.0,
+      "thickness": 0.25,
+      "variants": 1,
+      "prompt": "a thin stone wall with an arched old wooden door with iron bands and a ring handle set into it",
+      "board": "tile.crypt_door"
+    },
+    {
+      "id": "tile.Stylized_door_iron",
+      "board": "tile.crypt_door",
+      "kind": "tile",
+      "shape": "run",
+      "opening": "door",
+      "length": 1,
+      "height": 2.0,
+      "thickness": 0.25,
+      "variants": 1,
+      "prompt": "a thin stone wall with a heavy riveted black iron door set into it"
+    },
+    {
+      "id": "tile.Stylized_door_portcullis",
+      "board": "tile.crypt_door",
+      "kind": "tile",
+      "shape": "run",
+      "opening": "door",
+      "length": 1,
+      "height": 2.0,
+      "thickness": 0.25,
+      "variants": 1,
+      "prompt": "a thin stone wall with a rusty iron portcullis grate lowered in its doorway, darkness behind the bars"
+    },
+    {
+      "id": "tile.Stylized_door_double",
+      "board": "tile.crypt_door",
+      "kind": "tile",
+      "shape": "run",
+      "opening": "door",
+      "length": 1,
+      "height": 2.0,
+      "thickness": 0.25,
+      "variants": 1,
+      "door_width": 0.6,
+      "prompt": "a thin stone wall with closed double wooden doors with carved panels and brass studs set into it"
+    },
+    {
+      "id": "tile.Stylized_arch",
+      "kind": "tile",
+      "shape": "mesh",
+      "mesh": "archway",
+      "length": 1,
+      "height": 2.0,
+      "thickness": 0.25,
+      "variants": 2,
+      "prompt": "a thin crypt wall of rough grey stone bricks with an open stone archway of carved wedge-shaped voussoir stones and a keystone, the opening is empty",
+      "board": "tile.crypt_arch"
+    }
+  ]
+}

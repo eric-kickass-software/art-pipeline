@@ -1,0 +1,134 @@
+{
+  "_doc": "Modular character kit. Read by blender/build_character_kit.py (geometry), blender/render_character.py (renders) and hdart compose (runtime-style compositing). See README.md in P:/Tools/art-pipeline.",
+  "schemaVersion": 1,
+
+  "channels": [
+    { "id": 0, "name": "none" },
+    { "id": 1, "name": "skin",    "customizable": true,  "default": "skin.fair" },
+    { "id": 2, "name": "hair",    "customizable": true,  "default": "hair.chestnut" },
+    { "id": 3, "name": "eyes",    "customizable": true,  "default": "eyes.brown" },
+    { "id": 4, "name": "cloth1",  "customizable": true,  "default": "cloth.blue" },
+    { "id": 5, "name": "cloth2",  "customizable": true,  "default": "cloth.cream" },
+    { "id": 6, "name": "leather", "customizable": true,  "default": "leather.brown" },
+    { "id": 7, "name": "metal",   "customizable": true,  "default": "metal.iron" },
+    { "id": 8, "name": "wood",    "customizable": false, "default": "wood.oak" },
+    { "id": 9, "name": "accent",  "customizable": true,  "default": "accent.gold" },
+    { "id": 10, "name": "dark",   "customizable": false, "default": "dark.ink" },
+    { "id": 11, "name": "magic",  "customizable": true,  "default": "magic.arcane" }
+  ],
+
+  "bodies": {
+    "slim":  { "torso": 1.0,  "limbs": 1.0,  "shoulders": 1.0,  "height": 1.0 },
+    "broad": { "torso": 1.22, "limbs": 1.18, "shoulders": 1.15, "height": 1.0 },
+    "short": { "torso": 1.18, "limbs": 1.12, "shoulders": 1.08, "height": 0.86 }
+  },
+
+  "slots": [
+    { "name": "body",     "required": true },
+    { "name": "face",     "required": true },
+    { "name": "hair",     "required": false },
+    { "name": "facial",   "required": false },
+    { "name": "head",     "required": false },
+    { "name": "torso",    "required": false },
+    { "name": "legs",     "required": false },
+    { "name": "feet",     "required": false },
+    { "name": "hands",    "required": false },
+    { "name": "back",     "required": false },
+    { "name": "mainhand", "required": false },
+    { "name": "offhand",  "required": false }
+  ],
+
+  "views": {
+    "token": {
+      "_doc": "Isometric board token. 2:1 dimetric camera (elevation 30 deg, azimuth 45 deg).",
+      "cell": [64, 64],
+      "orthoScale": 2.8,
+      "elevation": 30,
+      "azimuth": 45,
+      "target": [0, 0, 0.96],
+      "directions": [0, 90, 180, 270],
+      "clips": ["idle", "walk"]
+    },
+    "battle": {
+      "_doc": "FF3-style side view. Party stands on the right and faces left (towards the enemies).",
+      "cell": [96, 96],
+      "orthoScale": 2.8,
+      "elevation": 8,
+      "azimuth": 0,
+      "target": [0, 0, 0.96],
+      "directions": [-50],
+      "clips": ["idle", "attack", "cast", "hurt", "dead"]
+    }
+  },
+
+  "clips": {
+    "idle":   { "frames": 4, "fps": 4,  "loop": true },
+    "walk":   { "frames": 8, "fps": 10, "loop": true },
+    "attack": { "frames": 6, "fps": 12, "loop": false },
+    "cast":   { "frames": 6, "fps": 10, "loop": false },
+    "hurt":   { "frames": 3, "fps": 10, "loop": false },
+    "dead":   { "frames": 4, "fps": 8,  "loop": false }
+  },
+
+  "render": {
+    "_doc": "Voxel look (Eric 2026-10-11: 'voxelize these characters ... pixelated characters come to life'). Every part is turned into grid-aligned cubes of `voxel` world units (~2.6 px at these cells), faces are drawn on the voxel grid (1 voxel eyes), and each voxel is one flat colour (detailRange) with top/side faces shaded differently. Set voxel to 0 for the smooth low-res look. coverage = how much of a pixel a part must fill to draw it.",
+    "voxel": 0.075,
+    "supersample": 4,
+    "detailRange": [0.97, 1.0],
+    "coverage": { "default": 0.45 },
+    "lightDir": [-0.45, 0.5, 0.74],
+    "ambient": 0.45,
+    "depthRange": 3.0
+  },
+
+  "parts": [
+    { "id": "body.base",         "slot": "body",  "name": "Base body" },
+
+    { "id": "face.neutral",      "slot": "face",  "name": "Neutral" },
+    { "id": "face.stern",        "slot": "face",  "name": "Stern" },
+    { "id": "face.kind",         "slot": "face",  "name": "Kind" },
+    { "id": "face.wide",         "slot": "face",  "name": "Wide-eyed" },
+
+    { "id": "hair.short",        "slot": "hair",  "name": "Short" },
+    { "id": "hair.long",         "slot": "hair",  "name": "Long" },
+    { "id": "hair.ponytail",     "slot": "hair",  "name": "Ponytail" },
+    { "id": "hair.spiky",        "slot": "hair",  "name": "Spiky" },
+    { "id": "hair.bun",          "slot": "hair",  "name": "Bun" },
+    { "id": "hair.mohawk",       "slot": "hair",  "name": "Mohawk" },
+
+    { "id": "facial.beard",      "slot": "facial","name": "Full beard" },
+    { "id": "facial.mustache",   "slot": "facial","name": "Mustache" },
+
+    { "id": "head.hood",         "slot": "head",  "name": "Hood",        "hides": ["hair"] },
+    { "id": "head.helmet",       "slot": "head",  "name": "Helmet",      "hides": ["hair"] },
+    { "id": "head.wizard_hat",   "slot": "head",  "name": "Wizard hat" },
+    { "id": "head.cap",          "slot": "head",  "name": "Cap" },
+
+    { "id": "torso.tunic",       "slot": "torso", "name": "Tunic" },
+    { "id": "torso.robe",        "slot": "torso", "name": "Robe",        "hides": ["legs"] },
+    { "id": "torso.plate",       "slot": "torso", "name": "Plate armour" },
+    { "id": "torso.vest",        "slot": "torso", "name": "Leather vest" },
+
+    { "id": "legs.pants",        "slot": "legs",  "name": "Pants" },
+    { "id": "legs.shorts",       "slot": "legs",  "name": "Shorts" },
+    { "id": "legs.greaves",      "slot": "legs",  "name": "Greaves" },
+
+    { "id": "feet.boots",        "slot": "feet",  "name": "Boots" },
+    { "id": "feet.shoes",        "slot": "feet",  "name": "Shoes" },
+
+    { "id": "hands.gloves",      "slot": "hands", "name": "Gloves" },
+    { "id": "hands.gauntlets",   "slot": "hands", "name": "Gauntlets" },
+
+    { "id": "back.cape",         "slot": "back",  "name": "Cape" },
+    { "id": "back.quiver",       "slot": "back",  "name": "Quiver" },
+
+    { "id": "mainhand.sword",    "slot": "mainhand", "name": "Sword" },
+    { "id": "mainhand.staff",    "slot": "mainhand", "name": "Staff" },
+    { "id": "mainhand.dagger",   "slot": "mainhand", "name": "Dagger" },
+    { "id": "mainhand.mace",     "slot": "mainhand", "name": "Mace" },
+
+    { "id": "offhand.shield",    "slot": "offhand",  "name": "Shield" },
+    { "id": "offhand.tome",      "slot": "offhand",  "name": "Tome" },
+    { "id": "offhand.lantern",   "slot": "offhand",  "name": "Lantern" }
+  ]
+}

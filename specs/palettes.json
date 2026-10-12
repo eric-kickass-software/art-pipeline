@@ -1,0 +1,242 @@
+{
+  "_doc": "Colour ramps for the character channels. Each ramp is 5 colours, darkest first. Give `base` and the ramp is hue-shifted automatically (shadows cooler, highlights warmer), or give `colors` to set it by hand. Ramp ids are <group>.<name>; a channel uses the ramps of the group with the same name (cloth1/cloth2 both use `cloth`).",
+  "rampSize": 5,
+  "outline": "#1b1421",
+  "groups": {
+    "skin": {
+      "fair": {
+        "base": "#f2c7a5"
+      },
+      "rose": {
+        "base": "#e8b0a0"
+      },
+      "tan": {
+        "base": "#c98d63"
+      },
+      "olive": {
+        "base": "#b38a5c"
+      },
+      "brown": {
+        "base": "#8d5a3b"
+      },
+      "deep": {
+        "base": "#5e3a2a"
+      },
+      "orc": {
+        "base": "#7d9a58"
+      },
+      "ash": {
+        "base": "#9aa3b5"
+      }
+    },
+    "hair": {
+      "black": {
+        "base": "#2c2630"
+      },
+      "chestnut": {
+        "base": "#7a4a2b"
+      },
+      "auburn": {
+        "base": "#a2452c"
+      },
+      "blonde": {
+        "base": "#d9b45a"
+      },
+      "platinum": {
+        "base": "#e6e0cf"
+      },
+      "grey": {
+        "base": "#8e8a90"
+      },
+      "ginger": {
+        "base": "#cf6a2e"
+      },
+      "teal": {
+        "base": "#3f8f8a"
+      },
+      "violet": {
+        "base": "#7a4fa3"
+      }
+    },
+    "eyes": {
+      "brown": {
+        "colors": [
+          "#1b1421",
+          "#2a1b17",
+          "#3d2a20",
+          "#5a3d2a",
+          "#5a3d2a"
+        ]
+      },
+      "blue": {
+        "colors": [
+          "#1b1421",
+          "#16233d",
+          "#22406b",
+          "#3b6aa0",
+          "#3b6aa0"
+        ]
+      },
+      "green": {
+        "colors": [
+          "#1b1421",
+          "#16301f",
+          "#245433",
+          "#3f8a4f",
+          "#3f8a4f"
+        ]
+      },
+      "glow": {
+        "colors": [
+          "#3a1010",
+          "#8a1d1d",
+          "#e0402a",
+          "#ff9a4a",
+          "#ffe08a"
+        ]
+      }
+    },
+    "cloth": {
+      "blue": {
+        "base": "#3e5f9a"
+      },
+      "red": {
+        "base": "#9c3434"
+      },
+      "green": {
+        "base": "#4a7a3d"
+      },
+      "purple": {
+        "base": "#6a4a8c"
+      },
+      "cream": {
+        "base": "#d8ccad"
+      },
+      "black": {
+        "base": "#36313d"
+      },
+      "white": {
+        "base": "#e4e1d8"
+      },
+      "mustard": {
+        "base": "#c49a32"
+      },
+      "teal": {
+        "base": "#2f7f7a"
+      },
+      "brown": {
+        "base": "#7a5a3a"
+      },
+      "grey": {
+        "base": "#7b7884"
+      },
+      "rose": {
+        "base": "#b8607a"
+      }
+    },
+    "leather": {
+      "brown": {
+        "base": "#6e4a2f"
+      },
+      "dark": {
+        "base": "#3f2d24"
+      },
+      "tan": {
+        "base": "#a07a50"
+      },
+      "red": {
+        "base": "#7c3326"
+      },
+      "black": {
+        "base": "#2c2830"
+      }
+    },
+    "metal": {
+      "iron": {
+        "base": "#8c8f99"
+      },
+      "steel": {
+        "base": "#a7b2c2"
+      },
+      "bronze": {
+        "base": "#a8763e"
+      },
+      "gold": {
+        "base": "#d4aa3c"
+      },
+      "dark": {
+        "base": "#4f4c5a"
+      }
+    },
+    "wood": {
+      "oak": {
+        "base": "#7d5634"
+      },
+      "dark": {
+        "base": "#4e3524"
+      },
+      "pale": {
+        "base": "#b08a5c"
+      }
+    },
+    "accent": {
+      "gold": {
+        "base": "#d9b046"
+      },
+      "silver": {
+        "base": "#c5c9d3"
+      },
+      "red": {
+        "base": "#b8333a"
+      },
+      "green": {
+        "base": "#3e9a58"
+      },
+      "blue": {
+        "base": "#3d6fc4"
+      }
+    },
+    "dark": {
+      "ink": {
+        "colors": [
+          "#140e18",
+          "#1b1421",
+          "#241a2a",
+          "#2e2233",
+          "#3a2b3e"
+        ]
+      }
+    },
+    "magic": {
+      "arcane": {
+        "base": "#7a6cf0"
+      },
+      "fire": {
+        "base": "#f07a2a"
+      },
+      "frost": {
+        "base": "#6ad0f0"
+      },
+      "holy": {
+        "base": "#f0d86a"
+      },
+      "nature": {
+        "base": "#6ad07a"
+      },
+      "shadow": {
+        "base": "#8a3fa8"
+      }
+    },
+    "white": {
+      "base": {
+        "colors": [
+          "#c9c3cf",
+          "#e3dde6",
+          "#f4f0f2",
+          "#ffffff",
+          "#ffffff"
+        ]
+      }
+    }
+  }
+}
