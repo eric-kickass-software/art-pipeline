@@ -1116,6 +1116,51 @@ def _runs(cells, along_x, lengths):
     return out
 
 
+# ----------------------------------------------------------------------------- floor blocks (mixed atlas sizes)
+# Same rules and hash as the game's FloorBlocks.cs (Presentation/Board), so the room preview matches the board.
+
+FLOOR_SKIP_PERCENT = 30
+
+
+def _fnv(vals):
+    """FNV-1a over ints as little-endian uint32 (FloorBlocks.Hash(int x, int y, uint seed))."""
+    h = 2166136261
+    for v in vals:
+        for k in range(4):
+            h = ((h ^ ((v & 0xFFFFFFFF) >> (8 * k) & 0xFF)) * 16777619) & 0xFFFFFFFF
+    return h
+
+
+def _fnv_str(s):
+    """FNV-1a over UTF-16 code units (FloorBlocks.Hash(string))."""
+    h = 2166136261
+    for c in s:
+        h = ((h ^ ord(c)) * 16777619) & 0xFFFFFFFF
+    return h
+
+
+def plan_floor_blocks(cells, sizes, seed):
+    """{(x, y): (block x, block y, size)}: square blocks of the given sizes (plus 1x1) over the cells. Greedy in
+    scan order, largest size first, skipping a size at ~30% of anchors for variety."""
+    floor = set(cells)
+    big = sorted({s for s in sizes if s > 1}, reverse=True)
+    plan = {}
+    for x, y in sorted(floor, key=lambda c: (c[1], c[0])):
+        if (x, y) in plan:
+            continue
+        size = 1
+        for s in big:
+            if (_fnv((x, y, (seed + s) & 0xFFFFFFFF)) % 100 >= FLOOR_SKIP_PERCENT
+                    and all((x + dx, y + dy) in floor and (x + dx, y + dy) not in plan
+                            for dy in range(s) for dx in range(s))):
+                size = s
+                break
+        for dy in range(size):
+            for dx in range(size):
+                plan[(x + dx, y + dy)] = (x, y, size)
+    return plan
+
+
 def room_preview(name, tile=None, scale=3, include=None):
     """Compose approved pieces (native pixels) into a small iso room with thin, joined-up walls. `include` =
     {pid: rel} swaps in one candidate for a piece, to judge it in context before approving."""
@@ -1161,20 +1206,39 @@ def room_preview(name, tile=None, scale=3, include=None):
         if pv:
             items.append((layer, x + y, sub, x, y, pv[0], pv[1], suf))
 
+    def floor_key(x, y):
+        """The floor piece key under a cell, or None (thin walls only need floor on the side the camera sees)."""
+        ch = at(x, y)
+        if ch in WALLISH and ch not in "DA" and not any(at(x + dx, y + dy) in ".RXP" + "abcdefghijkl"
+                                                        for dx, dy in ((1, 0), (0, 1), (1, 1))):
+            return None
+        return roles[ch] if ch in "RX" else roles["."]
+
+    main = roles["."]
+    atlas_vs = [v for v in variants(main) if layout(v[0]) == "atlas"]
+    singles = [v for v in variants(main) if layout(v[0]) != "atlas"]
+    plan = plan_floor_blocks([(x, y) for y in range(rows) for x in range(cols) if main and floor_key(x, y) == main],
+                             [1] + [int(v[0].get("atlas", 4)) for v in atlas_vs], _fnv_str(main or "")) if atlas_vs else {}
+
     for y in range(rows):
         for x in range(cols):
             ch = at(x, y)
-            fkey = roles[ch] if ch in "RX" else roles["."]
-            fv = pick(fkey, x, y)
-            open_ = ".RXP" + "abcdefghijkl"
-            if ch in WALLISH and ch not in "DA" and not any(at(x + dx, y + dy) in open_
-                                                            for dx, dy in ((1, 0), (0, 1), (1, 1))):
-                fv = None  # thin walls only need floor on the side the camera sees
+            fkey = floor_key(x, y)
+            fv = pick(fkey, x, y) if fkey else None
+            if fv and (x, y) in plan:  # mixed atlas sizes: this cell's tile of its block (preview axes: i = x, j = y)
+                bx, by, n = plan[(x, y)]
+                same = [v for v in atlas_vs if int(v[0].get("atlas", 4)) == n]
+                if n > 1:
+                    add(0, x, y, 0, same[(bx * 7 + by * 13) % len(same)], f"i{x - bx}j{y - by}")
+                    fv = None
+                elif singles:
+                    add(0, x, y, 0, singles[(x * 7 + y * 13) % len(singles)], "")
+                    fv = None
             if fv:
                 p = fv[0]
                 if layout(p) == "atlas":
                     N = int(p.get("atlas", 4))
-                    fv = variants(fkey)[0]
+                    fv = [v for v in variants(fkey) if layout(v[0]) == "atlas"][0]
                     add(0, x, y, 0, fv, f"i{x % N}j{y % N}")
                 else:
                     add(0, x, y, 0, fv, "")
