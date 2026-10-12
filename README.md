@@ -8,6 +8,8 @@ Design notes and decisions live in the vault: `Game Dev/Hearthdelve/Hearthdelve 
 2026-10-12; history before that is in the Hearthdelve repo). Output goes into the Unity project at `HD_PROJECT`,
 by default the root checkout `P:\Projects\Unity\Hearthdelve` (see `hdart/paths.py`). Set `HD_PROJECT` to point a run
 at a worktree instead. Paths like `Assets/...` below are in that project.
+Git holds only the tool and its workflow (code, specs, docs). Generated art (`sprites/`, `textures/`, `kit/`, `work/`,
+`archive/`) stays local: approved art is exported into the game project, and the rest can be thrown away or regenerated.
 
 ```
 ComfyUI (FLUX.2-klein 4B + pixel LoRA, TRELLIS.2, BiRefNet)      Blender 5.2 (headless, Cycles)
