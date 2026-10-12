@@ -42,6 +42,16 @@
   .strip { display:flex; gap:4px; flex-wrap:wrap; }
   .strip img { width:72px; height:72px; object-fit:contain; background:#fff; border-radius:3px; border:2px solid transparent; cursor:pointer; }
   .strip img.on { border-color:var(--ok); } .strip .none { color:var(--muted); font-size:12px; }
+  #familyView h3 { margin:14px 0 6px; font-size:13px; color:var(--accent); }
+  .famver { gap:6px; align-items:flex-start; margin:4px 0; } .famgrp { margin:8px 0 4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .famcards { display:flex; gap:8px; flex-wrap:wrap; }
+  .famcard { background:var(--card); border:2px solid transparent; border-radius:6px; padding:5px; width:172px; }
+  .famcard.active { border-color:var(--ok); } .famcard .seam { width:160px; height:160px; display:block; border-radius:3px; cursor:zoom-in; }
+  .famcard .btns { display:flex; gap:3px; margin-top:4px; } .famcard .btns button { flex:1; padding:3px; font-size:11px; }
+  .famcard .btns button.on { border-color:var(--ok); color:var(--ok); }
+  .famcard .trials { display:flex; gap:3px; margin-top:4px; flex-wrap:wrap; } .famcard .trials img { width:50px; height:50px; border-radius:2px; cursor:zoom-in; }
+  .strip img.stale { outline:2px dashed #e0a030; outline-offset:-2px; opacity:.6; }
+  .fampreview { width:100%; border-radius:4px; background:#16121c; cursor:zoom-in; min-height:40px; }
   .gbar { display:flex; gap:6px; align-items:center; flex-wrap:wrap; position:sticky; top:0; background:var(--panel, #1d1924); padding:4px 0; z-index:2; }
   .pitem { display:flex; gap:8px; align-items:center; padding:4px; border-radius:5px; cursor:pointer; border:1px solid transparent; }
   .pitem:hover { background:var(--card); } .pitem.sel { border-color:var(--accent); background:var(--card); }
@@ -157,6 +167,7 @@
     </div>
 
     <div id="groupView" class="hidden"></div>
+    <div id="familyView" class="hidden"></div>
 
     <div id="styleView" class="hidden">
       <h2>Set</h2>
@@ -259,7 +270,7 @@ function running(pid) { return JOBS.some(j => j.status !== "done" && j.status !=
 function renderList() {
   const order = ["Floors", "Walls & doors", "Wall decor", "Pillars", "Props", "Features & traps", "Retired (old geometry)"];
   const by = {}; D.spec.pieces.forEach(p => (by[group(p)] ||= []).push(p));
-  $("#plist").innerHTML = order.filter(g => by[g]).map(g => `<div class="grp gclick ${VIEW === "group" && GROUP === g ? "sel" : ""}" data-g="${esc(g)}" title="Open the ${esc(g)} board: all prompts and candidates">${g} ▸</div>` + by[g].map(p => {
+  $("#plist").innerHTML = renderFamiliesList() + order.filter(g => by[g]).map(g => `<div class="grp gclick ${VIEW === "group" && GROUP === g ? "sel" : ""}" data-g="${esc(g)}" title="Open the ${esc(g)} board: all prompts and candidates">${g} ▸</div>` + by[g].map(p => {
     const s = pstate(p.id), a = s.approved.length, v = p.variants || 1;
     const cls = running(p.id) ? "run" : a >= v ? "ok" : (a || s.candidates.length) ? "part" : "none";
     const txt = running(p.id) ? "generating" : `${a}/${v}` + (s.candidates.length && a < v ? ` · ${s.candidates.length} cand` : "");
@@ -268,6 +279,8 @@ function renderList() {
   }).join("")).join("") + renderOrphans();
   document.querySelectorAll(".pitem").forEach(el => el.onclick = () => { SEL = el.dataset.id; TRY = null; setView("pieces"); });
   document.querySelectorAll(".plist .grp.gclick").forEach(el => el.onclick = () => { GROUP = el.dataset.g; setView("group"); });
+  document.querySelectorAll(".plist .fitem").forEach(el => el.onclick = () => { FAM = el.dataset.fam; setView("family"); });
+  $("#newFamBtn").onclick = newFamily;
   document.querySelectorAll(".orphan button").forEach(b => b.onclick = async () => {
     const pid = b.closest(".orphan").dataset.id;
     try {
@@ -285,6 +298,206 @@ function renderOrphans() {
   return `<div class="grp" title="These pieces have generated images but aren't in the set any more">Not in set (images kept)</div>` +
     o.map(([id, v]) => `<div class="orphan" data-id="${esc(id)}" title="${esc(v.prompt)}"><span class="nm">${esc(id)}</span>
       <span class="badge part">${v.count} img</span><button data-a="restore">Restore</button><button data-a="archive" class="danger">Archive</button></div>`).join("");
+}
+
+// ---- floor families: one master + repainted variants per block size, on one board.
+// Static part (prompt versions, variation phrases, targets, weights) renders once; the master grid, size strips and
+// preview re-render when jobs finish, without touching what's being typed.
+let FAM = null, FAMSEED = 0;
+const famInfo = () => (D.families || {})[FAM];
+const famSet = () => famInfo().settings;
+const SIZES = [1, 2, 3, 4];
+const rnd = () => 1 + Math.floor(Math.random() * 99999);
+
+function renderFamiliesList() {
+  const fams = Object.keys(D.families || {});
+  return `<div class="grp">Floor families</div>` + fams.map(id => {
+    const rel = pstate(id).approved[0];
+    const img = rel ? `<img src="${natUrl(id, rel, D.spec.tile, 1)}">` : `<div class="ph"></div>`;
+    return `<div class="pitem fitem ${VIEW === "family" && FAM === id ? "sel" : ""}" data-fam="${esc(id)}">${img}<span class="nm" title="${esc(id)}">${esc(id.replace(/^tile\./, ""))}</span><span class="badge ${rel ? "ok" : "none"}">${rel ? "family" : "no master"}</span></div>`;
+  }).join("") + `<div class="row"><button id="newFamBtn" style="width:100%">+ New floor family</button></div>`;
+}
+
+async function newFamily() {
+  const nm = (prompt("Family name (letters, digits, _), e.g. stone, moss, sewer:", "stone") || "").trim();
+  if (!nm) return;
+  const material = prompt("What the floor is made of (the master's prompt):", "cracked grey flagstones with dark mortar lines") || "";
+  const board = (D.spec.pieces.find(q => q.method === "master") || D.spec.pieces.find(q => q.shape === "floor" && (q.board || q.id).endsWith("_floor")) || {}).board || `tile.${SET}_floor`;
+  const id = `tile.${SET}_${nm.replace(/\W/g, "_")}_master`;
+  try {
+    await post("piece/save", {piece: {id, kind: "tile", shape: "floor", method: "master", board, variants: 1, prompt: material, family: {prompts: [material]}}});
+    FAM = id; await load(); setView("family");
+  } catch (e) { notice(e.message); }
+}
+
+function renderFamily() {
+  if (!famInfo()) { $("#familyView").innerHTML = `<div class="hint">Pick a floor family on the left, or make one.</div>`; return; }
+  const f = famSet(), m = piece(FAM);
+  $("#familyView").innerHTML = `
+    <h2 style="margin-top:0">${esc(FAM)} <span class="hint">· floor family: one seamless master, variants repainted from it (they share its edges)</span></h2>
+    <h3>1 · Masters <span class="hint">prompt versions × seeds, judged tiled 3×3. ★ the keepers, then Use as master.</span></h3>
+    <div id="famPrompts"></div>
+    <div class="gbar"><button id="famAddVer">+ prompt version</button>
+      <label>seeds each<input id="famSeeds" type="number" value="2" min="1" max="8" style="width:52px"></label>
+      <button id="famGenMasters" class="primary">Generate masters</button>
+      <span class="hint" id="famMsg"></span></div>
+    <div id="famMasters"></div>
+    <div class="gbar"><label style="flex:1">variation test<input id="famTrialText" value="${esc(f.variations[0] || "")}" style="width:100%"></label>
+      <button id="famTrialBtn" title="A quick 1×1 repaint of this variation from every ★ master, to see how each takes variations">Test on ★ masters</button></div>
+    <h3>2 · Variants <span class="hint">repainted from the active master. One variation phrase per line; each new variant takes the next one.</span></h3>
+    <textarea id="famVariations" rows="4">${esc(f.variations.join("\n"))}</textarea>
+    <div id="famSizes"></div>
+    <div class="gbar"><button id="famFill" class="primary">Fill family</button><span class="hint">generates whatever each size is missing (one candidate per missing variant), then approve the good ones</span></div>
+    <h3>3 · Preview <span class="hint">a floor laid out by the game's planner from the approved family</span></h3>
+    <div class="gbar"><select id="famView" style="width:auto"><option value="iso">iso</option><option value="top">top-down</option></select>
+      <label><input id="famOutline" type="checkbox" style="width:auto"> block outlines</label>
+      <button id="famReroll">↻ re-roll</button></div>
+    <img id="famPreview" class="fampreview" alt="family preview">`;
+  renderFamPrompts();
+  $("#famAddVer").onclick = () => { famSet().prompts.push(famSet().prompts[famSet().prompts.length - 1] || m.prompt || ""); renderFamPrompts(); saveFamily(); };
+  $("#famGenMasters").onclick = generateMasters;
+  $("#famTrialBtn").onclick = testVariation;
+  $("#famVariations").oninput = () => { famSet().variations = $("#famVariations").value.split("\n"); saveFamilySoon(); };
+  $("#famFill").onclick = () => fillFamily();
+  $("#famView").onchange = $("#famOutline").onchange = refreshFamPreview;
+  $("#famReroll").onclick = () => { FAMSEED = rnd(); refreshFamPreview(); };
+  renderFamilyDynamic();
+}
+
+function renderFamPrompts() {
+  const ps = famSet().prompts;
+  $("#famPrompts").innerHTML = ps.map((t, i) => `<div class="row famver"><span class="badge">${String.fromCharCode(65 + i)}</span>
+    <textarea rows="2" data-i="${i}" style="flex:1">${esc(t)}</textarea>${ps.length > 1 ? `<button data-x="${i}" title="remove this version">✕</button>` : ""}</div>`).join("");
+  document.querySelectorAll("#famPrompts textarea").forEach(t => t.oninput = () => { famSet().prompts[+t.dataset.i] = t.value; saveFamilySoon(); });
+  document.querySelectorAll("#famPrompts [data-x]").forEach(b => b.onclick = () => { famSet().prompts.splice(+b.dataset.x, 1); renderFamPrompts(); saveFamily(); });
+}
+
+function renderFamilyDynamic() {
+  if (VIEW !== "family" || !famInfo() || !$("#famMasters")) return;
+  renderFamMasters(); renderFamSizes(); refreshFamPreview();
+}
+
+// Master candidates grouped by the prompt version that made them (meta.prompt).
+function renderFamMasters() {
+  const s = pstate(FAM), meta = s.meta || {}, active = s.approved[0], starred = s.starred || [], trials = s.trials || {};
+  const versions = famSet().prompts, groups = {};
+  s.candidates.forEach(rel => { const pr = (meta[rel] || {}).prompt || ""; (groups[pr] ||= []).push(rel); });
+  const label = pr => { const i = versions.indexOf(pr); return i >= 0 ? `${String.fromCharCode(65 + i)} · ${pr}` : `older prompt · ${pr}`; };
+  const order = Object.keys(groups).sort((a, b) => (versions.indexOf(a) + 1 || 99) - (versions.indexOf(b) + 1 || 99));
+  $("#famMasters").innerHTML = s.candidates.length ? order.map(pr => `<div class="hint famgrp" title="${esc(pr)}">${esc(label(pr))}</div><div class="famcards">` +
+    groups[pr].map(rel => `<div class="famcard ${rel === active ? "active" : ""}" data-rel="${esc(rel)}">
+      <img class="seam" src="/api/dun/seam?set=${SET}&piece=${encodeURIComponent(FAM)}&rel=${encodeURIComponent(rel)}" title="tiled 3×3 (click to zoom)">
+      <div class="btns"><button data-a="star" class="${starred.includes(rel) ? "on" : ""}" title="keep for comparing">${starred.includes(rel) ? "★" : "☆"}</button>
+        <button data-a="use" class="${rel === active ? "on" : ""}">${rel === active ? "✓ Active master" : "Use as master"}</button>
+        <button data-a="drop" class="danger" title="archive">✕</button></div>
+      <div class="trials">${(trials[rel] || []).map(t => `<img src="/api/dun/img?set=${SET}&rel=${encodeURIComponent(t.rel)}" title="${esc(t.variation)}">`).join("")}</div>
+    </div>`).join("") + `</div>`).join("") : `<div class="hint">No masters yet: write a prompt version or two and hit Generate masters.</div>`;
+  document.querySelectorAll(".famcard").forEach(card => {
+    const rel = card.dataset.rel;
+    card.querySelector(".seam").onclick = e => zoom(e.target.src);
+    card.querySelectorAll(".trials img").forEach(i => i.onclick = () => zoom(i.src));
+    card.querySelectorAll("button").forEach(b => b.onclick = async () => {
+      try {
+        if (b.dataset.a === "star") D.state.pieces[FAM] = (await post("star", {piece: FAM, rel, on: !(pstate(FAM).starred || []).includes(rel)})).piece;
+        if (b.dataset.a === "use") {
+          const stale = SIZES.some(n => famPiece(n) && pstate(famPiece(n)).approved.length);
+          if (stale && rel !== pstate(FAM).approved[0] && !confirm("Switch the active master? Variants made from the old one keep its edges and will be marked stale.")) return;
+          D.state.pieces[FAM] = (await post("promote", {piece: FAM, rel})).piece; await load(); return;
+        }
+        if (b.dataset.a === "drop") D.state.pieces[FAM] = (await post("discard", {piece: FAM, rel})).piece;
+        renderFamilyDynamic(); renderList();
+      } catch (e) { famMsg(e.message); }
+    });
+  });
+}
+
+const famPiece = n => (famInfo().pieces || {})[n];
+const famWant = n => Math.max(0, (famSet().targets[n] ?? 0) - (n === 1 ? 1 : 0));
+
+function renderFamSizes() {
+  const active = pstate(FAM).approved[0], f = famSet();
+  $("#famSizes").innerHTML = SIZES.map(n => {
+    const pid = famPiece(n), s = pid ? pstate(pid) : {candidates: [], approved: []}, meta = s.meta || {};
+    const stale = rel => (meta[rel] || {}).master !== active;  // made from another master, or from an unknown one
+    const fresh = s.approved.filter(r => !stale(r)).length;
+    const rest = s.candidates.filter(r => !s.approved.includes(r));
+    const thumbs = s.approved.map(r => [r, true]).concat(rest.map(r => [r, false])).map(([r, on]) =>
+      `<img class="${on ? "on" : ""} ${stale(r) ? "stale" : ""}" data-rel="${esc(r)}" src="/api/dun/img?set=${SET}&rel=${encodeURIComponent(r)}" title="${esc((meta[r] || {}).prompt || "")}${stale(r) ? " · STALE: made from another master" : ""} · click: approve / unapprove · double-click: zoom">`).join("");
+    return `<div class="grow famsize" data-n="${n}">
+      <div class="ghead"><b>${n}×${n}</b>
+        <label title="${n === 1 ? "including the master itself" : ""}">target<input class="ftarget" type="number" min="0" max="12" value="${f.targets[n] ?? 0}" style="width:52px"></label>
+        ${n > 1 ? `<label title="How often the planner uses a ${n}×${n} where one fits">weight<input class="fweight" type="range" min="0" max="100" step="5" value="${f.weights[n] ?? 70}" style="width:90px;vertical-align:middle"></label><span class="badge fwlbl">${f.weights[n] ?? 70}%</span>` : `<span class="hint">master + 1×1 variants</span>`}
+        <span class="badge gbadge ${fresh >= famWant(n) ? "ok" : s.candidates.length ? "part" : "none"}" title="approved from the active master / target">${fresh}/${famWant(n)} approved${s.approved.length > fresh ? ` · ${s.approved.length - fresh} stale` : ""} · ${s.candidates.length} cand</span>
+        <button class="ffill">Fill</button></div>
+      <div class="strip">${thumbs || `<span class="none">${active ? "None yet: Fill makes them." : "Pick an active master first."}</span>`}</div></div>`;
+  }).join("");
+  document.querySelectorAll(".famsize").forEach(row => {
+    const n = +row.dataset.n;
+    row.querySelector(".ftarget").onchange = e => { famSet().targets[n] = Math.max(0, +e.target.value || 0); saveFamily().then(renderFamSizes); };
+    const w = row.querySelector(".fweight");
+    if (w) { w.oninput = () => row.querySelector(".fwlbl").textContent = w.value + "%"; w.onchange = () => { famSet().weights[n] = +w.value; saveFamily().then(refreshFamPreview); }; }
+    row.querySelector(".ffill").onclick = () => fillFamily([n]);
+    row.querySelectorAll(".strip img").forEach(el => {
+      let t = null;
+      el.onclick = () => { clearTimeout(t); t = setTimeout(async () => {
+        const pid = famPiece(n), rel = el.dataset.rel, on = !pstate(pid).approved.includes(rel);
+        try { D.state.pieces[pid] = (await post("approve", {piece: pid, rel, on})).piece; renderFamSizes(); refreshFamPreview(); renderList(); }
+        catch (e) { famMsg(e.message); }
+      }, 220); };
+      el.ondblclick = () => { clearTimeout(t); zoom(el.src); };
+    });
+  });
+}
+
+function refreshFamPreview() {
+  const img = $("#famPreview");
+  if (!img) return;
+  if (!pstate(FAM).approved[0]) { img.removeAttribute("src"); img.alt = "Pick an active master to see the family on a floor."; return; }
+  img.src = `/api/dun/family?set=${SET}&piece=${encodeURIComponent(FAM)}&seed=${FAMSEED}&view=${$("#famView").value}&outline=${$("#famOutline").checked ? 1 : 0}&_=${Date.now()}`;
+  img.onclick = () => zoom(img.src);
+}
+
+function famMsg(t) { const el = $("#famMsg"); if (el) el.textContent = t; }
+
+let famSaveT = null;
+function saveFamilySoon() { clearTimeout(famSaveT); famSaveT = setTimeout(saveFamily, 600); }
+async function saveFamily() {
+  clearTimeout(famSaveT);
+  const m = piece(FAM), f = famSet();
+  const family = {prompts: f.prompts, variations: f.variations.filter(v => v.trim()), targets: f.targets, weights: f.weights};
+  try {
+    D.spec = (await post("piece/save", {piece: {...m, prompt: f.prompts[0] || m.prompt, family}})).spec;
+    for (const n of SIZES) {  // keep each size piece's variant count in step with its target
+      const pid = famPiece(n), want = famWant(n);
+      if (pid && want && piece(pid).variants !== want) D.spec = (await post("piece/save", {piece: {...piece(pid), variants: want}})).spec;
+    }
+  } catch (e) { famMsg(e.message); }
+}
+
+async function generateMasters() {
+  await saveFamily();
+  const k = Math.max(1, +$("#famSeeds").value || 1), vers = famSet().prompts.filter(p => p.trim());
+  try {
+    for (const pr of vers) for (let i = 0; i < k; i++) await post("generate", {piece: FAM, n: 1, seed: rnd(), prompt: pr.trim()});
+    famMsg(`Queued ${vers.length * k} masters.`); pollJobs();
+  } catch (e) { famMsg(e.message); }
+}
+
+async function testVariation() {
+  const starred = pstate(FAM).starred || [], v = $("#famTrialText").value.trim();
+  if (!starred.length) { famMsg("★ a master or two first."); return; }
+  try { for (const rel of starred) await post("trial", {piece: FAM, rel, variation: v, seed: rnd()}); famMsg(`Testing "${v}" on ${starred.length} master${starred.length > 1 ? "s" : ""}.`); pollJobs(); }
+  catch (e) { famMsg(e.message); }
+}
+
+async function fillFamily(sizes) {
+  await saveFamily();
+  try {
+    const r = await post("family/fill", {piece: FAM, sizes});
+    D.spec = r.spec; await load();
+    famMsg(r.jobs.length ? `Queued ${r.jobs.length} variant${r.jobs.length > 1 ? "s" : ""}.` : "Nothing missing: every size is at its target.");
+    pollJobs();
+  } catch (e) { famMsg(e.message); }
 }
 
 // ---- group board: every piece of one group (Floors, Walls & doors, ...) on one page. Edit prompts side by side,
@@ -378,6 +591,7 @@ function setView(v) {
   VIEW = v;
   $("#pieceView").classList.toggle("hidden", v !== "pieces");
   $("#groupView").classList.toggle("hidden", v !== "group");
+  $("#familyView").classList.toggle("hidden", v !== "family");
   $("#styleView").classList.toggle("hidden", v !== "style");
   $("#addView").classList.toggle("hidden", v !== "add");
   $("#tabPieces").classList.toggle("on", v !== "style"); $("#tabStyle").classList.toggle("on", v === "style");
@@ -500,6 +714,7 @@ function syncFormVis() {
 function renderCenter() {
   if (VIEW === "style") return renderStyle();
   if (VIEW === "group") return renderGroup();
+  if (VIEW === "family") return renderFamily();
   if (VIEW === "add") return renderCatalog();
   const p = piece(SEL);
   $("#noPiece").classList.toggle("hidden", !!p); $("#pieceEd").classList.toggle("hidden", !p);
@@ -731,11 +946,11 @@ async function pollJobs() {
   for (const j of JOBS) {
     if ((j.status === "done" || j.status === "failed") && !seenDone.has(j.id)) {
       seenDone.add(j.id);
-      if (j.kind === "dun") reload = true;
+      if (j.kind === "dun" || j.kind === "dun_trial") reload = true;
       if (j.kind === "dun_capture") { caps = true; if (j.error) $("#exportHint").textContent = j.error; }
     }
   }
-  if (reload && D) { const sel = SEL; D = await api("/api/dun/state?set=" + SET); SEL = sel; renderList(); if (VIEW === "pieces") renderCands(); if (VIEW === "group") groupPieces().forEach(p => renderGroupRow(p.id)); }
+  if (reload && D) { const sel = SEL; D = await api("/api/dun/state?set=" + SET); SEL = sel; renderList(); if (VIEW === "pieces") renderCands(); if (VIEW === "group") groupPieces().forEach(p => renderGroupRow(p.id)); if (VIEW === "family") renderFamilyDynamic(); }
   if (caps) { capStamp = Date.now(); loadCaps(); }
   if (!reload && D) renderList();
 }

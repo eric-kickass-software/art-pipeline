@@ -9,3 +9,6 @@ __pycache__/
 
 # Archived sets, candidates and spec history (delete by hand when sure)
 /archive/
+
+# Throwaway test sets
+/specs/dungeon_sets/zz_*.json

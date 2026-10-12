@@ -399,7 +399,9 @@ def block_mask(N, per, band, ramp=0.10):
     return np.clip((d - band) / ramp, 0, 1)
 
 
-def master_image(name, spec, piece):
+def master_image(name, spec, piece, rel=None):
+    if rel:
+        return Image.open(set_dir(name) / rel).convert("RGB")
     mid = piece.get("from")
     if not mid or not any(p["id"] == mid for p in spec["pieces"]):
         raise ValueError(f"{piece['id']}: pick the master it repaints (from)")
@@ -595,6 +597,8 @@ def generate(name, pid, n=3, seed=1, denoise=None, prompt=None, lora=None):
         made.append(rel)
         meta[rel] = {"seed": sd, "prompt": piece["prompt"], "denoise": denoise, "lora": lora,
                      "on_base": base is not None}
+        if piece.get("method") == "repaint":  # which master it was made from (switching masters makes it stale)
+            meta[rel]["master"] = master_rel(name, piece.get("from"))
     with LOCK:  # re-read: approvals and archiving may have happened while this was generating
         s = state(name)
         ps = s["pieces"].setdefault(pid, {"candidates": [], "approved": []})
@@ -916,6 +920,8 @@ def export(name, tiles=(32, 64)):
         of = piece.get("of")
         of = piece_of(spec, of).get("board", of) if of and any(p["id"] == of for p in spec["pieces"]) else of
         entry = meta["pieces"].setdefault(key, {"kind": piece["kind"], "of": of, "variants": []})
+        if piece.get("method") == "master":  # floor family: block size weights for the board's planner
+            entry["blockWeights"] = family_settings(piece)["weights"]
         for rel in approved:
             vi = len(entry["variants"])
             var = {"source": piece["id"], "layout": layout(piece), "mirror": mirrored(piece),
@@ -1290,6 +1296,190 @@ def _runs(cells, along_x, lengths):
                 i += L
     return out
 
+# ----------------------------------------------------------------------------- floor families (Studio > family board)
+# A family = one master piece (method "master") + one repaint piece per block size, made from its approved candidate.
+# Settings live on the master piece as `family`: prompt versions for the master shootout, variation phrases, target
+# counts and planner weights per size. Starred master candidates and variation trials live in the master's state.
+
+FAMILY_SIZES = (1, 2, 3, 4)
+DEFAULT_WEIGHT = 70  # % of anchors where a block size that fits is used (FloorBlocks; 70 = the old 30% skip)
+DEFAULT_VARIATIONS = ["one large crack running across", "moss growing in the joints", "a few sunken and chipped stones",
+                      "a shallow puddle", "scattered dust and small rubble", "a worn, smoother patch"]
+
+
+def family_settings(master):
+    f = dict(master.get("family") or {})
+    f.setdefault("prompts", [master.get("prompt", "")])
+    f.setdefault("variations", list(DEFAULT_VARIATIONS))
+    f["targets"] = {str(n): int(v) for n, v in {"1": 3, "2": 2, "3": 1, "4": 1, **f.get("targets", {})}.items()}
+    f["weights"] = {str(n): int(v) for n, v in {"2": DEFAULT_WEIGHT, "3": DEFAULT_WEIGHT, "4": DEFAULT_WEIGHT,
+                                                **f.get("weights", {})}.items()}
+    return f
+
+
+def family_pieces(spec, master_id):
+    """{N: repaint piece} made from this master (the first per size)."""
+    out = {}
+    for p in spec["pieces"]:
+        if p.get("method") == "repaint" and p.get("from") == master_id and not p.get("retired"):
+            out.setdefault(atlas_n(p), p)
+    return out
+
+
+def master_rel(name, master_id):
+    appr = state(name)["pieces"].get(master_id, {}).get("approved", [])
+    return appr[0] if appr else None
+
+
+def material_prompt(name, master):
+    """What the family is made of: the prompt of the active master candidate, else the master piece's prompt."""
+    rel = master_rel(name, master["id"])
+    meta = state(name)["pieces"].get(master["id"], {}).get("meta", {}).get(rel or "", {})
+    return meta.get("prompt") or master.get("prompt", "")
+
+
+def variant_prompt(material, variation):
+    return f"{material}, {variation}" if variation.strip() else material
+
+
+def ensure_variant_piece(name, master_id, N):
+    """The family's repaint piece for NxN blocks (created on first use). Returns its id."""
+    with LOCK:
+        spec = load_set(name)
+        have = family_pieces(spec, master_id)
+        if N in have:
+            return have[N]["id"]
+        master = piece_of(spec, master_id)
+        pid = f"{master_id}_v{N}"
+        target = family_settings(master)["targets"].get(str(N), 1)
+        upsert_piece(name, {"id": pid, "kind": "tile", "shape": "floor", "method": "repaint", "from": master_id,
+                            "atlas": N, "board": master.get("board", master_id), "variants": max(1, target),
+                            "prompt": master.get("prompt", "")})
+        return pid
+
+
+def star(name, pid, rel, on=True):
+    with LOCK:
+        s = state(name)
+        ps = s["pieces"].setdefault(pid, {"candidates": [], "approved": []})
+        st = ps.setdefault("starred", [])
+        if on and rel not in st:
+            st.append(rel)
+        if not on and rel in st:
+            st.remove(rel)
+        save_state(name, s)
+        return ps
+
+
+def promote(name, pid, rel):
+    """Make one candidate the family's active master (the only approved one)."""
+    with LOCK:
+        s = state(name)
+        ps = s["pieces"].setdefault(pid, {"candidates": [], "approved": []})
+        ps["approved"] = [rel]
+        save_state(name, s)
+        return ps
+
+
+def trial(name, master_id, rel, variation, seed=1):
+    """A quick 1x1 variation repainted from one master candidate (starred or not), to see how a master takes
+    variations before choosing it. Saved under candidates/<master>/trials/, listed in the master's state."""
+    spec = load_set(name)
+    master = piece_of(spec, master_id)
+    meta = state(name)["pieces"].get(master_id, {}).get("meta", {}).get(rel, {})
+    material = meta.get("prompt") or master.get("prompt", "")
+    base = Image.open(set_dir(name) / rel).convert("RGB").resize((MASTER_PX, MASTER_PX), Image.LANCZOS)
+    img = repaint(base, block_mask(1, MASTER_PX, 0.08), floor_texture_prompt(set_style(spec), variant_prompt(material, variation)),
+                  seed, denoise=REPAINT_DENOISE, reference=False)
+    out = set_dir(name) / "candidates" / master_id / "trials"
+    out.mkdir(parents=True, exist_ok=True)
+    f = out / f"t{seed}_{int(time.time())}.png"
+    img.save(f)
+    trel = str(f.relative_to(set_dir(name))).replace("\\", "/")
+    with LOCK:
+        s = state(name)
+        ps = s["pieces"].setdefault(master_id, {"candidates": [], "approved": []})
+        ps.setdefault("trials", {}).setdefault(rel, []).insert(0, {"rel": trel, "variation": variation})
+        save_state(name, s)
+    return trel
+
+
+def fresh_approved(name, master_id, pid):
+    """Approved variants of a family piece that were made from the active master (others are stale: their edges
+    are the old master's, or unknown for variants made before this was recorded)."""
+    active, ps = master_rel(name, master_id), state(name)["pieces"].get(pid, {})
+    return [r for r in ps.get("approved", []) if ps.get("meta", {}).get(r, {}).get("master") == active]
+
+
+def fill_jobs(name, master_id, sizes=None):
+    """Generation jobs that bring each size up to its target: one candidate per missing variant, each with the next
+    variation phrase and a fresh seed. Creates the size's repaint piece on first use."""
+    import random
+    spec = load_set(name)
+    master = piece_of(spec, master_id)
+    if not master_rel(name, master_id):
+        raise ValueError(f"pick the active master of {master_id} first (Use as master)")
+    fam = family_settings(master)
+    material, variations = material_prompt(name, master), [v for v in fam["variations"] if v.strip()] or [""]
+    jobs, s = [], state(name)
+    for N in sizes or FAMILY_SIZES:
+        want = fam["targets"].get(str(N), 0)
+        if N == 1:
+            want -= 1  # the master itself is a 1x1 tile of the family
+        if want <= 0:
+            continue
+        pid = ensure_variant_piece(name, master_id, N)
+        ps = s["pieces"].get(pid, {})
+        missing = want - len(fresh_approved(name, master_id, pid))
+        k0 = len(ps.get("candidates", []))
+        for k in range(max(0, missing)):
+            jobs.append({"set": name, "piece": pid, "n": 1, "seed": random.randint(1, 99999),
+                         "prompt": variant_prompt(material, variations[(k0 + k) % len(variations)])})
+    return jobs
+
+
+def family_tiles(name, spec, master_id):
+    """{N: [top-down squares]}: the active master and the approved variants of each size."""
+    s = state(name)["pieces"]
+    rel = master_rel(name, master_id)
+    out = {1: [Image.open(set_dir(name) / rel).convert("RGB")]} if rel else {}
+    for N, p in family_pieces(spec, master_id).items():
+        for r in s.get(p["id"], {}).get("approved", []):
+            out.setdefault(N, []).append(Image.open(set_dir(name) / r).convert("RGB"))
+    return out
+
+
+def family_preview(name, master_id, seed=0, outline=False, view="iso", W=14, H=10, per=64):
+    """A W x H floor laid out by the planner from the family (same rules and weights as the game), top-down or iso.
+    `outline` draws the blocks (white 1x1, blue 2x2, yellow 3x3, red 4x4)."""
+    from PIL import ImageDraw
+    spec = load_set(name)
+    master = piece_of(spec, master_id)
+    tiles = family_tiles(name, spec, master_id)
+    if not tiles:
+        raise ValueError("no active master yet")
+    weights = {int(k): v for k, v in family_settings(master)["weights"].items()}
+    holes = {(W // 3, H // 3), (2 * W // 3, H // 3), (W // 3, 2 * H // 3), (2 * W // 3, 2 * H // 3)}
+    cells = [(x, y) for y in range(H) for x in range(W) if (x, y) not in holes]
+    plan = plan_floor_blocks(cells, sorted(tiles), _fnv_str(master.get("board", master_id)) + seed, weights)
+    top = Image.new("RGB", (W * per, H * per), (24, 20, 30))
+    blocks = sorted(set(plan.values()))
+    for bx, by, n in blocks:
+        imgs = tiles[n]
+        top.paste(imgs[_fnv((bx, by, seed)) % len(imgs)].resize((n * per, n * per), Image.LANCZOS), (bx * per, by * per))
+    if outline:
+        dr = ImageDraw.Draw(top)
+        colour = {1: (255, 255, 255), 2: (90, 200, 255), 3: (255, 200, 60), 4: (255, 90, 120)}
+        for bx, by, n in blocks:
+            dr.rectangle([bx * per + 1, by * per + 1, (bx + n) * per - 2, (by + n) * per - 2],
+                         outline=colour.get(n, (200, 200, 200)), width=3 if n > 1 else 1)
+    if view != "iso":
+        return top
+    a = per // 2  # iso: the top-down squares warped onto the 2:1 diamond grid (what cutting does per cell)
+    X0, k = H * a, per / a
+    return top.transform(((W + H) * a, (W + H) * a // 2), Image.AFFINE,
+                         (k / 2, k, -X0 * k / 2, -k / 2, k, X0 * k / 2), Image.BICUBIC, fillcolor=(24, 20, 30))
+
 
 # ----------------------------------------------------------------------------- floor blocks (mixed atlas sizes)
 # Same rules and hash as the game's FloorBlocks.cs (Presentation/Board), so the room preview matches the board.
@@ -1314,9 +1504,9 @@ def _fnv_str(s):
     return h
 
 
-def plan_floor_blocks(cells, sizes, seed):
+def plan_floor_blocks(cells, sizes, seed, weights=None):
     """{(x, y): (block x, block y, size)}: square blocks of the given sizes (plus 1x1) over the cells. Greedy in
-    scan order, largest size first, skipping a size at ~30% of anchors for variety."""
+    scan order, largest size first; at each anchor a size that fits is used with `weights[size]` % (default 70)."""
     floor = set(cells)
     big = sorted({s for s in sizes if s > 1}, reverse=True)
     plan = {}
@@ -1325,7 +1515,7 @@ def plan_floor_blocks(cells, sizes, seed):
             continue
         size = 1
         for s in big:
-            if (_fnv((x, y, (seed + s) & 0xFFFFFFFF)) % 100 >= FLOOR_SKIP_PERCENT
+            if (_fnv((x, y, (seed + s) & 0xFFFFFFFF)) % 100 >= 100 - (weights or {}).get(s, 100 - FLOOR_SKIP_PERCENT)
                     and all((x + dx, y + dy) in floor and (x + dx, y + dy) not in plan
                             for dy in range(s) for dx in range(s))):
                 size = s
@@ -1392,8 +1582,10 @@ def room_preview(name, tile=None, scale=3, include=None):
     main = roles["."]
     atlas_vs = [v for v in variants(main) if layout(v[0]) == "atlas"]
     singles = [v for v in variants(main) if layout(v[0]) != "atlas"]
+    mp = next((p for p in spec["pieces"] if p.get("method") == "master" and p.get("board", p["id"]) == main), None)
     plan = plan_floor_blocks([(x, y) for y in range(rows) for x in range(cols) if main and floor_key(x, y) == main],
-                             [1] + [int(v[0].get("atlas", 4)) for v in atlas_vs], _fnv_str(main or "")) if atlas_vs else {}
+                             [1] + [int(v[0].get("atlas", 4)) for v in atlas_vs], _fnv_str(main or ""),
+                             {int(k): v for k, v in family_settings(mp)["weights"].items()} if mp else None) if atlas_vs else {}
 
     for y in range(rows):
         for x in range(cols):

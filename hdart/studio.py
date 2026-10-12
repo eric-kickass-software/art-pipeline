@@ -154,6 +154,8 @@ class Jobs:
                                                 float(a["denoise"]) if a.get("denoise") not in (None, "") else None,
                                                 a.get("prompt") or None,
                                                 float(a["lora"]) if a.get("lora") not in (None, "") else None)
+                elif job["kind"] == "dun_trial":
+                    job["result"] = dg.trial(a["set"], a["piece"], a["rel"], a.get("variation", ""), int(a.get("seed", 1)))
                 elif job["kind"] == "dun_capture":
                     job["result"] = dg.capture(a["set"])
                 elif job["kind"] == "base":
@@ -252,6 +254,17 @@ def dungeon_post(action, b):
         return {"piece": dg.approve(name, b["piece"], b["rel"], bool(b.get("on", True)))}
     if action == "discard":
         return {"piece": dg.discard(name, b["piece"], b["rel"])}
+    if action == "star":
+        return {"piece": dg.star(name, b["piece"], b["rel"], bool(b.get("on", True)))}
+    if action == "promote":
+        return {"piece": dg.promote(name, b["piece"], b["rel"])}
+    if action == "trial":
+        job = JOBS.add("dun_trial", b, f"{name} · {b['piece']} trial: {b.get('variation', '')[:30]}")
+        return {"job": job["id"]}
+    if action == "family/fill":
+        jobs = dg.fill_jobs(name, b["piece"], b.get("sizes"))
+        ids = [JOBS.add("dun", j, f"{name} · {j['piece']} ×1")["id"] for j in jobs]
+        return {"jobs": ids, "spec": dg.load_set(name)}
     if action == "archive_unapproved":
         ps, n = dg.archive_unapproved(name, b["piece"])
         return {"piece": ps, "count": n}
@@ -283,9 +296,16 @@ def dungeon_get(path, q):
         return "application/json", json.dumps({"sets": dg.list_sets(), "spec": spec, "state": dg.state(name),
                                                "orphans": dg.orphans(name),
                                                "output_tile": dg.output_tile(spec), "pixel_steps": dg.pixel_steps(spec),
+                                               "families": {p["id"]: {"settings": dg.family_settings(p),
+                                                                      "pieces": {n: q["id"] for n, q in dg.family_pieces(spec, p["id"]).items()},
+                                                                      "material": dg.material_prompt(name, p)}
+                                                            for p in spec["pieces"] if p.get("method") == "master"},
                                                "style": dg.style(), "set_style": dg.set_style(spec)["groups"]}).encode()
     if path == "sets":
         return "application/json", json.dumps(dg.list_sets()).encode()
+    if path == "family":  # planner-laid floor from a family (iso or top-down, optional block outlines)
+        return "image/png", dg.png_bytes(dg.family_preview(name, g("piece"), int(g("seed", 0)), g("outline") == "1",
+                                                           g("view", "iso")))
     if path == "seam":  # master / repaint candidate among master tiles
         return "image/png", dg.png_bytes(dg.seam_preview(name, g("piece"), g("rel")))
     if path == "img":  # raw 8x candidate
