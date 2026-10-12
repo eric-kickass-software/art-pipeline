@@ -594,7 +594,8 @@ function renderFamily() {
   $("#familyView").innerHTML = `
     <h2 style="margin-top:0">${esc(FAM)} <span class="hint">· ${wall
       ? "wall family: one front-view elevation (3 units tall, repeats every tile), wall variations per run length and doors repainted from it, then built onto every wall piece"
-      : "floor family: one seamless master, variants repainted from it (they share its edges)"}</span></h2>
+      : "floor family: one seamless master, variants repainted from it (they share its edges)"}</span>
+      <button id="famDelete" class="danger" style="float:right" title="Remove this family and all its pieces from the set; their images move to archive/families/">Delete family</button></h2>
     <h3>Layout template <span class="hint">a repeating layout at a known scale: masters start from it (FLUX keeps the layout and paints the surface), and the preview's blockout shows it before anything is generated</span></h3>
     <div class="tplrow"><img id="tplImg" alt="" title="the template, 2 tiles"><div id="tplForm" class="tplform"></div></div>
     <h3>1 · Masters <span class="hint">prompt versions × seeds, judged tiled 3×3. Click a master to inspect, ★, use, edit or rescale it.</span></h3>
@@ -626,6 +627,7 @@ function renderFamily() {
   renderFamPrompts();
   renderTemplateForm();
   $("#famAddVer").onclick = () => { famSet().prompts.push(famSet().prompts[famSet().prompts.length - 1] || ""); renderFamPrompts(); saveFamily(); };
+  $("#famDelete").onclick = deleteFamily;
   $("#famGenMasters").onclick = generateMasters;
   $("#famTrialBtn").onclick = testVariation;
   $("#famAddVar").onclick = () => { famSet().variations.push({id: "v" + Date.now().toString(36), text: ""}); renderFamMatrix(); saveFamily();
@@ -640,6 +642,18 @@ function renderFamily() {
     $("#famDoorW").onchange = $("#famDoorH").onchange = () => { famSet().door_width = +$("#famDoorW").value; famSet().door_height = +$("#famDoorH").value; saveFamily(); };
   }
   renderFamilyDynamic(false);
+}
+
+async function deleteFamily() {
+  const ids = D.spec.pieces.filter(p => p.id === FAM || p.from === FAM || p.built_from === FAM).map(p => p.id);
+  const imgs = ids.reduce((n, id) => n + new Set([...(D.state.pieces[id]?.candidates || []), ...(D.state.pieces[id]?.approved || [])]).size, 0);
+  if (!confirm(`Delete the family ${FAM}? Its ${ids.length} pieces leave the set and their ${imgs} images move to ` +
+               `archive/families/ (delete that folder by hand once you're sure). Anything exported to Unity stays until the next export.`)) return;
+  try {
+    const r = await post("family/archive", {piece: FAM});
+    notice(`Deleted ${FAM} → ${r.path}`);
+    FAM = null; await load();
+  } catch (e) { notice(e.message); }
 }
 
 function renderFamilyDynamic(keepView = true) {

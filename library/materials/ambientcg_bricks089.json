@@ -1,0 +1,35 @@
+{
+  "id": "ambientcg_bricks089",
+  "name": "Bricks 089",
+  "source": "ambientcg",
+  "asset": "Bricks089",
+  "license": "CC0",
+  "url": "https://ambientcg.com/view?id=Bricks089",
+  "tags": [
+    "brick",
+    "bricks",
+    "dark",
+    "gray",
+    "medieval",
+    "random",
+    "stone",
+    "wall"
+  ],
+  "descriptors": "brick, bricks, dark, gray, medieval, random, stone, wall",
+  "size_m": [
+    2.2,
+    1.1
+  ],
+  "palette": {
+    "stones": [
+      "#716b4d",
+      "#5f5a42",
+      "#8a815e",
+      "#ad9f77"
+    ],
+    "mortar": "#908562",
+    "variation": 0.06
+  },
+  "repeats": 1,
+  "imported": "2026-10-12"
+}

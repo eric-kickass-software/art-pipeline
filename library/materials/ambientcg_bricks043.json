@@ -1,0 +1,31 @@
+{
+  "id": "ambientcg_bricks043",
+  "name": "Bricks 043",
+  "source": "ambientcg",
+  "asset": "Bricks043",
+  "license": "CC0",
+  "url": "https://ambientcg.com/view?id=Bricks043",
+  "tags": [
+    "beige",
+    "brick",
+    "bricks",
+    "mortar",
+    "sloppy",
+    "stone",
+    "wall"
+  ],
+  "descriptors": "beige, brick, bricks, mortar, sloppy, stone, wall",
+  "size_m": null,
+  "palette": {
+    "stones": [
+      "#716c64",
+      "#89837a",
+      "#46453f",
+      "#aaa69c"
+    ],
+    "mortar": "#5e5647",
+    "variation": 0.06
+  },
+  "repeats": 1,
+  "imported": "2026-10-12"
+}

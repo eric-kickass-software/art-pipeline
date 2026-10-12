@@ -297,6 +297,8 @@ def dungeon_post(action, b):
     if action == "orphan/archive":
         dg.archive_orphan(name, b["piece"])
         return {"ok": True}
+    if action == "family/archive":  # delete a family: pieces out of the spec, images to archive/families/
+        return {"path": str(dg.archive_family(name, b["piece"]))}
     if action == "set/archive":
         return {"path": str(dg.archive_set(name)), "sets": dg.list_sets()}
     if action == "export":

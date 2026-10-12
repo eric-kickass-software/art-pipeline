@@ -9,6 +9,7 @@ matching Prototype V's placeholders).
 """
 import json
 import math
+import re
 import shutil
 import time
 from pathlib import Path
@@ -1283,6 +1284,52 @@ def archive_set(name):
         if set_dir(name).exists():
             shutil.move(str(set_dir(name)), str(dst / "sprites"))
         return dst
+
+
+def family_members(spec, master_id):
+    """Every piece of a family, retired ones included: the master, its repaints, wall variations, doors and the wall
+    pieces built from it."""
+    return [p["id"] for p in spec["pieces"]
+            if p["id"] == master_id or p.get("from") == master_id or p.get("built_from") == master_id]
+
+
+def archive_family(name, master_id):
+    """Remove a family from the set: its pieces leave the spec and their whole image folders (candidates, trials,
+    blockouts) and state move to archive/families/<set>_<master>_<stamp>/, with family.json holding the piece specs
+    and state so it can be put back by hand. Wall pieces its builds retired come back when no other wall family is
+    built on those boards. Its Unity export, if any, stays until the next export. Returns the archive folder."""
+    with LOCK:
+        spec = load_set(name)
+        master = piece_of(spec, master_id)
+        if master.get("method") not in ("master", "wall_master"):
+            raise ValueError(f"{master_id} is not a family master")
+        ids = family_members(spec, master_id)
+        boards = set(wall_family_settings(master, spec)["boards"].values()) if master["method"] == "wall_master" else set()
+        dst = ARCHIVE / "families" / f"{name}_{_slug_id(master_id)}_{_stamp()}"
+        dst.mkdir(parents=True)
+        s = state(name)
+        (dst / "family.json").write_text(json.dumps({
+            "set": name, "master": master_id, "pieces": [p for p in spec["pieces"] if p["id"] in ids],
+            "state": {pid: s["pieces"][pid] for pid in ids if pid in s["pieces"]}}, indent=2), encoding="utf-8")
+        for pid in ids:
+            src = set_dir(name) / "candidates" / pid
+            if src.exists():
+                shutil.move(str(src), str(dst / "candidates" / pid))
+            s["pieces"].pop(pid, None)
+        save_state(name, s)
+        spec["pieces"] = [p for p in spec["pieces"] if p["id"] not in ids]
+        if boards:  # older walls on its boards were retired by its builds: bring them back unless another family builds there
+            built = {p.get("board", p["id"]) for p in spec["pieces"] if p.get("built_from") and not p.get("retired")}
+            for p in spec["pieces"]:
+                if p.get("retired") and not p.get("built_from") and p.get("board", p["id"]) in boards - built:
+                    p.pop("retired")
+        save_set(name, spec)
+        _CELL_CACHE.clear()
+        return dst
+
+
+def _slug_id(pid):
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", pid)
 
 
 def candidate_path(name, rel):

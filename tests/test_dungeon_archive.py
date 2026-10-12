@@ -38,6 +38,24 @@ def bump(i): d.approve("zz", "tile.zz_floor_moss", f"candidates/tile.zz_floor_mo
 ts = [threading.Thread(target=bump, args=(i,)) for i in range(40)]; [t.start() for t in ts]; [t.join() for t in ts]
 json.loads((d.set_dir("zz") / "state.json").read_text())
 assert len(list((d.ARCHIVE / "history/zz").glob("*.json"))) == 2
+# delete a family: master + its repaints + built walls leave the spec, folders go to archive/families/, retired walls return
+d.upsert_piece("zz", {"id": "tile.zz_fm", "kind": "tile", "shape": "floor", "method": "master", "variants": 1})
+d.upsert_piece("zz", {"id": "tile.zz_fm_2x2", "kind": "tile", "shape": "floor", "method": "repaint", "from": "tile.zz_fm", "atlas": 2})
+d.upsert_piece("zz", {"id": "tile.zz_other", "kind": "tile", "shape": "floor", "method": "repaint", "from": "tile.zz_x"})
+fake("zz", "tile.zz_fm", 2); fake("zz", "tile.zz_fm_2x2", 1); fake("zz", "tile.zz_other", 1)
+assert d.family_members(d.load_set("zz"), "tile.zz_fm") == ["tile.zz_fm", "tile.zz_fm_2x2"]
+dst = d.archive_family("zz", "tile.zz_fm"); ids = {p["id"] for p in d.load_set("zz")["pieces"]}; st = d.state("zz")["pieces"]
+assert "tile.zz_fm" not in ids and "tile.zz_fm_2x2" not in ids and "tile.zz_other" in ids and "tile.zz_fm" not in st and "tile.zz_other" in st
+assert (dst / "candidates/tile.zz_fm/s1_1.png").exists() and (dst / "candidates/tile.zz_fm_2x2/s0_1.npy").exists()
+assert not (d.set_dir("zz") / "candidates/tile.zz_fm").exists() and (d.set_dir("zz") / "candidates/tile.zz_other").exists()
+fam = json.loads((dst / "family.json").read_text()); assert len(fam["pieces"]) == 2 and set(fam["state"]) == {"tile.zz_fm", "tile.zz_fm_2x2"}
+d.upsert_piece("zz", {"id": "tile.zz_wm", "kind": "elevation", "shape": "elevation", "method": "wall_master", "variants": 1, "family": {"boards": {"wall": "tile.zz_w", "post": "tile.zz_p", "door": "tile.zz_d"}}})
+d.upsert_piece("zz", {"id": "tile.zz_w", "kind": "tile", "shape": "run", "length": 1, "retired": True})
+d.upsert_piece("zz", {"id": "tile.zz_wm_run1", "kind": "tile", "shape": "run", "length": 1, "board": "tile.zz_w", "from": "tile.zz_wm", "built_from": "tile.zz_wm"})
+d.archive_family("zz", "tile.zz_wm"); sp = d.load_set("zz")
+assert not d.piece_of(sp, "tile.zz_w").get("retired") and not any(p["id"].startswith("tile.zz_wm") for p in sp["pieces"])
+try: d.archive_family("zz", "tile.zz_other"); raise SystemExit("no error")
+except ValueError: pass
 dst = d.archive_set("zz"); assert (dst / "spec.json").exists() and (dst / "sprites/state.json").exists() and "zz" not in d.list_sets()
 try: piece = d.piece_of({"id": "x", "pieces": []}, "nope"); raise SystemExit("no error")
 except KeyError as e: assert "not in set x" in str(e)

@@ -1,0 +1,42 @@
+{
+  "id": "polyhaven_large_square_pattern_01",
+  "name": "Large Square Pattern 01",
+  "source": "polyhaven",
+  "asset": "large_square_pattern_01",
+  "license": "CC0",
+  "url": "https://polyhaven.com/a/large_square_pattern_01",
+  "tags": [
+    "clean",
+    "concrete",
+    "concrete blocks",
+    "concrete pavers",
+    "even",
+    "floor",
+    "grid",
+    "grid pattern",
+    "large",
+    "man made",
+    "moss",
+    "outdoor",
+    "tiles",
+    "urban",
+    "urban design"
+  ],
+  "descriptors": "clean, concrete, concrete blocks, concrete pavers, even, floor, grid, grid pattern",
+  "size_m": [
+    3,
+    3
+  ],
+  "palette": {
+    "stones": [
+      "#7a766d",
+      "#807d73",
+      "#88847b",
+      "#635a3e"
+    ],
+    "mortar": "#6f6751",
+    "variation": 0.06
+  },
+  "repeats": 1,
+  "imported": "2026-10-12"
+}

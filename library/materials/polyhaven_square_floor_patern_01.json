@@ -1,0 +1,37 @@
+{
+  "id": "polyhaven_square_floor_patern_01",
+  "name": "Square Floor Patern 01",
+  "source": "polyhaven",
+  "asset": "square_floor_patern_01",
+  "license": "CC0",
+  "url": "https://polyhaven.com/a/square_floor_patern_01",
+  "tags": [
+    "clean",
+    "floor",
+    "man made",
+    "outdoor",
+    "pattern",
+    "regular",
+    "road",
+    "square",
+    "tiles",
+    "uneven"
+  ],
+  "descriptors": "clean, floor, man made, outdoor, pattern, regular, road, square",
+  "size_m": [
+    3.000000238418579,
+    3.000000238418579
+  ],
+  "palette": {
+    "stones": [
+      "#746f64",
+      "#7c776c",
+      "#6b6759",
+      "#655e4b"
+    ],
+    "mortar": "#69604d",
+    "variation": 0.06
+  },
+  "repeats": 1,
+  "imported": "2026-10-12"
+}

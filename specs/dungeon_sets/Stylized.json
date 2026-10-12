@@ -459,10 +459,10 @@
       "shape": "elevation",
       "method": "wall_master",
       "variants": 1,
-      "prompt": "pale grey large stone wall with dark mortar, sharp crisp lines, flat stone cap along the top, dungeon wall",
+      "prompt": "pale grey large stone wall with dark mortar, sharp crisp lines, flat stone cap along the top, dungeon wall, bricks 043, beige, brick, bricks, mortar, sloppy, stone, wall",
       "family": {
         "prompts": [
-          "pale grey large stone wall with dark mortar, sharp crisp lines, flat stone cap along the top, dungeon wall"
+          "pale grey large stone wall with dark mortar, sharp crisp lines, flat stone cap along the top, dungeon wall, bricks 043, beige, brick, bricks, mortar, sloppy, stone, wall"
         ],
         "variations": [
           {
@@ -502,6 +502,13 @@
           "4": 70
         },
         "palette_lock": true,
+        "template": {
+          "pattern": "image",
+          "material": "ambientcg_bricks043",
+          "repeats": 1,
+          "strength": 0.65,
+          "seed": 1
+        },
         "doors": [
           {
             "id": "d1",
@@ -646,6 +653,109 @@
       "thickness": 0.25,
       "board": "tile.crypt_wall",
       "built_from": "tile.Stylized_stone_wall_master"
+    },
+    {
+      "id": "tile.Stylized_bricks_089_master",
+      "kind": "tile",
+      "shape": "floor",
+      "method": "master",
+      "board": "tile.crypt_floor",
+      "variants": 1,
+      "prompt": "pale grey stone tile with dark mortar, stylized, pixar, bold straight lines, square, clay render, nonrepeating, seamless",
+      "family": {
+        "prompts": [
+          "pale grey stone tile with dark mortar, stylized, pixar, bold straight lines, square, clay render, nonrepeating, seamless"
+        ],
+        "variations": [
+          {
+            "id": "v1",
+            "text": "one large crack running across"
+          },
+          {
+            "id": "v2",
+            "text": "moss growing in the joints"
+          },
+          {
+            "id": "v3",
+            "text": "a few sunken and chipped stones"
+          },
+          {
+            "id": "v4",
+            "text": "a shallow puddle"
+          },
+          {
+            "id": "v5",
+            "text": "scattered dust and small rubble"
+          },
+          {
+            "id": "v6",
+            "text": "a worn, smoother patch"
+          }
+        ],
+        "sizes": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "weights": {
+          "2": 70,
+          "3": 70,
+          "4": 70
+        },
+        "palette_lock": true,
+        "template": {
+          "pattern": "image",
+          "material": "ambientcg_bricks089",
+          "repeats": 1,
+          "strength": 0.3,
+          "seed": 1
+        }
+      }
+    },
+    {
+      "id": "tile.Stylized_bricks_089_master_v1",
+      "kind": "tile",
+      "shape": "floor",
+      "method": "repaint",
+      "from": "tile.Stylized_bricks_089_master",
+      "atlas": 1,
+      "board": "tile.crypt_floor",
+      "variants": 3,
+      "prompt": "pale grey stone tile with dark mortar, stylized, pixar, bold straight lines, square, clay render, nonrepeating, seamless"
+    },
+    {
+      "id": "tile.Stylized_bricks_089_master_v2",
+      "kind": "tile",
+      "shape": "floor",
+      "method": "repaint",
+      "from": "tile.Stylized_bricks_089_master",
+      "atlas": 2,
+      "board": "tile.crypt_floor",
+      "variants": 2,
+      "prompt": "pale grey stone tile with dark mortar, stylized, pixar, bold straight lines, square, clay render, nonrepeating, seamless"
+    },
+    {
+      "id": "tile.Stylized_bricks_089_master_v3",
+      "kind": "tile",
+      "shape": "floor",
+      "method": "repaint",
+      "from": "tile.Stylized_bricks_089_master",
+      "atlas": 3,
+      "board": "tile.crypt_floor",
+      "variants": 1,
+      "prompt": "pale grey stone tile with dark mortar, stylized, pixar, bold straight lines, square, clay render, nonrepeating, seamless"
+    },
+    {
+      "id": "tile.Stylized_bricks_089_master_v4",
+      "kind": "tile",
+      "shape": "floor",
+      "method": "repaint",
+      "from": "tile.Stylized_bricks_089_master",
+      "atlas": 4,
+      "board": "tile.crypt_floor",
+      "variants": 1,
+      "prompt": "pale grey stone tile with dark mortar, stylized, pixar, bold straight lines, square, clay render, nonrepeating, seamless"
     }
   ],
   "harmonize": 0.1,

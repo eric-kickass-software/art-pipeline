@@ -210,6 +210,7 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
   export follow it. Tests: `tests/test_harmonize.py`.
 - **Removing things = archiving** (nothing is deleted; `archive/` is git-ignored, empty it by hand when sure):
   - ✕ on a candidate, **Archive unapproved**, and **Remove piece** move images to `archive/dungeon/<set>/` (same relative paths).
+  - **Delete family** (family board header) removes the master and every piece made from it (repaints, wall variations, doors, built walls) from the spec; their image folders and state go to `archive/families/<set>_<master>_<stamp>/` with a `family.json` to restore by hand. Older walls its builds retired come back unless another family builds on those boards.
   - **Archive set** moves the spec, images and state to `archive/sets/<set>_<stamp>/`. A Unity export stays in the project.
   - Every spec save keeps the previous version in `archive/history/<set>/` (last 40).
   - Pieces with images that aren't in the spec show under **Not in set** in the list, with Restore / Archive.

@@ -1,0 +1,44 @@
+{
+  "id": "polyhaven_mossy_stone_wall",
+  "name": "Mossy Stone Wall",
+  "source": "polyhaven",
+  "asset": "mossy_stone_wall",
+  "license": "CC0",
+  "url": "https://polyhaven.com/a/mossy_stone_wall",
+  "tags": [
+    "aged",
+    "concrete",
+    "dilapidated",
+    "discolored",
+    "dungeon",
+    "exterior",
+    "man made",
+    "moss",
+    "mosscovered",
+    "outdoor",
+    "rock",
+    "stonework",
+    "uneven",
+    "wall",
+    "weatherbeaten",
+    "weathered",
+    "worn"
+  ],
+  "descriptors": "aged, concrete, dilapidated, discolored, dungeon, exterior, man made, moss",
+  "size_m": [
+    1.9999996423721313,
+    1.9999996423721313
+  ],
+  "palette": {
+    "stones": [
+      "#423926",
+      "#352e17",
+      "#70624f",
+      "#554a37"
+    ],
+    "mortar": "#635744",
+    "variation": 0.06
+  },
+  "repeats": 1,
+  "imported": "2026-10-12"
+}
