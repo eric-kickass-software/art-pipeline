@@ -126,10 +126,14 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
   1. **Masters:** prompt versions (A, B, …) × seeds → cards tiled 3×3, grouped by version. ★ to compare,
      **Use as master** (= the only approved one), ✕ archives. **Variation test** repaints a 1×1 of a phrase from every
      ★ master (`trial`, saved under `candidates/<master>/trials/`) to see how each master takes variations.
-  2. **Variants:** **Fill** / **Fill family** queues one candidate per missing variant (prompt = the active master's
-     prompt + the next variation phrase). Variants record their master (`meta.master`): switching masters marks the
-     old ones **stale** (dashed); only fresh approvals count toward targets, so Fill replaces them.
-  3. **Preview:** the planner's floor from the approved family (`/api/dun/family`), iso or top-down, outlines, re-roll.
+  2. **Variations matrix:** rows = variation entries (`family.variations`: `{id, text}`; **+ variation**, ✕ removes
+     the row, its images stay as "untagged"), columns = sizes (tick to enable, weight slider). ▶ on a row = that
+     variation at every ticked size, ▶ on a column = that size for every variation, **Generate all** = everything
+     (× "per cell"). Prompt = the active master's prompt + the variation text; candidates are tagged
+     `meta.variation` (and `meta.master`: switching masters marks old ones **stale**, dashed). Click = approve.
+  3. **Live preview:** a canvas drawing the planner's layout (`family_layout`) with the cut sprites the export ships
+     (`/api/dun/cell`, cached in `locks.CELLS`; Pixelate/Harmonize applied, point filtering when pixelated). Drag to
+     pan, wheel to zoom at the cursor, double-click / fit, full screen (Esc), board size, re-roll, block outlines.
   Size weights (% of anchors where a size that fits is used, default 70) feed the room preview and the export
   (`blockWeights` in set.json, read by the game's FloorBlocks).
 - **Group boards:** click a group header in the piece list (FLOORS ▸, WALLS & DOORS ▸, ...) for every piece of that

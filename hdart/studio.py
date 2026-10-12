@@ -153,7 +153,8 @@ class Jobs:
                     job["result"] = dg.generate(a["set"], a["piece"], int(a.get("n", 3)), int(a.get("seed", 1)),
                                                 float(a["denoise"]) if a.get("denoise") not in (None, "") else None,
                                                 a.get("prompt") or None,
-                                                float(a["lora"]) if a.get("lora") not in (None, "") else None)
+                                                float(a["lora"]) if a.get("lora") not in (None, "") else None,
+                                                a.get("variation"))
                 elif job["kind"] == "dun_trial":
                     job["result"] = dg.trial(a["set"], a["piece"], a["rel"], a.get("variation", ""), int(a.get("seed", 1)))
                 elif job["kind"] == "dun_capture":
@@ -261,9 +262,9 @@ def dungeon_post(action, b):
     if action == "trial":
         job = JOBS.add("dun_trial", b, f"{name} · {b['piece']} trial: {b.get('variation', '')[:30]}")
         return {"job": job["id"]}
-    if action == "family/fill":
-        jobs = dg.fill_jobs(name, b["piece"], b.get("sizes"))
-        ids = [JOBS.add("dun", j, f"{name} · {j['piece']} ×1")["id"] for j in jobs]
+    if action == "family/generate":  # variations x sizes x n
+        jobs = dg.variant_jobs(name, b["piece"], b.get("variations"), b.get("sizes"), int(b.get("n", 1)))
+        ids = [JOBS.add("dun", j, f"{name} · {j['piece']} · {j['variation']}")["id"] for j in jobs]
         return {"jobs": ids, "spec": dg.load_set(name)}
     if action == "archive_unapproved":
         ps, n = dg.archive_unapproved(name, b["piece"])
@@ -303,6 +304,11 @@ def dungeon_get(path, q):
                                                "style": dg.style(), "set_style": dg.set_style(spec)["groups"]}).encode()
     if path == "sets":
         return "application/json", json.dumps(dg.list_sets()).encode()
+    if path == "family_layout":  # live preview: which sprite goes where
+        return "application/json", json.dumps(dg.family_layout(name, g("piece"), int(g("seed", 0)),
+                                                               int(g("w", 16)), int(g("h", 12)))).encode()
+    if path == "cell":  # one cut sprite (cached)
+        return "image/png", dg.cell_png(name, g("piece"), g("rel"), g("suf", ""))
     if path == "family":  # planner-laid floor from a family (iso or top-down, optional block outlines)
         return "image/png", dg.png_bytes(dg.family_preview(name, g("piece"), int(g("seed", 0)), g("outline") == "1",
                                                            g("view", "iso")))

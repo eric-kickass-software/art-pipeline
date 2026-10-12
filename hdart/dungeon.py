@@ -17,7 +17,7 @@ import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
 from . import ai_kit, comfy, iso
-from .locks import DUNGEON as LOCK, HARMONY as _REF_CACHE
+from .locks import CELLS as _CELL_CACHE, DUNGEON as LOCK, HARMONY as _REF_CACHE
 from .paths import REPO
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -553,7 +553,7 @@ def piece_of(spec, pid):
     return p
 
 
-def generate(name, pid, n=3, seed=1, denoise=None, prompt=None, lora=None):
+def generate(name, pid, n=3, seed=1, denoise=None, prompt=None, lora=None, variation=None):
     """n candidates for one piece. Returns relative paths (under sprites/dungeon/<set>/)."""
     spec = load_set(name)
     piece = resolved(spec, pid)
@@ -599,6 +599,8 @@ def generate(name, pid, n=3, seed=1, denoise=None, prompt=None, lora=None):
                      "on_base": base is not None}
         if piece.get("method") == "repaint":  # which master it was made from (switching masters makes it stale)
             meta[rel]["master"] = master_rel(name, piece.get("from"))
+        if variation:  # floor family: the variation entry it was made for
+            meta[rel]["variation"] = variation
     with LOCK:  # re-read: approvals and archiving may have happened while this was generating
         s = state(name)
         ps = s["pieces"].setdefault(pid, {"candidates": [], "approved": []})
@@ -1311,6 +1313,9 @@ def family_settings(master):
     f = dict(master.get("family") or {})
     f.setdefault("prompts", [master.get("prompt", "")])
     f.setdefault("variations", list(DEFAULT_VARIATIONS))
+    # entries {id, text}: the id tags the candidates made from it (meta.variation), so renaming keeps them together
+    f["variations"] = [v if isinstance(v, dict) else {"id": f"v{i + 1}", "text": v} for i, v in enumerate(f["variations"])]
+    f["sizes"] = [int(n) for n in f.get("sizes", FAMILY_SIZES)]
     f["targets"] = {str(n): int(v) for n, v in {"1": 3, "2": 2, "3": 1, "4": 1, **f.get("targets", {})}.items()}
     f["weights"] = {str(n): int(v) for n, v in {"2": DEFAULT_WEIGHT, "3": DEFAULT_WEIGHT, "4": DEFAULT_WEIGHT,
                                                 **f.get("weights", {})}.items()}
@@ -1411,31 +1416,64 @@ def fresh_approved(name, master_id, pid):
     return [r for r in ps.get("approved", []) if ps.get("meta", {}).get(r, {}).get("master") == active]
 
 
-def fill_jobs(name, master_id, sizes=None):
-    """Generation jobs that bring each size up to its target: one candidate per missing variant, each with the next
-    variation phrase and a fresh seed. Creates the size's repaint piece on first use."""
+def variant_jobs(name, master_id, var_ids=None, sizes=None, n=1):
+    """Generation jobs for the chosen variations (default all) at the chosen sizes (default the family's enabled
+    sizes), n candidates each: prompt = the active master's prompt + the variation text, tagged with its id."""
     import random
     spec = load_set(name)
     master = piece_of(spec, master_id)
     if not master_rel(name, master_id):
         raise ValueError(f"pick the active master of {master_id} first (Use as master)")
     fam = family_settings(master)
-    material, variations = material_prompt(name, master), [v for v in fam["variations"] if v.strip()] or [""]
-    jobs, s = [], state(name)
-    for N in sizes or FAMILY_SIZES:
-        want = fam["targets"].get(str(N), 0)
-        if N == 1:
-            want -= 1  # the master itself is a 1x1 tile of the family
-        if want <= 0:
-            continue
-        pid = ensure_variant_piece(name, master_id, N)
-        ps = s["pieces"].get(pid, {})
-        missing = want - len(fresh_approved(name, master_id, pid))
-        k0 = len(ps.get("candidates", []))
-        for k in range(max(0, missing)):
-            jobs.append({"set": name, "piece": pid, "n": 1, "seed": random.randint(1, 99999),
-                         "prompt": variant_prompt(material, variations[(k0 + k) % len(variations)])})
+    material = material_prompt(name, master)
+    vs = [v for v in fam["variations"] if (var_ids is None or v["id"] in var_ids) and v["text"].strip()]
+    jobs = []
+    for N in sizes or fam["sizes"]:
+        pid = ensure_variant_piece(name, master_id, int(N))
+        for v in vs:
+            for _ in range(max(1, int(n))):
+                jobs.append({"set": name, "piece": pid, "n": 1, "seed": random.randint(1, 99999),
+                             "prompt": variant_prompt(material, v["text"]), "variation": v["id"]})
     return jobs
+
+
+def family_layout(name, master_id, seed=0, W=16, H=12):
+    """A planner-laid floor for the live preview: each cell's sprite (piece, candidate, cut suffix) at the set's
+    output resolution, from the approved family (the same pieces, weights and rules as the game)."""
+    spec = load_set(name)
+    master = piece_of(spec, master_id)
+    s = state(name)["pieces"]
+    tiles = {}
+    rel = master_rel(name, master_id)
+    if rel:
+        tiles[1] = [(master_id, rel)]
+    for N, p in family_pieces(spec, master_id).items():
+        tiles.setdefault(N, []).extend((p["id"], r) for r in s.get(p["id"], {}).get("approved", []))
+    if not tiles:
+        raise ValueError("no active master yet")
+    holes = {(W // 3, H // 3), (2 * W // 3, H // 3), (W // 3, 2 * H // 3), (2 * W // 3, 2 * H // 3)}
+    cells_ = [(x, y) for y in range(H) for x in range(W) if (x, y) not in holes]
+    weights = {int(k): v for k, v in family_settings(master)["weights"].items()}
+    plan = plan_floor_blocks(cells_, sorted(tiles), (_fnv_str(master.get("board", master_id)) + seed) & 0xFFFFFFFF, weights)
+    out = []
+    for (x, y), (bx, by, n) in sorted(plan.items(), key=lambda kv: (kv[0][0] + kv[0][1], kv[0][0])):
+        pid, r = tiles[n][_fnv((bx, by, seed)) % len(tiles[n])]
+        out.append({"x": x, "y": y, "bx": bx, "by": by, "n": n, "piece": pid, "rel": r,
+                    "suf": f"i{x - bx}j{y - by}" if n > 1 else ""})
+    return {"tile": output_tile(spec), "pixel": bool(spec.get("pixel")), "W": W, "H": H,
+            "holes": sorted(holes), "cells": out}
+
+
+def cell_png(name, pid, rel, suf, tile=None):
+    """One cut sprite as PNG (what the export ships), cached across requests: the live preview asks for many."""
+    spec = load_set(name)
+    tile = tile or output_tile(spec)
+    key = (name, pid, rel, tile, spec.get("pixel"), spec.get("harmonize"))
+    if key not in _CELL_CACHE:
+        if len(_CELL_CACHE) > 64:
+            _CELL_CACHE.clear()
+        _CELL_CACHE[key] = {k: png_bytes(v[0]) for k, v in cells(name, pid, rel, tile).items()}
+    return _CELL_CACHE[key][suf]
 
 
 def family_tiles(name, spec, master_id):

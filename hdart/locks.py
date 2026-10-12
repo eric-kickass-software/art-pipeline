@@ -3,4 +3,5 @@ reloads dungeon.py and friends with importlib.reload on every request, which wou
 import threading
 
 DUNGEON = threading.RLock()  # every read-modify-write of a set spec or a set's state.json
+CELLS = {}  # dungeon.cell_png: (set, piece, candidate, tile, pixel, harmonize) -> {suffix: png bytes}
 HARMONY = {}  # dungeon.harmonize references: (set, family, approved images) -> Lab (mean, std)

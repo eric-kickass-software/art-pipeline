@@ -51,6 +51,19 @@
   .famcard .btns button.on { border-color:var(--ok); color:var(--ok); }
   .famcard .trials { display:flex; gap:3px; margin-top:4px; flex-wrap:wrap; } .famcard .trials img { width:50px; height:50px; border-radius:2px; cursor:zoom-in; }
   .strip img.stale { outline:2px dashed #e0a030; outline-offset:-2px; opacity:.6; }
+  .famstage { position:relative; height:460px; border-radius:6px; overflow:hidden; background:#16121c; border:1px solid var(--line); }
+  .famstage.full { position:fixed; inset:0; height:auto; z-index:60; border-radius:0; }
+  .famstage canvas { width:100%; height:100%; display:block; cursor:grab; } .famstage canvas.grabbing { cursor:grabbing; }
+  .famhint { position:absolute; left:10px; top:8px; color:var(--muted); font-size:12px; pointer-events:none; }
+  .fammatrix { width:100%; border-collapse:collapse; font-size:12px; }
+  .fammatrix th, .fammatrix td { border:1px solid var(--line); padding:4px; vertical-align:top; }
+  .fammatrix th { background:var(--card); font-weight:normal; } .fammatrix .szhead { display:flex; justify-content:space-between; align-items:center; gap:4px; }
+  .fammatrix .szw { display:flex; align-items:center; gap:4px; } .fammatrix .szw input { width:70px; }
+  .fammatrix .vcell { width:26%; } .fammatrix .vcell textarea { width:100%; font-size:12px; }
+  .fammatrix .mcell img { width:52px; height:52px; object-fit:cover; border-radius:3px; border:2px solid transparent; margin:1px; cursor:pointer; }
+  .fammatrix .mcell img.on { border-color:var(--ok); } .fammatrix .mcell.off { opacity:.35; } .fammatrix .none { color:var(--muted); }
+  .fammatrix .vact { width:56px; text-align:center; } .fammatrix .vact button { padding:2px 6px; margin:1px; }
+  .fammatrix .untagged td { opacity:.75; }
   .fampreview { width:100%; border-radius:4px; background:#16121c; cursor:zoom-in; min-height:40px; }
   .gbar { display:flex; gap:6px; align-items:center; flex-wrap:wrap; position:sticky; top:0; background:var(--panel, #1d1924); padding:4px 0; z-index:2; }
   .pitem { display:flex; gap:8px; align-items:center; padding:4px; border-radius:5px; cursor:pointer; border:1px solid transparent; }
@@ -330,39 +343,6 @@ async function newFamily() {
   } catch (e) { notice(e.message); }
 }
 
-function renderFamily() {
-  if (!famInfo()) { $("#familyView").innerHTML = `<div class="hint">Pick a floor family on the left, or make one.</div>`; return; }
-  const f = famSet(), m = piece(FAM);
-  $("#familyView").innerHTML = `
-    <h2 style="margin-top:0">${esc(FAM)} <span class="hint">· floor family: one seamless master, variants repainted from it (they share its edges)</span></h2>
-    <h3>1 · Masters <span class="hint">prompt versions × seeds, judged tiled 3×3. ★ the keepers, then Use as master.</span></h3>
-    <div id="famPrompts"></div>
-    <div class="gbar"><button id="famAddVer">+ prompt version</button>
-      <label>seeds each<input id="famSeeds" type="number" value="2" min="1" max="8" style="width:52px"></label>
-      <button id="famGenMasters" class="primary">Generate masters</button>
-      <span class="hint" id="famMsg"></span></div>
-    <div id="famMasters"></div>
-    <div class="gbar"><label style="flex:1">variation test<input id="famTrialText" value="${esc(f.variations[0] || "")}" style="width:100%"></label>
-      <button id="famTrialBtn" title="A quick 1×1 repaint of this variation from every ★ master, to see how each takes variations">Test on ★ masters</button></div>
-    <h3>2 · Variants <span class="hint">repainted from the active master. One variation phrase per line; each new variant takes the next one.</span></h3>
-    <textarea id="famVariations" rows="4">${esc(f.variations.join("\n"))}</textarea>
-    <div id="famSizes"></div>
-    <div class="gbar"><button id="famFill" class="primary">Fill family</button><span class="hint">generates whatever each size is missing (one candidate per missing variant), then approve the good ones</span></div>
-    <h3>3 · Preview <span class="hint">a floor laid out by the game's planner from the approved family</span></h3>
-    <div class="gbar"><select id="famView" style="width:auto"><option value="iso">iso</option><option value="top">top-down</option></select>
-      <label><input id="famOutline" type="checkbox" style="width:auto"> block outlines</label>
-      <button id="famReroll">↻ re-roll</button></div>
-    <img id="famPreview" class="fampreview" alt="family preview">`;
-  renderFamPrompts();
-  $("#famAddVer").onclick = () => { famSet().prompts.push(famSet().prompts[famSet().prompts.length - 1] || m.prompt || ""); renderFamPrompts(); saveFamily(); };
-  $("#famGenMasters").onclick = generateMasters;
-  $("#famTrialBtn").onclick = testVariation;
-  $("#famVariations").oninput = () => { famSet().variations = $("#famVariations").value.split("\n"); saveFamilySoon(); };
-  $("#famFill").onclick = () => fillFamily();
-  $("#famView").onchange = $("#famOutline").onchange = refreshFamPreview;
-  $("#famReroll").onclick = () => { FAMSEED = rnd(); refreshFamPreview(); };
-  renderFamilyDynamic();
-}
 
 function renderFamPrompts() {
   const ps = famSet().prompts;
@@ -372,10 +352,6 @@ function renderFamPrompts() {
   document.querySelectorAll("#famPrompts [data-x]").forEach(b => b.onclick = () => { famSet().prompts.splice(+b.dataset.x, 1); renderFamPrompts(); saveFamily(); });
 }
 
-function renderFamilyDynamic() {
-  if (VIEW !== "family" || !famInfo() || !$("#famMasters")) return;
-  renderFamMasters(); renderFamSizes(); refreshFamPreview();
-}
 
 // Master candidates grouped by the prompt version that made them (meta.prompt).
 function renderFamMasters() {
@@ -412,67 +388,13 @@ function renderFamMasters() {
 }
 
 const famPiece = n => (famInfo().pieces || {})[n];
-const famWant = n => Math.max(0, (famSet().targets[n] ?? 0) - (n === 1 ? 1 : 0));
 
-function renderFamSizes() {
-  const active = pstate(FAM).approved[0], f = famSet();
-  $("#famSizes").innerHTML = SIZES.map(n => {
-    const pid = famPiece(n), s = pid ? pstate(pid) : {candidates: [], approved: []}, meta = s.meta || {};
-    const stale = rel => (meta[rel] || {}).master !== active;  // made from another master, or from an unknown one
-    const fresh = s.approved.filter(r => !stale(r)).length;
-    const rest = s.candidates.filter(r => !s.approved.includes(r));
-    const thumbs = s.approved.map(r => [r, true]).concat(rest.map(r => [r, false])).map(([r, on]) =>
-      `<img class="${on ? "on" : ""} ${stale(r) ? "stale" : ""}" data-rel="${esc(r)}" src="/api/dun/img?set=${SET}&rel=${encodeURIComponent(r)}" title="${esc((meta[r] || {}).prompt || "")}${stale(r) ? " · STALE: made from another master" : ""} · click: approve / unapprove · double-click: zoom">`).join("");
-    return `<div class="grow famsize" data-n="${n}">
-      <div class="ghead"><b>${n}×${n}</b>
-        <label title="${n === 1 ? "including the master itself" : ""}">target<input class="ftarget" type="number" min="0" max="12" value="${f.targets[n] ?? 0}" style="width:52px"></label>
-        ${n > 1 ? `<label title="How often the planner uses a ${n}×${n} where one fits">weight<input class="fweight" type="range" min="0" max="100" step="5" value="${f.weights[n] ?? 70}" style="width:90px;vertical-align:middle"></label><span class="badge fwlbl">${f.weights[n] ?? 70}%</span>` : `<span class="hint">master + 1×1 variants</span>`}
-        <span class="badge gbadge ${fresh >= famWant(n) ? "ok" : s.candidates.length ? "part" : "none"}" title="approved from the active master / target">${fresh}/${famWant(n)} approved${s.approved.length > fresh ? ` · ${s.approved.length - fresh} stale` : ""} · ${s.candidates.length} cand</span>
-        <button class="ffill">Fill</button></div>
-      <div class="strip">${thumbs || `<span class="none">${active ? "None yet: Fill makes them." : "Pick an active master first."}</span>`}</div></div>`;
-  }).join("");
-  document.querySelectorAll(".famsize").forEach(row => {
-    const n = +row.dataset.n;
-    row.querySelector(".ftarget").onchange = e => { famSet().targets[n] = Math.max(0, +e.target.value || 0); saveFamily().then(renderFamSizes); };
-    const w = row.querySelector(".fweight");
-    if (w) { w.oninput = () => row.querySelector(".fwlbl").textContent = w.value + "%"; w.onchange = () => { famSet().weights[n] = +w.value; saveFamily().then(refreshFamPreview); }; }
-    row.querySelector(".ffill").onclick = () => fillFamily([n]);
-    row.querySelectorAll(".strip img").forEach(el => {
-      let t = null;
-      el.onclick = () => { clearTimeout(t); t = setTimeout(async () => {
-        const pid = famPiece(n), rel = el.dataset.rel, on = !pstate(pid).approved.includes(rel);
-        try { D.state.pieces[pid] = (await post("approve", {piece: pid, rel, on})).piece; renderFamSizes(); refreshFamPreview(); renderList(); }
-        catch (e) { famMsg(e.message); }
-      }, 220); };
-      el.ondblclick = () => { clearTimeout(t); zoom(el.src); };
-    });
-  });
-}
 
-function refreshFamPreview() {
-  const img = $("#famPreview");
-  if (!img) return;
-  if (!pstate(FAM).approved[0]) { img.removeAttribute("src"); img.alt = "Pick an active master to see the family on a floor."; return; }
-  img.src = `/api/dun/family?set=${SET}&piece=${encodeURIComponent(FAM)}&seed=${FAMSEED}&view=${$("#famView").value}&outline=${$("#famOutline").checked ? 1 : 0}&_=${Date.now()}`;
-  img.onclick = () => zoom(img.src);
-}
 
 function famMsg(t) { const el = $("#famMsg"); if (el) el.textContent = t; }
 
 let famSaveT = null;
 function saveFamilySoon() { clearTimeout(famSaveT); famSaveT = setTimeout(saveFamily, 600); }
-async function saveFamily() {
-  clearTimeout(famSaveT);
-  const m = piece(FAM), f = famSet();
-  const family = {prompts: f.prompts, variations: f.variations.filter(v => v.trim()), targets: f.targets, weights: f.weights};
-  try {
-    D.spec = (await post("piece/save", {piece: {...m, prompt: f.prompts[0] || m.prompt, family}})).spec;
-    for (const n of SIZES) {  // keep each size piece's variant count in step with its target
-      const pid = famPiece(n), want = famWant(n);
-      if (pid && want && piece(pid).variants !== want) D.spec = (await post("piece/save", {piece: {...piece(pid), variants: want}})).spec;
-    }
-  } catch (e) { famMsg(e.message); }
-}
 
 async function generateMasters() {
   await saveFamily();
@@ -490,14 +412,208 @@ async function testVariation() {
   catch (e) { famMsg(e.message); }
 }
 
-async function fillFamily(sizes) {
+function renderFamily() {
+  if (!famInfo()) { $("#familyView").innerHTML = `<div class="hint">Pick a floor family on the left, or make one.</div>`; return; }
+  const f = famSet();
+  $("#familyView").innerHTML = `
+    <h2 style="margin-top:0">${esc(FAM)} <span class="hint">· floor family: one seamless master, variants repainted from it (they share its edges)</span></h2>
+    <h3>1 · Masters <span class="hint">prompt versions × seeds, judged tiled 3×3. ★ the keepers, then Use as master.</span></h3>
+    <div id="famPrompts"></div>
+    <div class="gbar"><button id="famAddVer">+ prompt version</button>
+      <label>seeds each<input id="famSeeds" type="number" value="2" min="1" max="8" style="width:52px"></label>
+      <button id="famGenMasters" class="primary">Generate masters</button>
+      <span class="hint" id="famMsg"></span></div>
+    <div id="famMasters"></div>
+    <div class="gbar"><label style="flex:1">variation test<input id="famTrialText" value="${esc((f.variations[0] || {}).text || "")}" style="width:100%"></label>
+      <button id="famTrialBtn" title="A quick 1×1 repaint of this variation from every ★ master, to see how each takes variations">Test on ★ masters</button></div>
+    <h3>2 · Variations <span class="hint">each row is repainted from the active master at every ticked size. Click an image to approve, double-click to zoom.</span></h3>
+    <div id="famMatrix"></div>
+    <div class="gbar"><button id="famAddVar">+ variation</button>
+      <label>per cell<input id="famN" type="number" value="1" min="1" max="6" style="width:52px"></label>
+      <button id="famGenAll" class="primary">Generate all</button>
+      <span class="hint">▶ on a row = that variation at every ticked size · ▶ on a column = that size for every variation</span></div>
+    <h3>3 · Preview <span class="hint">the approved family laid out by the game's planner, cut and filtered like the Unity export</span></h3>
+    <div class="gbar">board<input id="famW" type="number" value="16" min="4" max="48" style="width:52px">×<input id="famH" type="number" value="12" min="4" max="48" style="width:52px">
+      <label><input id="famOutline" type="checkbox" style="width:auto"> block outlines</label>
+      <button id="famReroll">↻ re-roll</button><button id="famFit">fit</button><button id="famFull">⛶ full screen</button>
+      <span class="hint">drag to pan · wheel to zoom · double-click to fit</span></div>
+    <div id="famStage" class="famstage"><canvas id="famCanvas"></canvas><div class="famhint" id="famStageMsg"></div></div>`;
+  renderFamPrompts();
+  $("#famAddVer").onclick = () => { famSet().prompts.push(famSet().prompts[famSet().prompts.length - 1] || ""); renderFamPrompts(); saveFamily(); };
+  $("#famGenMasters").onclick = generateMasters;
+  $("#famTrialBtn").onclick = testVariation;
+  $("#famAddVar").onclick = () => { famSet().variations.push({id: "v" + Date.now().toString(36), text: ""}); renderFamMatrix(); saveFamily();
+    const ins = document.querySelectorAll("#famMatrix .vtext"); ins[ins.length - 1]?.focus(); };
+  $("#famGenAll").onclick = () => generateVariants(null, null);
+  $("#famOutline").onchange = drawFam;
+  $("#famReroll").onclick = () => { FAMSEED = rnd(); loadFamLayout(true); };
+  $("#famW").onchange = $("#famH").onchange = () => loadFamLayout(false);
+  $("#famFit").onclick = () => { fitFam(); drawFam(); };
+  $("#famFull").onclick = () => { $("#famStage").classList.toggle("full"); fitFam(); drawFam(); };
+  setupFamCanvas();
+  renderFamilyDynamic(false);
+}
+
+function renderFamilyDynamic(keepView = true) {
+  if (VIEW !== "family" || !famInfo() || !$("#famMasters")) return;
+  renderFamMasters(); renderFamMatrix(); loadFamLayout(keepView);
+}
+
+// Variations × sizes. Candidates are matched to a row by meta.variation (older ones without it: "untagged").
+function renderFamMatrix() {
+  const f = famSet(), active = pstate(FAM).approved[0];
+  const cellOf = (n, vid) => {
+    const pid = famPiece(n); if (!pid) return [];
+    const s = pstate(pid), meta = s.meta || {};
+    return s.candidates.filter(r => (meta[r] || {}).variation === vid || (!vid && !(meta[r] || {}).variation))
+      .map(r => ({pid, rel: r, on: s.approved.includes(r), stale: (meta[r] || {}).master !== active, prompt: (meta[r] || {}).prompt || ""}))
+      .sort((a, b) => b.on - a.on);
+  };
+  const thumbs = list => list.map(c => `<img class="${c.on ? "on" : ""} ${c.stale ? "stale" : ""}" data-pid="${esc(c.pid)}" data-rel="${esc(c.rel)}" src="/api/dun/img?set=${SET}&rel=${encodeURIComponent(c.rel)}" title="${esc(c.prompt)}${c.stale ? " · STALE: made from another master" : ""}">`).join("");
+  const rows = f.variations.map(v => ({v, cells: SIZES.map(n => cellOf(n, v.id))}));
+  const untagged = SIZES.map(n => cellOf(n, null));
+  const head = `<tr><th>variation</th>${SIZES.map(n => `<th><div class="szhead"><label><input type="checkbox" class="szon" data-n="${n}" ${f.sizes.includes(n) ? "checked" : ""} style="width:auto"> ${n}×${n}</label>
+      <button class="szgen" data-n="${n}" title="generate ${n}×${n} for every variation">▶</button></div>
+      ${n > 1 ? `<div class="szw" title="How often the planner uses a ${n}×${n} where one fits"><input type="range" class="fweight" data-n="${n}" min="0" max="100" step="5" value="${f.weights[n] ?? 70}"><span class="fwlbl">${f.weights[n] ?? 70}%</span></div>` : `<div class="hint">+ the master</div>`}</th>`).join("")}<th></th></tr>`;
+  const body = rows.map(({v, cells}) => `<tr data-vid="${esc(v.id)}"><td class="vcell"><textarea class="vtext" rows="2" placeholder="what's different, e.g. a shallow puddle">${esc(v.text)}</textarea></td>
+      ${cells.map((c, i) => `<td class="mcell ${f.sizes.includes(SIZES[i]) ? "" : "off"}">${thumbs(c) || `<span class="none">–</span>`}</td>`).join("")}
+      <td class="vact"><button class="vgen primary" title="generate this variation at every ticked size">▶</button><button class="vdel danger" title="remove this variation">✕</button></td></tr>`).join("") +
+    (untagged.some(c => c.length) ? `<tr class="untagged"><td class="hint">untagged (made before variations had ids)</td>${untagged.map(c => `<td class="mcell">${thumbs(c)}</td>`).join("")}<td></td></tr>` : "");
+  $("#famMatrix").innerHTML = active ? `<table class="fammatrix">${head}${body}</table>` : `<div class="hint">Pick an active master first (Use as master).</div>`;
+  if (!active) return;
+  document.querySelectorAll("#famMatrix tr[data-vid]").forEach(tr => {
+    const v = famSet().variations.find(x => x.id === tr.dataset.vid);
+    tr.querySelector(".vtext").oninput = e => { v.text = e.target.value; saveFamilySoon(); };
+    tr.querySelector(".vgen").onclick = () => generateVariants([v.id], null);
+    tr.querySelector(".vdel").onclick = () => {
+      const n = tr.querySelectorAll(".mcell img").length;
+      if (n && !confirm(`Remove "${v.text}"? Its ${n} image${n > 1 ? "s" : ""} stay (shown as untagged).`)) return;
+      famSet().variations = famSet().variations.filter(x => x !== v); renderFamMatrix(); saveFamily();
+    };
+  });
+  document.querySelectorAll("#famMatrix .szon").forEach(cb => cb.onchange = () => {
+    const n = +cb.dataset.n, s = new Set(famSet().sizes); cb.checked ? s.add(n) : s.delete(n);
+    famSet().sizes = SIZES.filter(x => s.has(x)); renderFamMatrix(); saveFamily();
+  });
+  document.querySelectorAll("#famMatrix .szgen").forEach(b => b.onclick = () => generateVariants(null, [+b.dataset.n]));
+  document.querySelectorAll("#famMatrix .fweight").forEach(w => {
+    w.oninput = () => w.nextElementSibling.textContent = w.value + "%";
+    w.onchange = () => { famSet().weights[+w.dataset.n] = +w.value; saveFamily().then(() => loadFamLayout(true)); };
+  });
+  document.querySelectorAll("#famMatrix .mcell img").forEach(el => {
+    let t = null;
+    el.onclick = () => { clearTimeout(t); t = setTimeout(async () => {
+      const pid = el.dataset.pid, rel = el.dataset.rel, on = !pstate(pid).approved.includes(rel);
+      try { D.state.pieces[pid] = (await post("approve", {piece: pid, rel, on})).piece; renderFamMatrix(); renderList(); loadFamLayout(true); }
+      catch (e) { famMsg(e.message); }
+    }, 220); };
+    el.ondblclick = () => { clearTimeout(t); zoom(el.src); };
+  });
+}
+
+async function generateVariants(varIds, sizes) {
   await saveFamily();
   try {
-    const r = await post("family/fill", {piece: FAM, sizes});
+    const r = await post("family/generate", {piece: FAM, variations: varIds, sizes, n: +($("#famN") || {}).value || 1});
     D.spec = r.spec; await load();
-    famMsg(r.jobs.length ? `Queued ${r.jobs.length} variant${r.jobs.length > 1 ? "s" : ""}.` : "Nothing missing: every size is at its target.");
+    famMsg(r.jobs.length ? `Queued ${r.jobs.length} variant${r.jobs.length > 1 ? "s" : ""}.` : "Nothing to generate (no ticked sizes, or empty variations).");
     pollJobs();
   } catch (e) { famMsg(e.message); }
+}
+
+async function saveFamily() {
+  clearTimeout(famSaveT);
+  const m = piece(FAM), f = famSet();
+  const family = {prompts: f.prompts, variations: f.variations, sizes: f.sizes, weights: f.weights};
+  try { D.spec = (await post("piece/save", {piece: {...m, prompt: f.prompts[0] || m.prompt, family}})).spec; }
+  catch (e) { famMsg(e.message); }
+}
+
+// ---- live preview: the planner's layout drawn with the cut sprites (what the Unity export ships), pan + zoom.
+const PV = {scale: 1, ox: 0, oy: 0, data: null, imgs: {}, fitted: false, raf: 0};
+const pvStamp = () => `${D.spec.pixel || 0}_${D.spec.harmonize || 0}`;
+
+async function loadFamLayout(keepView) {
+  if (!$("#famCanvas")) return;
+  if (!pstate(FAM).approved[0]) { PV.data = null; $("#famStageMsg").textContent = "Pick an active master to see the family on a floor."; drawFam(); return; }
+  try {
+    PV.data = await api(`/api/dun/family_layout?set=${SET}&piece=${encodeURIComponent(FAM)}&seed=${FAMSEED}&w=${+$("#famW").value || 16}&h=${+$("#famH").value || 12}`);
+  } catch (e) { $("#famStageMsg").textContent = e.message; return; }
+  $("#famStageMsg").textContent = "";
+  const st = pvStamp();
+  for (const c of PV.data.cells) {
+    c.key = `${c.piece}|${c.rel}|${c.suf}|${st}`;
+    if (!PV.imgs[c.key]) {
+      const im = new Image();
+      im.onload = scheduleFamDraw;
+      im.src = `/api/dun/cell?set=${SET}&piece=${encodeURIComponent(c.piece)}&rel=${encodeURIComponent(c.rel)}&suf=${c.suf}&_=${st}`;
+      PV.imgs[c.key] = im;
+    }
+  }
+  if (!keepView || !PV.fitted) fitFam();
+  drawFam();
+}
+
+function scheduleFamDraw() { if (!PV.raf) PV.raf = requestAnimationFrame(() => { PV.raf = 0; drawFam(); }); }
+
+function famBounds() {
+  const t = PV.data.tile, W = PV.data.W, H = PV.data.H;
+  return {x0: -H * t / 2, x1: W * t / 2, y0: 0, y1: (W + H) * t / 4};
+}
+
+function fitFam() {
+  const stage = $("#famStage"); if (!stage || !PV.data) return;
+  const b = famBounds(), cw = stage.clientWidth, ch = stage.clientHeight;
+  PV.scale = Math.min(cw / (b.x1 - b.x0), ch / (b.y1 - b.y0)) * 0.94;
+  PV.ox = cw / 2 - (b.x0 + b.x1) / 2 * PV.scale; PV.oy = ch / 2 - (b.y0 + b.y1) / 2 * PV.scale;
+  PV.fitted = true;
+}
+
+function drawFam() {
+  const cv = $("#famCanvas"), stage = $("#famStage"); if (!cv || !stage) return;
+  const dpr = window.devicePixelRatio || 1, cw = stage.clientWidth, ch = stage.clientHeight;
+  if (cv.width !== Math.round(cw * dpr) || cv.height !== Math.round(ch * dpr)) { cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); }
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = "#16121c"; ctx.fillRect(0, 0, cv.width, cv.height);
+  if (!PV.data) return;
+  ctx.setTransform(dpr * PV.scale, 0, 0, dpr * PV.scale, dpr * PV.ox, dpr * PV.oy);
+  ctx.imageSmoothingEnabled = !PV.data.pixel;  // pixel art: point filtering, like the export's "point" filter in Unity
+  const t = PV.data.tile, at = (x, y) => [(x - y) * t / 2, (x + y) * t / 4];
+  for (const c of PV.data.cells) {
+    const im = PV.imgs[c.key];
+    if (!im || !im.complete || !im.naturalWidth) continue;
+    const [sx, sy] = at(c.x, c.y);
+    ctx.drawImage(im, sx - t / 2, sy, t, im.naturalHeight * t / im.naturalWidth);
+  }
+  if ($("#famOutline") && $("#famOutline").checked) {
+    const colour = {1: "#ffffff", 2: "#5ac8ff", 3: "#ffc83c", 4: "#ff5a78"}, seen = new Set();
+    ctx.lineWidth = 2 / PV.scale;
+    for (const c of PV.data.cells) {
+      const k = `${c.bx},${c.by}`; if (seen.has(k)) continue; seen.add(k);
+      const pts = [at(c.bx, c.by), at(c.bx + c.n, c.by), at(c.bx + c.n, c.by + c.n), at(c.bx, c.by + c.n)];
+      ctx.strokeStyle = colour[c.n] || "#ccc"; ctx.globalAlpha = c.n > 1 ? 0.95 : 0.35;
+      ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+function setupFamCanvas() {
+  const cv = $("#famCanvas"); let drag = null;
+  cv.onmousedown = e => { drag = {x: e.clientX, y: e.clientY, ox: PV.ox, oy: PV.oy}; cv.classList.add("grabbing"); };
+  cv.onmouseup = cv.onmouseleave = () => { drag = null; cv.classList.remove("grabbing"); };
+  cv.onmousemove = e => { if (!drag) return; PV.ox = drag.ox + e.clientX - drag.x; PV.oy = drag.oy + e.clientY - drag.y; scheduleFamDraw(); };
+  cv.onwheel = e => {
+    e.preventDefault();
+    const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    const k = Math.exp(-e.deltaY * 0.0015), s = Math.min(Math.max(PV.scale * k, 0.02), 16);
+    PV.ox = mx - (mx - PV.ox) * s / PV.scale; PV.oy = my - (my - PV.oy) * s / PV.scale; PV.scale = s; scheduleFamDraw();
+  };
+  cv.ondblclick = () => { fitFam(); drawFam(); };
+  if (PV.bound) return;  // page-level listeners once
+  PV.bound = true;
+  window.addEventListener("resize", scheduleFamDraw);
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#famStage")?.classList.contains("full")) { $("#famStage").classList.remove("full"); fitFam(); drawFam(); } });
 }
 
 // ---- group board: every piece of one group (Floors, Walls & doors, ...) on one page. Edit prompts side by side,
