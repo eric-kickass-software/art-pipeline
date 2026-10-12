@@ -166,10 +166,13 @@ def render(pattern, params=None, palette=None, width_tiles=1, height_tiles=1.0, 
     p = {**PATTERNS[pattern], **(params or {})}
     pal = {**DEFAULT_PALETTE, **(palette or {})}
     W, H = int(round(width_tiles * per)), int(round(height_tiles * per))
-    yy, xx = np.mgrid[0:H, 0:W].astype(np.float64) + 0.5
-    u, v = xx / per, yy / per
+    yi, xi = np.mgrid[0:H, 0:W]
+    yy, xx = yi + 0.5, xi + 0.5
+    # coordinates from the pixel index within its tile, so every tile gets bit-identical numbers (exact repeats)
+    um = (np.mod(xi, per) + 0.5) / per
+    v = ((np.mod(yi, per) if periodic_v else yi) + 0.5) / per
+    u = um
     across, course = int(p["across"]), float(p.get("course") or 0.1)
-    um = np.mod(u, 1.0)  # everything repeats once per tile across
     if pattern in ("running_bond", "stack_bond", "square_tiles", "planks"):
         if pattern == "square_tiles":
             course = 1.0 / across
@@ -186,8 +189,9 @@ def render(pattern, params=None, palette=None, width_tiles=1, height_tiles=1.0, 
         kind = "hex" if pattern == "hex_tiles" else "voronoi"
         pts = _voronoi_points(kind, across, float(p.get("jitter", 0.0)), seed, periodic_v, height_tiles)
         ids, d = _voronoi(um, np.mod(v, 1.0) if periodic_v else v, pts, periodic_v, height_tiles)
-    mortar = d < p["mortar"] / 2
-    height = np.clip((d - p["mortar"] / 2) / max(p["bevel"], 1e-6), 0, 1)
+    joint = max(float(p["mortar"]), 1.0 / per) if p["mortar"] > 0 else 0.0  # joints never thinner than a pixel
+    mortar = d < joint / 2
+    height = np.clip((d - joint / 2) / max(p["bevel"], 1e-6), 0, 1)
     stones = np.stack([_hex(c) for c in pal["stones"]])
     pick = (ids % np.uint64(len(stones))).astype(np.int64)
     tone = 1 + (_rand(ids, seed, 5) - 0.5) * 2 * pal["variation"]
