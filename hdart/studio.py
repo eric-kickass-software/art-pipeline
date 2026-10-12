@@ -161,8 +161,13 @@ class Jobs:
                     job["result"] = dg.edit_candidate(a["set"], a["piece"], a["rel"], a.get("prompt", ""),
                                                       float(a.get("denoise", 0.5)), int(a.get("seed", 1)))
                 elif job["kind"] == "dun_rescale":
-                    job["result"] = dg.rescale_master(a["set"], a["piece"], a["rel"], float(a["factor"]),
-                                                      bool(a.get("redetail")), int(a.get("seed", 1)))
+                    if "fx" in a:  # wall master: brick width / height, cap and base kept
+                        job["result"] = dg.rescale_wall_master(a["set"], a["piece"], a["rel"], float(a["fx"]), float(a["fy"]),
+                                                               float(a.get("keep_top", dg.KEEP_TOP)), float(a.get("keep_bottom", dg.KEEP_BOTTOM)),
+                                                               bool(a.get("redetail")), int(a.get("seed", 1)))
+                    else:
+                        job["result"] = dg.rescale_master(a["set"], a["piece"], a["rel"], float(a["factor"]),
+                                                          bool(a.get("redetail")), int(a.get("seed", 1)))
                 elif job["kind"] == "dun_build":
                     job["result"] = dg.build_walls(a["set"], a["piece"])
                 elif job["kind"] == "lib_import":
@@ -276,8 +281,12 @@ def dungeon_post(action, b):
     if action == "even":  # a master with stone-sized tone differences evened out (instant, no FLUX)
         rel = dg.even_master(name, b["piece"], b["rel"], float(b.get("strength", dg.EVEN_TONE)))
         return {"rel": rel, "piece": dg.state(name)["pieces"].get(b["piece"])}
+    if action == "preview/refresh":  # force: forget cached sprites and colour references
+        dg.clear_preview_caches()
+        return {"ok": True}
     if action == "rescale":
-        job = JOBS.add("dun_rescale", b, f"{name} · {b['piece']} ×{b['factor']}")
+        label = f"×{b['fx']} wide ×{b['fy']} tall" if "fx" in b else f"×{b['factor']}"
+        job = JOBS.add("dun_rescale", b, f"{name} · {b['piece']} {label}")
         return {"job": job["id"]}
     if action == "trial":
         job = JOBS.add("dun_trial", b, f"{name} · {b['piece']} trial: {b.get('variation', '')[:30]}")
@@ -365,8 +374,8 @@ def dungeon_get(path, q):
             fp = next((p for p in spec["pieces"] if p["id"] == g("floor")), None)
             fb = fp.get("board", fp["id"]) if fp else None
         inc = dg.blockout_include(name, g("floor") or None, g("wall") or None) if g("blockout") == "1" else None
-        return "application/json", json.dumps(dg.room_preview(name, dg.output_tile(spec), 1, inc,
-                                                              dg.room_grid(int(g("w", 14)), int(g("h", 10))), fb, True)).encode()
+        lay = dg.room_preview(name, dg.output_tile(spec), 1, inc, dg.room_grid(int(g("w", 14)), int(g("h", 10))), fb, True)
+        return "application/json", json.dumps({**lay, "rev": dg.preview_rev(name, spec)}).encode()
     if path == "template":  # a family's layout template on its own
         return "image/png", dg.png_bytes(dg.template_preview(name, g("piece")))
     if path == "patterns":  # the pattern list with default params, for the template editor
@@ -375,8 +384,19 @@ def dungeon_get(path, q):
     if path == "family_palette":  # family board: colour drift per image
         return "application/json", json.dumps(dg.family_palette(name, g("piece"))).encode()
     if path == "family_layout":  # live preview: which sprite goes where
-        return "application/json", json.dumps(dg.family_layout(name, g("piece"), int(g("seed", 0)),
-                                                               int(g("w", 16)), int(g("h", 12)))).encode()
+        lay = dg.family_layout(name, g("piece"), int(g("seed", 0)), int(g("w", 16)), int(g("h", 12)))
+        return "application/json", json.dumps({**lay, "rev": dg.preview_rev(name, dg.load_set(name))}).encode()
+    if path == "elev_measure":  # wall master: courses in the field between the kept cap and base
+        spec = dg.load_set(name)
+        fam = dg.wall_family_settings(dg.piece_of(spec, g("piece")), spec)
+        from PIL import Image
+        return "application/json", json.dumps(dg.measure_elevation(Image.open(dg.candidate_path(name, g("rel"))), fam["height"],
+                                                                   float(g("top", dg.KEEP_TOP)), float(g("bottom", dg.KEEP_BOTTOM)))).encode()
+    if path == "elev_bands":  # wall master repeated sideways with the kept cap and base tinted
+        spec = dg.load_set(name)
+        fam = dg.wall_family_settings(dg.piece_of(spec, g("piece")), spec)
+        return "image/png", dg.png_bytes(dg.elevation_bands(name, g("rel"), fam["height"], float(g("top", dg.KEEP_TOP)),
+                                                            float(g("bottom", dg.KEEP_BOTTOM))))
     if path == "cell":  # one cut sprite (cached)
         return "image/png", dg.cell_png(name, g("piece"), g("rel"), g("suf", ""))
     if path == "family":  # planner-laid floor from a family (iso or top-down, optional block outlines)

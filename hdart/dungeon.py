@@ -795,8 +795,8 @@ def _lab_stats(img, mask):
     return lab.mean(0), lab.std(0)
 
 
-def _reference(name, spec, fam):
-    """(mean, std) in Lab over the family's approved images (else all its candidates), or None."""
+def _reference_rels(name, spec, fam):
+    """The images a family's harmonize reference is measured over: its approved ones, else all its candidates."""
     s = state(name)
     rels = []
     for p in spec["pieces"]:
@@ -807,6 +807,23 @@ def _reference(name, spec, fam):
         for p in spec["pieces"]:
             if family(p) == fam and not p.get("retired"):
                 rels += [(p["id"], r) for r in s["pieces"].get(p["id"], {}).get("candidates", [])]
+    return rels
+
+
+def harmony_key(name, spec, piece):
+    """What harmonize() makes a piece's colours depend on (for caches): nothing, its family master, or the set of
+    images its family's reference is measured over."""
+    fam = family(piece)
+    if not float(spec.get("harmonize") or 0) or fam is None or piece.get("method") == "master" or piece.get("built_from"):
+        return ""
+    if piece.get("method") == "repaint":
+        return master_rel(name, piece.get("from")) or ""
+    return str(hash(tuple(sorted(r for _, r in _reference_rels(name, spec, fam)))))
+
+
+def _reference(name, spec, fam):
+    """(mean, std) in Lab over the family's approved images (else all its candidates), or None."""
+    rels = _reference_rels(name, spec, fam)
     if not rels:
         return None
     key = (name, fam, tuple(sorted(r for _, r in rels)))
@@ -1707,6 +1724,164 @@ def wall_master_image(name, spec, master_id):
     return Image.open(set_dir(name) / rel).convert("RGB"), rel
 
 
+KEEP_TOP, KEEP_BOTTOM = 0.25, 0.10  # wall rescale: units kept as they are at the top (cap) and the base (plinth)
+
+
+def _count_joints(sig, minsep, wrap=False):
+    """Joints along an edge-strength profile: peaks standing well above the typical level (median + 40% of the
+    way to the top), at least `minsep` apart (a bevelled joint's two edges count once). Returns their positions."""
+    sig = np.convolve(np.pad(sig, 2, mode="wrap" if wrap else "edge"), np.ones(5) / 5, "valid")
+    if sig.max() - np.median(sig) < 1.0:  # flat: no joints at all
+        return []
+    thr = np.median(sig) + 0.4 * (sig.max() - np.median(sig))
+    order = np.argsort(-sig)
+    picked = []
+    n = len(sig)
+    for i in order:
+        if sig[i] < thr:
+            break
+        dist = lambda j: min(abs(i - j), n - abs(i - j)) if wrap else abs(i - j)
+        if all(dist(j) >= minsep for j in picked):
+            picked.append(int(i))
+    return sorted(picked)
+
+
+def measure_elevation(img, height_units=WALL_UNITS, keep_top=KEEP_TOP, keep_bottom=KEEP_BOTTOM):
+    """Count the courses of a wall elevation's field (between the kept cap and base): {"rows" (courses in the field),
+    "course_units" (their average height), "across" (bricks per tile, averaged over the courses)}. Joints are edges
+    (whatever the tone of the bricks either side): horizontal ones from each row's vertical edge strength, then
+    inside each course the vertical ones (wrapping: the elevation repeats sideways). None when nothing clear."""
+    a = np.asarray(img.convert("L")).astype(np.float64)
+    h, w = a.shape
+    unit = h / height_units
+    f = a[int(round(keep_top * unit)):h - int(round(keep_bottom * unit))]
+    out = {"rows": None, "course_units": None, "across": None}
+    if len(f) < 32:
+        return out
+    prof = np.abs(np.diff(f, axis=0, append=f[-1:])).mean(1)
+    joints = _count_joints(prof, max(6, int(0.04 * unit)))
+    if len(joints) < 2:
+        return out
+    gaps = np.diff(joints)
+    course = float(np.median(gaps))
+    out.update(rows=round(len(f) / course, 1), course_units=round(course / unit, 3))
+    counts = []
+    for y0, y1 in zip(joints, joints[1:]):
+        if y1 - y0 < 0.6 * course:
+            continue
+        strip = f[y0 + (y1 - y0) // 4:y1 - (y1 - y0) // 4]
+        col = np.abs(strip - np.roll(strip, 1, 1)).mean(0)
+        counts.append(len(_count_joints(col, max(6, w // 24), wrap=True)))
+    if counts:
+        out["across"] = round(float(np.median(counts)), 1)
+    return out
+
+
+def rescale_wall_master(name, pid, rel, fx=1.0, fy=1.0, keep_top=KEEP_TOP, keep_bottom=KEEP_BOTTOM, redetail=False, seed=1,
+                        snap=True):
+    """A wall master with its field (everything between `keep_top` units at the top and `keep_bottom` at the base)
+    rescaled: `fx` scales the bricks' width (0.5 = twice as many per tile), `fy` their height (0.5 = twice as many
+    rows). The cap and base stay exactly as they were. New courses are counted up from the base; the joins (cap,
+    base, and where the field had to be stacked to fill a smaller scale) are repainted, then the sideways seam is
+    fixed where anything changed. 1/fx a whole number and fy = 1 keeps the bricks exact. -> new candidate rel."""
+    spec = load_set(name)
+    piece = resolved(spec, pid)
+    if piece.get("method") != "wall_master":
+        raise ValueError("this rescale works on wall masters")
+    fx, fy = float(fx), float(fy)
+    if not (1 / 3 - 1e-6 <= fx <= 3 and 0.25 <= fy <= 3):
+        raise ValueError("brick width ×0.34-3, height ×0.25-3")
+    fam = wall_family_settings(piece, spec)
+    old = state(name)["pieces"].get(pid, {}).get("meta", {}).get(rel, {})
+    prompt = old.get("prompt", piece.get("prompt", ""))
+    full = wall_texture_prompt(set_style(spec), prompt)
+    src = np.asarray(Image.open(candidate_path(name, rel)).convert("RGB"))
+    h, w = src.shape[:2]
+    unit = h / fam["height"]
+    t, b = int(round(max(0.0, keep_top) * unit)), int(round(max(0.0, keep_bottom) * unit))
+    if t + b > h - 64:
+        raise ValueError("the kept top and bottom leave no wall to rescale")
+    field = src[t:h - b]
+    hf = len(field)
+    # whole courses: the window starts on the field's lowest joint and spans a whole number of (scaled) courses, so
+    # no sliver course is left under the cap (fy moves a little to fit; it's reported back)
+    ww, wh, core = w / fx, hf / fy, field
+    if snap:
+        m = measure_elevation(Image.fromarray(src), fam["height"], keep_top, keep_bottom)
+        if m["course_units"]:
+            course = m["course_units"] * unit
+            fl = np.asarray(Image.fromarray(field).convert("L")).astype(np.float64)
+            jn = _count_joints(np.abs(np.diff(fl, axis=0, append=fl[-1:])).mean(1), max(6, int(0.04 * unit)))
+            low, high = [j for j in jn if j >= hf - 1.2 * course], [j for j in jn if j <= 1.2 * course]
+            if low and high and max(low) - min(high) > 2 * course:  # stack only whole courses (joint to joint)
+                core = field[min(high):max(low)]
+            n = max(1, round(wh / course))
+            wh = n * course
+            fy = hf / wh
+    # source window: ww x wh px of the field's whole courses, tiled 3 across and stacked up from the base
+    hc = len(core)
+    copies = int(np.ceil(wh / hc)) + 1
+    big = np.tile(core, (copies, 3, 1))
+    Y1 = len(big)
+    Y0 = Y1 - wh
+    x0 = 1.5 * w - ww / 2
+    win = Image.fromarray(big).crop((round(x0), round(Y0), round(x0 + ww), round(Y1)))
+    new = np.asarray(win.resize((w, hf), Image.LANCZOS))
+    out = src.copy()
+    out[t:h - b] = new
+    exact_x = fx < 1 and abs(1 / fx - round(1 / fx)) < 1e-6
+    # joins to repaint: cap / field, field / base, and the stacked copies of the field
+    joins = ([t] if t else []) + ([h - b] if b else [])
+    for k in range(1, copies):  # where stacked copies of the field meet, inside the window
+        yb = len(big) - k * hc
+        if Y0 + 1 < yb < Y1 - 1:
+            joins.append(int(round(t + (yb - Y0) / wh * hf)))
+    yy = np.arange(h)[:, None].astype(np.float64)
+    band, ramp = 0.06 * unit, 0.05 * unit
+    mask = np.zeros((h, w), np.float32)
+    for j in joins:
+        mask = np.maximum(mask, np.clip(1 - (np.abs(yy - j) - band) / ramp, 0, 1) * np.ones((1, w)))
+    img = Image.fromarray(out)
+    if redetail and (fx > 1 or fy > 1):  # an upscale goes soft: repaint the field lightly
+        fieldw = np.clip(np.minimum(yy - t, h - b - yy) / ramp, 0, 1) * np.ones((1, w))
+        img = repaint(img, fieldw.astype(np.float32), full, seed + 7, denoise=0.35, reference=True)
+    if joins:
+        img = repaint(img, mask, full, seed, denoise=0.65)
+    changed = np.clip(np.minimum(yy - (t - band - ramp) if t else yy + 1, (h - b + band + ramp) - yy if b else h - yy) / ramp, 0, 1)[:, 0]
+    if not exact_x or joins:  # the sideways seam, only where pixels changed (the cap and base already repeat)
+        a0 = np.asarray(img).astype(np.float32)
+        sm = np.asarray(periodic_smooth_x(img)).astype(np.float32)
+        a1 = a0 * (1 - changed[:, None, None]) + sm * changed[:, None, None]
+        rolled = Image.fromarray(np.roll(np.clip(a1, 0, 255).astype(np.uint8), w // 2, 1))
+        xx = (np.arange(w) + 0.5) / w
+        col = np.clip(1 - (np.abs(xx - 0.5) - 0.05) / 0.06, 0, 1)
+        fixed = repaint(rolled, (col[None, :] * changed[:, None]).astype(np.float32), full, seed + 1000, denoise=0.75)
+        img = Image.fromarray(np.roll(np.asarray(fixed), -(w // 2), 1))
+    res = np.asarray(img).copy()
+    keep = changed < 1e-6  # outside the changed rows the cap and base are the source's own pixels, exactly
+    res[keep] = src[keep]
+    meta = {"seed": seed, "prompt": prompt, "rescaled_from": rel, "scale": [round(fx, 3), round(fy, 3)], "keep": [keep_top, keep_bottom],
+            "redetail": bool(redetail)}
+    return _new_candidate(name, pid, Image.fromarray(res), meta, f"w{fx:g}x{fy:g}".replace(".", "_"))
+
+
+def elevation_bands(name, rel, height_units=WALL_UNITS, keep_top=KEEP_TOP, keep_bottom=KEEP_BOTTOM, repeat=2):
+    """The elevation repeated sideways with the kept cap and base tinted, to judge the keep bands before rescaling."""
+    a = np.asarray(Image.open(candidate_path(name, rel)).convert("RGB")).astype(np.float32)
+    h = a.shape[0]
+    unit = h / height_units
+    t, b = int(round(keep_top * unit)), int(round(keep_bottom * unit))
+    tint = np.array([90, 160, 255], np.float32)
+    if t:
+        a[:t] = a[:t] * 0.6 + tint * 0.4
+    if b:
+        a[h - b:] = a[h - b:] * 0.6 + tint * 0.4
+    for y in (t, h - b):
+        if 0 < y < h:
+            a[max(0, y - 2):y + 2] = (255, 210, 60)
+    return Image.fromarray(np.tile(np.clip(a, 0, 255).astype(np.uint8), (1, repeat, 1)))
+
+
 def gen_wall_variant(name, spec, piece, seed=1, denoise=None, lora=0.0):
     """A wall variation for runs of N cells: the master tiled N times sideways, everything but the kept edges
     (left/right where it meets other pieces, the cap line and the base) repainted. Canvas <= BLOCK_MAX wide."""
@@ -2199,7 +2374,8 @@ def family_info(name, spec, master):
         return {"kind": "wall", "settings": wall_family_settings(master, spec), "material": material_prompt(name, master),
                 "pieces": {int(k[3:]): p["id"] for k, p in pcs.items() if k.startswith("var")},
                 "door": pcs["door"]["id"] if "door" in pcs else None,
-                "built": [pcs[k]["id"] for k in pcs if k.startswith("run") or k in ("post", "doorway")] if built else []}
+                "built": [pcs[k]["id"] for k in pcs if k.startswith("run") or k in ("post", "doorway")] if built else [],
+                "build": wall_build_status(name, spec, master)}
     return {"kind": "floor", "settings": family_settings(master), "material": material_prompt(name, master),
             "pieces": {n: q["id"] for n, q in family_pieces(spec, master["id"]).items()}}
 
@@ -2231,12 +2407,58 @@ def family_layout(name, master_id, seed=0, W=16, H=12):
             "holes": sorted(holes), "cells": out}
 
 
+def preview_rev(name, spec):
+    """For the browser's image URLs: with Harmonize on, an approval or master switch can change a sprite's colours
+    without changing its file, so the state file's time is part of the URL (the server's own cache is keyed per
+    sprite by harmony_key, so unchanged sprites come straight from it)."""
+    if not spec.get("harmonize"):
+        return "0"
+    f = set_dir(name) / "state.json"
+    return str(f.stat().st_mtime_ns) if f.exists() else "0"
+
+
+def clear_preview_caches():
+    """Forget every cached cut sprite and colour reference (the preview's force refresh)."""
+    _CELL_CACHE.clear()
+    _REF_CACHE.clear()
+
+
+def wall_build_status(name, spec, master):
+    """Is the wall family's build current? {"built", "stale", "why"}: stale when the runs, post and doorway were
+    projected from another active master, or the approved variations / doors changed since."""
+    pcs = wall_family_pieces(spec, master["id"])
+    s = state(name)["pieces"]
+    mrel = master_rel(name, master["id"])
+    keys = [k for k in pcs if k.startswith("run") or k in ("post", "doorway")]
+    have = {(k, s.get(pcs[k]["id"], {}).get("meta", {}).get(r, {}).get("built_from"))
+            for k in keys for r in s.get(pcs[k]["id"], {}).get("approved", [])}
+    if not have:
+        return {"built": False, "stale": False, "why": "not built yet"}
+    if not mrel:
+        return {"built": True, "stale": False, "why": ""}
+    want = {("post", mrel)}
+    for L in (1, 2, 3, 4):
+        want.add((f"run{L}", mrel))
+        v = pcs.get(f"var{L}")
+        if v:
+            ps = s.get(v["id"], {})
+            want |= {(f"run{L}", r) for r in ps.get("approved", []) if ps.get("meta", {}).get(r, {}).get("master") == mrel}
+    if "door" in pcs:
+        want |= {("doorway", r) for r in s.get(pcs["door"]["id"], {}).get("approved", [])}
+    built_master = {r for k, r in have if k == "post"}
+    if built_master and mrel not in built_master:
+        return {"built": True, "stale": True, "why": "built from another master"}
+    if have != want:
+        return {"built": True, "stale": True, "why": "approvals changed since the last build"}
+    return {"built": True, "stale": False, "why": ""}
+
+
 def cell_sprites(name, pid, rel, tile=None, spec=None):
     """A candidate's cut sprites {suffix: RGBA} (what the export ships), cached across requests: the live previews
     and the room preview ask for the same ones over and over."""
     spec = spec or load_set(name)
     tile = tile or output_tile(spec)
-    key = (name, pid, rel, tile, spec.get("pixel"), spec.get("harmonize"))
+    key = (name, pid, rel, tile, spec.get("pixel"), spec.get("harmonize"), harmony_key(name, spec, resolved(spec, pid)))
     if key not in _CELL_CACHE:
         if len(_CELL_CACHE) > 160:
             _CELL_CACHE.clear()

@@ -25,4 +25,44 @@ assert mask[:, :30].max() == 0 and mask[:, -30:].max() == 0 and mask[:40].max() 
 fam = {"door_width": 0.5, "door_height": 2.0}
 x0, x1, y0, y1 = d.door_rect(fam, 512, d.iso._KZ * 512, h)
 assert x0 == 128 and x1 == 384 and y1 == h and abs((h - y0) / h - 2 / 3) < 0.01
+# course measurement (wall rescale): exact on templates, whatever the brick tones
+for across, course in [(5, 0.11), (3, 0.2), (4, 0.08), (6, 0.1), (2, 0.15)]:
+    im = d.template_render({"pattern": "running_bond", "params": {"across": across, "course": course, "mortar": 0.012, "bevel": 0.012}}, "wall", 512)["rgb"].resize((w, h))
+    m = d.measure_elevation(im)
+    rows = (d.WALL_UNITS - d.KEEP_TOP - d.KEEP_BOTTOM) * d.iso._KZ / course
+    assert m["across"] == across and abs(m["rows"] - rows) < 0.6, (across, course, m, rows)
+assert d.measure_elevation(Image.new("RGB", (w, h), (120, 120, 120)))["rows"] is None
+# bands view: kept cap and base tinted, repeated sideways
+import json, shutil, tempfile
+from pathlib import Path
+tmp = Path(tempfile.mkdtemp())
+shutil.copytree(d.SETS, tmp / "sets"); d.SETS = tmp / "sets"; d.DUN = tmp / "dun"; d.ARCHIVE = tmp / "archive"
+d.new_set("zw", biome="test")
+mid = "tile.zw_wall_master"
+d.upsert_piece("zw", {"id": mid, "kind": "elevation", "shape": "elevation", "method": "wall_master", "variants": 1, "prompt": "bricks"})
+def cand(pid, tag, meta=None):
+    f = d.set_dir("zw") / "candidates" / pid / f"{tag}.png"; f.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (w, h), (100, 100, 100)).save(f); np.save(f.with_suffix(".npy"), np.ones((4, 4), bool))
+    rel = f"candidates/{pid}/{tag}.png"; s = d.state("zw"); ps = s["pieces"].setdefault(pid, {"candidates": [], "approved": []})
+    ps["candidates"].append(rel); ps.setdefault("meta", {})[rel] = meta or {}; d.save_state("zw", s); return rel
+m1, m2 = cand(mid, "m1"), cand(mid, "m2")
+b = np.asarray(d.elevation_bands("zw", m1, d.WALL_UNITS, 0.25, 0.1))
+assert b.shape == (h, 2 * w, 3) and b[5, 5, 2] > b[h // 2, 5, 2]
+# build status: not built -> built and current -> stale after a master switch or a new approval
+d.promote("zw", mid, m1)
+spec = d.load_set("zw"); master = d.piece_of(spec, mid)
+assert d.wall_build_status("zw", spec, master)["built"] is False
+pcs = d.ensure_wall_pieces("zw", mid)
+st = d.state("zw")
+for k in ("run1", "run2", "run3", "run4", "post"):
+    pid = pcs[k]["id"]; r = f"candidates/{pid}/b.png"
+    st["pieces"][pid] = {"candidates": [r], "approved": [r], "meta": {r: {"built_from": m1, "master": m1}}}
+d.save_state("zw", st)
+spec = d.load_set("zw")
+assert d.wall_build_status("zw", spec, d.piece_of(spec, mid)) == {"built": True, "stale": False, "why": ""}
+v = cand(pcs["var2"]["id"], "v", {"master": m1}); d.approve("zw", pcs["var2"]["id"], v)
+assert "approvals" in d.wall_build_status("zw", spec, d.piece_of(spec, mid))["why"]
+d.promote("zw", mid, m2)
+assert "another master" in d.wall_build_status("zw", spec, d.piece_of(spec, mid))["why"]
+shutil.rmtree(tmp)
 print("wall tests passed")
