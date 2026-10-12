@@ -100,8 +100,9 @@ def thin_boxes(piece, length, h):
     if piece.get("opening") == "door":
         dh, dw = piece.get("door_height", 1.3), piece.get("door_width", 0.5)
         a, b, lt = 0.5 - dw / 2, 0.5 + dw / 2, t * 0.5
-        return [(0, a, y0, y1, 0, h, 0), (b, 1, y0, y1, 0, h, 0), (a, b, y0, y1, dh, h, 0),
-                (a, b, 0.5 - lt / 2, 0.5 + lt / 2, 0, dh, 1)]  # jambs, lintel, recessed door leaf (owner 1)
+        boxes = [(0, a, y0, y1, 0, h, 0), (b, 1, y0, y1, 0, h, 0), (a, b, y0, y1, dh, h, 0),
+                 (a, b, 0.5 - lt / 2, 0.5 + lt / 2, 0, dh, 1)]  # jambs, lintel, recessed door leaf (owner 1)
+        return [bx for bx in boxes if bx[1] - bx[0] > 1e-6]  # a full-width door has no jambs
     return [(k + hh / 2, k + (hh + 1) / 2, y0, y1, 0, h, 2 * k + hh) for k in range(length) for hh in (0, 1)]
 
 
@@ -1471,7 +1472,8 @@ def rescale_master(name, pid, rel, factor, redetail=False, seed=1):
 # projections are ordinary candidates of ordinary wall pieces, so cutting, export and Unity are unchanged.
 # Elevation pieces have kind "elevation": they are sources, never exported or drawn themselves.
 
-WALL_UNITS, DOOR_UNITS, DOOR_WIDTH = 3.0, 2.0, 0.5   # GDD 5.1 scale: walls 3 units, doors 2 (hero ~1.5)
+WALL_UNITS, DOOR_UNITS, DOOR_WIDTH = 3.0, 2.0, 1.0   # GDD 5.1 scale: walls 3 units, doors 2 (hero ~1.5); doors
+                                                      # fill the cell (Eric: no side frame, just the header above)
 DOOR_DENOISE = 0.8                                    # doors repaint a pre-filled opening (see gen_door)
 ELEV_PERIOD = 1                                       # the master repeats every tile (runs start anywhere)
 ELEV_METHODS = ("wall_master", "wall_repaint", "door_repaint")
@@ -1616,29 +1618,40 @@ def door_rect(fam, per, unit_px, h_px):
 
 
 def gen_door(name, spec, piece, seed=1, denoise=None, lora=0.0):
-    """A one-tile slice of the active wall master with only the door opening (plus a little frame) repainted."""
+    """A one-tile door slice of the active wall master: only the opening (plus a little frame when the door is
+    narrower than the cell) is repainted. FLUX gets the slice in the middle of three master tiles, so it sees wall
+    on both sides of the door (alone, a full-width opening reads as a plain panel), and the middle tile is kept."""
     master_id = piece.get("from")
     master = piece_of(spec, master_id)
     fam = wall_family_settings(master)
     base, _ = wall_master_image(name, spec, master_id)
-    per = base.width
-    unit_px = iso._KZ * per
-    x0, x1, y0, y1 = door_rect(fam, per, unit_px, base.height)
+    per, H = base.width, base.height
+    x0, x1, y0, _ = door_rect(fam, per, iso._KZ * per, H)
+    X0, X1, Y0 = per + int(round(x0)), per + int(round(x1)), int(round(y0))
     frame, ramp = 0.06 * per, 0.04 * per
-    xx, yy = np.arange(per) + 0.5, np.arange(base.height) + 0.5
-    mx = np.clip((np.minimum(xx - (x0 - frame), (x1 + frame) - xx)) / ramp, 0, 1)
-    my = np.clip((yy - (y0 - frame)) / ramp, 0, 1)
-    mask = mx[None, :] * my[:, None]
-    # Pre-fill the exact opening with dark wood (from the floor up to the door height): left alone, FLUX paints a
-    # nice door floating mid-wall; started from this shape at 0.8 it paints the door where the doorway geometry is.
-    init = np.asarray(base).astype(np.float32).copy()
+    left, right = max(per, X0 - frame), min(2 * per, X1 + frame)
+    xx, yy = np.arange(3 * per) + 0.5, np.arange(H) + 0.5
+    mx = np.clip(np.minimum(xx - left, right - xx) / ramp, 0, 1)
+    mx[(xx >= per) & (xx < 2 * per) & (xx >= left) & (xx < right)] = np.maximum(
+        mx[(xx >= per) & (xx < 2 * per) & (xx >= left) & (xx < right)], (left == per) * 1.0)  # full width: hard edges
+    if X1 - X0 >= per - 1:
+        mx = ((xx >= per) & (xx < 2 * per)).astype(np.float32)
+    mask = mx[None, :] * np.clip((yy - (Y0 - frame)) / ramp, 0, 1)[:, None]
+    # Pre-fill the exact opening with a door cue (dark planks, gaps, two iron bands) from the floor up to the door
+    # height: left alone, FLUX paints a door floating mid-wall or a plain panel.
+    init = np.tile(np.asarray(base).astype(np.float32), (1, 3, 1))
     r = np.random.default_rng(seed)
-    X0, X1, Y0 = int(round(x0)), int(round(x1)), int(round(y0))
-    plank = (np.sin((np.arange(X1 - X0) / max(X1 - X0, 1)) * np.pi * 8) * 10)[None, :, None]
-    init[Y0:, X0:X1] = np.array([96, 64, 42], np.float32) + plank + r.normal(0, 6, (base.height - Y0, X1 - X0, 1))
-    return repaint(Image.fromarray(np.clip(init, 0, 255).astype(np.uint8)), mask,
-                   door_texture_prompt(set_style(spec), material_prompt(name, master), piece["prompt"]),
-                   seed, denoise=float(denoise) if denoise else DOOR_DENOISE, lora=lora, reference=False)
+    w = X1 - X0
+    planks = np.where((np.arange(w) % max(w // 6, 1)) < 3, -38.0, 0.0)[None, :, None]
+    door = np.array([92, 60, 38], np.float32) + planks + r.normal(0, 6, (H - Y0, w, 1))
+    for band in (0.25, 0.75):
+        y = int((H - Y0) * band)
+        door[y:y + max(int(0.03 * per), 4)] = np.array([46, 44, 46], np.float32)
+    init[Y0:, X0:X1] = door
+    out = repaint(Image.fromarray(np.clip(init, 0, 255).astype(np.uint8)), mask,
+                  door_texture_prompt(set_style(spec), material_prompt(name, master), piece["prompt"]),
+                  seed, denoise=float(denoise) if denoise else DOOR_DENOISE, lora=lora, reference=False)
+    return out.crop((per, 0, 2 * per, H))
 
 
 def set_wall_boards(spec):
@@ -1714,6 +1727,10 @@ def build_walls(name, master_id):
     pcs = ensure_wall_pieces(name, master_id)
     spec = load_set(name)
     fam = wall_family_settings(piece_of(spec, master_id), spec)
+    dw = pcs["doorway"]
+    if (dw.get("door_width"), dw.get("door_height"), dw.get("height")) != (fam["door_width"], fam["door_height"], fam["height"]):
+        upsert_piece(name, {**dw, "door_width": fam["door_width"], "door_height": fam["door_height"], "height": fam["height"]})
+        pcs = wall_family_pieces(load_set(name), master_id)
     boards = set(fam["boards"].values())
     with LOCK:  # older wall pieces on the same boards would ship next to the new walls: retire them (reversible)
         sp = load_set(name)

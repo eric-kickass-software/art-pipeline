@@ -205,7 +205,8 @@
       "thickness": 0.25,
       "variants": 2,
       "prompt": "a thin crypt wall of rough grey stone bricks with dark mortar, flat stone coping along the top",
-      "board": "tile.crypt_wall"
+      "board": "tile.crypt_wall",
+      "retired": true
     },
     {
       "id": "tile.Stylized_wall_run2",
@@ -216,7 +217,8 @@
       "height": 2.0,
       "thickness": 0.25,
       "variants": 2,
-      "prompt": "a thin crypt wall of rough grey stone bricks with dark mortar, flat stone coping along the top, a few cracked and mossy bricks"
+      "prompt": "a thin crypt wall of rough grey stone bricks with dark mortar, flat stone coping along the top, a few cracked and mossy bricks",
+      "retired": true
     },
     {
       "id": "tile.Stylized_wall_run3",
@@ -227,7 +229,8 @@
       "height": 2.0,
       "thickness": 0.25,
       "variants": 2,
-      "prompt": "a thin crypt wall of rough grey stone bricks with dark mortar, flat stone coping along the top, a carved stone skull relief in the middle, cobwebs in a corner"
+      "prompt": "a thin crypt wall of rough grey stone bricks with dark mortar, flat stone coping along the top, a carved stone skull relief in the middle, cobwebs in a corner",
+      "retired": true
     },
     {
       "id": "tile.Stylized_wall_run4",
@@ -238,7 +241,8 @@
       "height": 2.0,
       "thickness": 0.25,
       "variants": 1,
-      "prompt": "a thin crypt wall of rough grey stone bricks with dark mortar, flat stone coping along the top, some bricks crumbled away, roots creeping over the stones, a faded painted rune"
+      "prompt": "a thin crypt wall of rough grey stone bricks with dark mortar, flat stone coping along the top, some bricks crumbled away, roots creeping over the stones, a faded painted rune",
+      "retired": true
     },
     {
       "id": "tile.Stylized_wall_post",
@@ -248,7 +252,8 @@
       "height": 2.0,
       "thickness": 0.25,
       "variants": 1,
-      "prompt": "a square stone pillar post of rough grey stone bricks, flat stone cap"
+      "prompt": "a square stone pillar post of rough grey stone bricks, flat stone cap",
+      "retired": true
     },
     {
       "id": "tile.Stylized_wall.torch",
@@ -276,7 +281,8 @@
       "thickness": 0.25,
       "variants": 1,
       "prompt": "a thin stone wall with an arched old wooden door with iron bands and a ring handle set into it",
-      "board": "tile.crypt_door"
+      "board": "tile.crypt_door",
+      "retired": true
     },
     {
       "id": "tile.Stylized_door_iron",
@@ -288,7 +294,8 @@
       "height": 2.0,
       "thickness": 0.25,
       "variants": 1,
-      "prompt": "a thin stone wall with a heavy riveted black iron door set into it"
+      "prompt": "a thin stone wall with a heavy riveted black iron door set into it",
+      "retired": true
     },
     {
       "id": "tile.Stylized_door_portcullis",
@@ -300,7 +307,8 @@
       "height": 2.0,
       "thickness": 0.25,
       "variants": 1,
-      "prompt": "a thin stone wall with a rusty iron portcullis grate lowered in its doorway, darkness behind the bars"
+      "prompt": "a thin stone wall with a rusty iron portcullis grate lowered in its doorway, darkness behind the bars",
+      "retired": true
     },
     {
       "id": "tile.Stylized_door_double",
@@ -313,7 +321,8 @@
       "thickness": 0.25,
       "variants": 1,
       "door_width": 0.6,
-      "prompt": "a thin stone wall with closed double wooden doors with carved panels and brass studs set into it"
+      "prompt": "a thin stone wall with closed double wooden doors with carved panels and brass studs set into it",
+      "retired": true
     },
     {
       "id": "tile.Stylized_arch",
@@ -443,6 +452,200 @@
       "board": "tile.crypt_floor",
       "variants": 1,
       "prompt": "flat pale blue-gray stone tiles, pristine squares with crisp edges and sharp corners, but a mix of small/medium/large tiles; with dark mortar lines"
+    },
+    {
+      "id": "tile.Stylized_stone_wall_master",
+      "kind": "elevation",
+      "shape": "elevation",
+      "method": "wall_master",
+      "variants": 1,
+      "prompt": "pale grey large stone wall with dark mortar, sharp crisp lines, flat stone cap along the top, dungeon wall",
+      "family": {
+        "prompts": [
+          "pale grey large stone wall with dark mortar, sharp crisp lines, flat stone cap along the top, dungeon wall"
+        ],
+        "variations": [
+          {
+            "id": "v1",
+            "text": "one large crack running across"
+          },
+          {
+            "id": "v2",
+            "text": "moss growing in the joints"
+          },
+          {
+            "id": "v3",
+            "text": "a few sunken and chipped stones"
+          },
+          {
+            "id": "v4",
+            "text": "a shallow puddle"
+          },
+          {
+            "id": "v5",
+            "text": "scattered dust and small rubble"
+          },
+          {
+            "id": "v6",
+            "text": "a worn, smoother patch"
+          }
+        ],
+        "sizes": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "weights": {
+          "2": 70,
+          "3": 70,
+          "4": 70
+        },
+        "palette_lock": true,
+        "doors": [
+          {
+            "id": "d1",
+            "text": "a closed arched wooden door with iron bands"
+          },
+          {
+            "id": "d2",
+            "text": "a heavy riveted black iron door"
+          },
+          {
+            "id": "d3",
+            "text": "a rusty iron portcullis grate"
+          },
+          {
+            "id": "d4",
+            "text": "closed double wooden doors with carved panels"
+          }
+        ],
+        "height": 3,
+        "door_height": 2,
+        "door_width": 0.5
+      }
+    },
+    {
+      "from": "tile.Stylized_stone_wall_master",
+      "variants": 1,
+      "id": "tile.Stylized_stone_wall_master_var1",
+      "kind": "elevation",
+      "shape": "elevation",
+      "method": "wall_repaint",
+      "atlas": 1,
+      "prompt": "pale grey large stone wall with dark mortar, sharp crisp lines, flat stone cap along the top, dungeon wall"
+    },
+    {
+      "from": "tile.Stylized_stone_wall_master",
+      "variants": 1,
+      "id": "tile.Stylized_stone_wall_master_var2",
+      "kind": "elevation",
+      "shape": "elevation",
+      "method": "wall_repaint",
+      "atlas": 2,
+      "prompt": "pale grey large stone wall with dark mortar, sharp crisp lines, flat stone cap along the top, dungeon wall"
+    },
+    {
+      "from": "tile.Stylized_stone_wall_master",
+      "variants": 1,
+      "id": "tile.Stylized_stone_wall_master_var3",
+      "kind": "elevation",
+      "shape": "elevation",
+      "method": "wall_repaint",
+      "atlas": 3,
+      "prompt": "pale grey large stone wall with dark mortar, sharp crisp lines, flat stone cap along the top, dungeon wall"
+    },
+    {
+      "from": "tile.Stylized_stone_wall_master",
+      "variants": 1,
+      "id": "tile.Stylized_stone_wall_master_var4",
+      "kind": "elevation",
+      "shape": "elevation",
+      "method": "wall_repaint",
+      "atlas": 4,
+      "prompt": "pale grey large stone wall with dark mortar, sharp crisp lines, flat stone cap along the top, dungeon wall"
+    },
+    {
+      "from": "tile.Stylized_stone_wall_master",
+      "variants": 1,
+      "id": "tile.Stylized_stone_wall_master_doors",
+      "kind": "elevation",
+      "shape": "elevation",
+      "method": "door_repaint",
+      "prompt": "a closed arched wooden door with iron bands"
+    },
+    {
+      "from": "tile.Stylized_stone_wall_master",
+      "variants": 1,
+      "id": "tile.Stylized_stone_wall_master_post",
+      "kind": "tile",
+      "shape": "post",
+      "height": 3.0,
+      "board": "tile.crypt_wall.post",
+      "built_from": "tile.Stylized_stone_wall_master"
+    },
+    {
+      "from": "tile.Stylized_stone_wall_master",
+      "variants": 1,
+      "id": "tile.Stylized_stone_wall_master_doorway",
+      "kind": "tile",
+      "shape": "run",
+      "opening": "door",
+      "length": 1,
+      "height": 3.0,
+      "door_height": 2.0,
+      "door_width": 0.5,
+      "thickness": 0.25,
+      "board": "tile.crypt_door",
+      "built_from": "tile.Stylized_stone_wall_master"
+    },
+    {
+      "from": "tile.Stylized_stone_wall_master",
+      "variants": 1,
+      "id": "tile.Stylized_stone_wall_master_run1",
+      "kind": "tile",
+      "shape": "run",
+      "length": 1,
+      "height": 3.0,
+      "thickness": 0.25,
+      "board": "tile.crypt_wall",
+      "built_from": "tile.Stylized_stone_wall_master"
+    },
+    {
+      "from": "tile.Stylized_stone_wall_master",
+      "variants": 1,
+      "id": "tile.Stylized_stone_wall_master_run2",
+      "kind": "tile",
+      "shape": "run",
+      "length": 2,
+      "height": 3.0,
+      "thickness": 0.25,
+      "board": "tile.crypt_wall",
+      "built_from": "tile.Stylized_stone_wall_master"
+    },
+    {
+      "from": "tile.Stylized_stone_wall_master",
+      "variants": 1,
+      "id": "tile.Stylized_stone_wall_master_run3",
+      "kind": "tile",
+      "shape": "run",
+      "length": 3,
+      "height": 3.0,
+      "thickness": 0.25,
+      "board": "tile.crypt_wall",
+      "built_from": "tile.Stylized_stone_wall_master"
+    },
+    {
+      "from": "tile.Stylized_stone_wall_master",
+      "variants": 1,
+      "id": "tile.Stylized_stone_wall_master_run4",
+      "kind": "tile",
+      "shape": "run",
+      "length": 4,
+      "height": 3.0,
+      "thickness": 0.25,
+      "board": "tile.crypt_wall",
+      "built_from": "tile.Stylized_stone_wall_master"
     }
   ],
   "harmonize": 0.1,

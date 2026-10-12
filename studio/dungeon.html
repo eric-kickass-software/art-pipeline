@@ -513,7 +513,9 @@ function renderFamily() {
       <span class="hint">▶ on a row = that variation at every ticked size · ▶ on a column = that size for every variation</span></div>
     ${wall ? `<h3>3 · Doors <span class="hint">each door is painted into a one-tile slice of the active elevation (only the 2-unit opening changes, so it keeps the wall's stone and colours)</span></h3>
     <div id="famDoors"></div>
-    <div class="gbar"><button id="famAddDoor">+ door</button><button id="famGenDoors" class="primary">Generate all doors</button>
+    <div class="gbar"><label title="Door width in tiles (1 = the whole cell: no side frame, just the header)">width<input id="famDoorW" type="number" step="0.05" min="0.3" max="1" value="${f.door_width}" style="width:58px"></label>
+      <label title="Door height in units (walls are ${f.height})">height<input id="famDoorH" type="number" step="0.1" min="1" max="${f.height}" value="${f.door_height}" style="width:58px"></label>
+      <button id="famAddDoor">+ door</button><button id="famGenDoors" class="primary">Generate all doors</button>
       <button id="famBuild" class="primary" title="Project the active elevation, approved variations and doors onto runs 1-4, the post and the doorway (also runs by itself after approving)">Build walls &amp; doors</button>
       <span class="hint" id="famBuildMsg">${famInfo().built.length ? "built" : "not built yet"}</span></div>` : ""}
     <h3>Palette <span class="hint">every image's colour (inside its kept border) next to the master's, sorted by distance (dE: ~2 barely visible, 5+ obvious). Click a chip to inspect.</span></h3>
@@ -533,6 +535,7 @@ function renderFamily() {
       const ins = document.querySelectorAll("#famDoors .vtext"); ins[ins.length - 1]?.focus(); };
     $("#famGenDoors").onclick = () => generateVariants(null, null, true);
     $("#famBuild").onclick = () => buildWalls();
+    $("#famDoorW").onchange = $("#famDoorH").onchange = () => { famSet().door_width = +$("#famDoorW").value; famSet().door_height = +$("#famDoorH").value; saveFamily(); };
   }
   renderFamilyDynamic(false);
 }
