@@ -84,6 +84,8 @@
   .fammatrix .vact { width:56px; text-align:center; } .fammatrix .vact button { padding:2px 6px; margin:1px; }
   .fammatrix .untagged td { opacity:.75; }
   .fammatrix.wallm .mcell img, #famDoors .mcell img { object-fit:contain; background:#16121c; }
+  .tplrow { display:flex; gap:10px; align-items:flex-start; } .tplrow img { width:150px; max-height:190px; object-fit:contain; border-radius:4px; background:#16121c; flex:none; }
+  .tplform { flex:1; } .tplform .row { gap:6px; flex-wrap:wrap; margin:3px 0; } .tplform input[type=color] { width:30px; height:24px; padding:0; border:none; background:none; }
   .fampal { display:flex; flex-wrap:wrap; gap:4px; }
   .pchip { width:42px; height:42px; border-radius:5px; border:2px solid transparent; display:flex; align-items:flex-end; justify-content:center; cursor:pointer; }
   .pchip span { font-size:10px; background:rgba(0,0,0,.55); color:#fff; padding:0 3px; border-radius:3px; margin-bottom:2px; }
@@ -266,6 +268,7 @@
       <div class="gbar">board<input id="famW" type="number" value="14" min="4" max="48" style="width:50px">×<input id="famH" type="number" value="10" min="4" max="48" style="width:50px">
         <label><input id="famOutline" type="checkbox" style="width:auto"> blocks</label>
         <label title="A hero figure (1.5 units: half a wall) and a 1-tile block at wall height (3 units), to judge texture scale"><input id="famGuides" type="checkbox" checked style="width:auto"> scale guides</label>
+        <label title="Show the families' layout templates instead of generated art: judge layout, scale and colours instantly"><input id="famBlockout" type="checkbox" style="width:auto"> blockout</label>
         <label title="Hero height in units (1 unit = half a tile width; walls are 3, doors 2)">hero<input id="famHero" type="number" step="0.1" min="0.5" max="4" value="1.5" style="width:52px"></label>
         <button id="famReroll" title="another layout">↻</button><button id="famFit">fit</button><button id="famFull">⛶</button>
         <button id="famExport" title="Export the set to Unity">Export</button></div>
@@ -496,6 +499,8 @@ function renderFamily() {
     <h2 style="margin-top:0">${esc(FAM)} <span class="hint">· ${wall
       ? "wall family: one front-view elevation (3 units tall, repeats every tile), wall variations per run length and doors repainted from it, then built onto every wall piece"
       : "floor family: one seamless master, variants repainted from it (they share its edges)"}</span></h2>
+    <h3>Layout template <span class="hint">a repeating layout at a known scale: masters start from it (FLUX keeps the layout and paints the surface), and the preview's blockout shows it before anything is generated</span></h3>
+    <div class="tplrow"><img id="tplImg" alt="" title="the template, 2 tiles"><div id="tplForm" class="tplform"></div></div>
     <h3>1 · Masters <span class="hint">prompt versions × seeds, judged tiled 3×3. Click a master to inspect, ★, use, edit or rescale it.</span></h3>
     <div id="famPrompts"></div>
     <div class="gbar"><button id="famAddVer">+ prompt version</button>
@@ -523,6 +528,7 @@ function renderFamily() {
       <span class="hint">For existing images, use Harmonize (Output, top right): on a family it pulls variant interiors to the master and never moves the edges.</span></div>
     <div id="famPalette" class="fampal"></div>`;
   renderFamPrompts();
+  renderTemplateForm();
   $("#famAddVer").onclick = () => { famSet().prompts.push(famSet().prompts[famSet().prompts.length - 1] || ""); renderFamPrompts(); saveFamily(); };
   $("#famGenMasters").onclick = generateMasters;
   $("#famTrialBtn").onclick = testVariation;
@@ -633,6 +639,46 @@ async function buildWalls() {
   catch (e) { famMsg(e.message); }
 }
 
+// ---- layout template editor (family board). PATTERNS_DEF comes from /api/dun/patterns.
+let PATTERNS_DEF = null;
+const TPL_FIELDS = [["across", "across", 1, 1, 24, "units per tile width (whole number: the layout repeats every tile)"],
+  ["course", "course", 0.01, 0.03, 0.6, "row height in tiles (bricks, ashlar, planks)"], ["mortar", "joint", 0.002, 0, 0.06, "mortar / grout width in tiles"],
+  ["bevel", "bevel", 0.002, 0, 0.08, "edge rounding in tiles"], ["jitter", "jitter", 0.05, 0, 1, "irregularity (flagstones, cobbles)"]];
+async function renderTemplateForm() {
+  if (!PATTERNS_DEF) { try { PATTERNS_DEF = await api("/api/dun/patterns"); } catch { PATTERNS_DEF = {}; } }
+  const t = famSet().template || {pattern: "none"}, def = PATTERNS_DEF[t.pattern] || {}, prm = {...def, ...(t.params || {})};
+  const pal = {stones: ["#7d7c80", "#6f6e73", "#87858a", "#76736f"], mortar: "#3b3a3f", variation: 0.08, ...(t.palette || {})};
+  const on = t.pattern && t.pattern !== "none";
+  $("#tplForm").innerHTML = `
+    <div class="row"><label>pattern<select id="tplPattern" style="width:auto"><option value="none">none (prompt only)</option>${Object.entries(PATTERNS_DEF).map(([k, v]) => `<option value="${k}" ${k === t.pattern ? "selected" : ""}>${esc(v.label)}</option>`).join("")}${t.pattern === "image" ? `<option value="image" selected>library image: ${esc(t.material || "")}</option>` : ""}</select></label>
+      <label title="How much FLUX may change the template: lower keeps the layout tighter">strength<input id="tplStrength" type="number" step="0.05" min="0.3" max="1" value="${t.strength ?? 0.7}" style="width:58px"></label>
+      <label title="Layout seed">seed<input id="tplSeed" type="number" value="${t.seed ?? 1}" style="width:58px"></label></div>
+    ${on && t.pattern !== "image" ? `<div class="row">${TPL_FIELDS.filter(([k]) => k in def).map(([k, l, st, mn, mx, tip]) => `<label title="${tip}">${l}<input class="tplP" data-k="${k}" type="number" step="${st}" min="${mn}" max="${mx}" value="${prm[k]}" style="width:62px"></label>`).join("")}</div>
+    <div class="row"><span class="hint">stones</span>${pal.stones.map((c, i) => `<input type="color" class="tplStone" data-i="${i}" value="${c}">`).join("")}
+      <button id="tplAddStone" title="another stone tone">+</button>${pal.stones.length > 1 ? `<button id="tplDelStone" title="remove the last tone">−</button>` : ""}
+      <span class="hint">joint</span><input type="color" id="tplMortar" value="${pal.mortar}"></div>` : ""}
+    ${t.pattern === "image" ? `<div class="hint">From the materials library (${esc(t.material || "")}): ${t.repeats ?? 1} repeat(s) per tile.</div>` : ""}`;
+  $("#tplImg").classList.toggle("hidden", !on);
+  if (on) $("#tplImg").src = `/api/dun/template?set=${SET}&piece=${encodeURIComponent(FAM)}&_=${Date.now()}`;
+  const collect = () => {
+    const pattern = $("#tplPattern").value;
+    if (pattern === "none") return {pattern: "none"};
+    if (pattern === "image") return {...t, strength: +$("#tplStrength").value, seed: +$("#tplSeed").value};
+    const params = {};
+    document.querySelectorAll("#tplForm .tplP").forEach(i => params[i.dataset.k] = +i.value);
+    const stones = [...document.querySelectorAll("#tplForm .tplStone")].map(i => i.value);
+    return {pattern, params: pattern === t.pattern ? params : {}, palette: {stones: stones.length ? stones : pal.stones, mortar: $("#tplMortar")?.value || pal.mortar},
+            strength: +$("#tplStrength").value, seed: +$("#tplSeed").value};
+  };
+  const changed = async (rerender) => { famSet().template = collect(); await saveFamily(); if (rerender) renderTemplateForm();
+    else if ($("#tplImg")) $("#tplImg").src = `/api/dun/template?set=${SET}&piece=${encodeURIComponent(FAM)}&_=${Date.now()}`;
+    if ($("#famBlockout").checked) loadFamLayout(true); };
+  $("#tplPattern").onchange = () => changed(true);
+  document.querySelectorAll("#tplForm input").forEach(i => i.onchange = () => changed(false));
+  if ($("#tplAddStone")) $("#tplAddStone").onclick = () => { famSet().template = {...collect(), palette: {...collect().palette, stones: [...pal.stones, pal.stones[pal.stones.length - 1]]}}; saveFamily().then(() => renderTemplateForm()); };
+  if ($("#tplDelStone")) $("#tplDelStone").onclick = () => { famSet().template = {...collect(), palette: {...collect().palette, stones: pal.stones.slice(0, -1)}}; saveFamily().then(() => renderTemplateForm()); };
+}
+
 async function generateVariants(varIds, sizes, doors = false) {
   await saveFamily();
   try {
@@ -646,7 +692,7 @@ async function generateVariants(varIds, sizes, doors = false) {
 async function saveFamily() {
   clearTimeout(famSaveT);
   const m = piece(FAM), f = famSet();
-  const family = {prompts: f.prompts, variations: f.variations, sizes: f.sizes, weights: f.weights, palette_lock: f.palette_lock};
+  const family = {prompts: f.prompts, variations: f.variations, sizes: f.sizes, weights: f.weights, palette_lock: f.palette_lock, template: f.template || null};
   if (famInfo().kind === "wall") Object.assign(family, {doors: f.doors, height: f.height, door_height: f.door_height, door_width: f.door_width});
   try { D.spec = (await post("piece/save", {piece: {...m, prompt: f.prompts[0] || m.prompt, family}})).spec; }
   catch (e) { famMsg(e.message); }
@@ -741,15 +787,17 @@ function famFloorForRoom() {
   if (famInfo().kind === "floor") return FAM;
   return Object.keys(D.families || {}).find(id => D.families[id].kind === "floor" && pstate(id).approved[0]) || "";
 }
-const famRoomMode = () => famInfo().kind === "wall" || Object.values(D.families || {}).some(f => f.kind === "wall" && f.built.length);
+const famWallForRoom = () => famInfo().kind === "wall" ? FAM : Object.keys(D.families || {}).find(id => D.families[id].kind === "wall" && (D.families[id].built.length || D.families[id].settings.template)) || "";
+const famRoomMode = () => famInfo().kind === "wall" || $("#famBlockout")?.checked || Object.values(D.families || {}).some(f => f.kind === "wall" && f.built.length);
 async function loadFamLayout(keepView) {
   if (!$("#famCanvas")) return;
-  if (!pstate(FAM).approved[0]) { PV.data = null; $("#famStageMsg").textContent = "Pick an active master to see it in a room."; drawFam(); return; }
+  if (!pstate(FAM).approved[0] && !($("#famBlockout")?.checked && famSet().template)) { PV.data = null; $("#famStageMsg").textContent = "Pick an active master (or turn on blockout with a template) to see it in a room."; drawFam(); return; }
   const room = famRoomMode(), w = +$("#famW").value || 14, h = +$("#famH").value || 10;
   const req = PV.req = (PV.req || 0) + 1;  // only the latest request may draw (switching sets/families races)
   let data;
   try {
-    data = await api(room ? `/api/dun/room_layout?set=${SET}&w=${w}&h=${h}&floor=${encodeURIComponent(famFloorForRoom())}`
+    const bo = $("#famBlockout")?.checked ? `&blockout=1&wall=${encodeURIComponent(famWallForRoom())}` : "";
+    data = await api(room ? `/api/dun/room_layout?set=${SET}&w=${w}&h=${h}&floor=${encodeURIComponent(famFloorForRoom())}${bo}`
                           : `/api/dun/family_layout?set=${SET}&piece=${encodeURIComponent(FAM)}&seed=${FAMSEED}&w=${w}&h=${h}`);
   } catch (e) { if (req === PV.req) $("#famStageMsg").textContent = e.message; return; }
   if (req !== PV.req) return;
@@ -865,6 +913,7 @@ function setupFamCanvas() {
   try { $("#famHero").value = localStorage.getItem("dun.hero") || 1.5; } catch {}
   $("#famHero").onchange = () => { try { localStorage.setItem("dun.hero", $("#famHero").value); } catch {} drawFam(); };
   $("#famGuides").onchange = $("#famOutline").onchange = drawFam;
+  $("#famBlockout").onchange = () => loadFamLayout(true);
   $("#famReroll").onclick = () => { FAMSEED = rnd(); loadFamLayout(true); };
   $("#famW").onchange = $("#famH").onchange = () => loadFamLayout(false);
   $("#famFit").onclick = () => { fitFam(); drawFam(); };

@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
-from . import ai_kit, comfy, iso
+from . import ai_kit, comfy, iso, patterns
 from .locks import CELLS as _CELL_CACHE, DUNGEON as LOCK, HARMONY as _REF_CACHE
 from .paths import REPO
 
@@ -361,10 +361,32 @@ def make_seamless(img, prompt, seed, lora=0.0, band=0.10):
     return Image.fromarray(np.roll(np.asarray(fixed), (-(S // 2), -(S // 2)), (0, 1)))
 
 
+def family_template(master):
+    """The family's layout template ({pattern, params, palette, seed, strength}) or None."""
+    t = (master.get("family") or {}).get("template")
+    return t if t and t.get("pattern") and t["pattern"] != "none" else None
+
+
+def template_render(tpl, kind, per=MASTER_PX, height_units=WALL_UNITS if "WALL_UNITS" in globals() else 3.0):
+    """A template as a floor square or a wall elevation: {"rgb", "height", "region"} (library image templates too)."""
+    if tpl["pattern"] == "image":
+        from . import library
+        return library.image_template(tpl, kind, per, height_units * iso._KZ)
+    if kind == "wall":
+        return patterns.wall_template(tpl, height_units * iso._KZ, per)
+    return patterns.floor_template(tpl, per)
+
+
 def gen_master(piece, seed=1, lora=0.0, st=None):
-    """A seamless master floor tile (top-down square, MASTER_PX)."""
+    """A seamless master floor tile (top-down square, MASTER_PX). With a family template: FLUX starts from the
+    template (img2img at its strength), so the layout and scale are the template's and only the surface is painted."""
     st = st or style()
     prompt = floor_texture_prompt(st, piece["prompt"])
+    tpl = family_template(piece)
+    if tpl:
+        init = template_render({**tpl, "seed": seed if tpl.get("reseed") else tpl.get("seed", 1)}, "floor", 1024)["rgb"]
+        src = _i2i(init, prompt, seed, float(tpl.get("strength", 0.7)), lora).resize((MASTER_PX, MASTER_PX), Image.LANCZOS)
+        return make_seamless(src, prompt, seed, lora)
     big = 1152  # FLUX likes a darker rim at the image edge: generate larger, keep the middle
     p = comfy.run(comfy.build_txt2img(prompt, big, big, seed=seed, lora_strength=lora, prefix="hdart/dun_master"),
                   DUN / "tmp")[0]
@@ -1570,6 +1592,11 @@ def gen_wall_master(spec, piece, seed=1, lora=0.0):
     fam = wall_family_settings(piece)
     w, h = elev_size(fam["height"])  # one tile wide, 3 units tall (512 x 1248)
     prompt = wall_texture_prompt(set_style(spec), piece["prompt"])
+    tpl = family_template(piece)
+    if tpl:  # start from the layout template (img2img), like floor masters
+        init = template_render({**tpl, "seed": seed if tpl.get("reseed") else tpl.get("seed", 1)}, "wall", 640, fam["height"])["rgb"]
+        img = _i2i(init, prompt, seed, float(tpl.get("strength", 0.7)), lora).resize((w, h), Image.LANCZOS)
+        return make_seamless_x(img, prompt, seed)
     gw, gh = 640, int(round(640 * h / w / 16)) * 16  # FLUX gets ~1 MP, then it's scaled to the elevation
     p = comfy.run(comfy.build_txt2img(prompt, gw, gh, seed=seed, lora_strength=lora, prefix="hdart/dun_wallm"), DUN / "tmp")[0]
     img = Image.open(p).convert("RGB").resize((w, h), Image.LANCZOS)
@@ -1966,6 +1993,87 @@ def family_palette(name, master_id):
     return {"master": {"rel": mrel, "rgb": to_rgb(mm)}, "items": items}
 
 
+def _blockout_file(name, pid, make, key):
+    """A blockout image for a piece (outside its candidate list), made by `make()` -> (img, mask) only when the
+    content key is new. Returns its rel."""
+    import hashlib
+    h = hashlib.sha1(key.encode()).hexdigest()[:12]
+    f = set_dir(name) / "candidates" / pid / "_blockout" / f"{h}.png"
+    if not f.exists():
+        img, mask = make()
+        f.parent.mkdir(parents=True, exist_ok=True)
+        img.save(f)
+        np.save(f.with_suffix(".npy"), mask)
+    return str(f.relative_to(set_dir(name))).replace("\\", "/")
+
+
+def blockout_include(name, floor_id=None, wall_id=None):
+    """room_preview `include` that shows the families' templates instead of generated art: the floor master as a
+    template tile (its variants left out), the wall template projected onto runs 1-4, the post and the doorway (a
+    flat door fill), and the set's other pieces on those boards left out. Families without a template keep their art."""
+    import json as _json
+    spec = load_set(name)
+    inc = {}
+    if floor_id:
+        fm = piece_of(spec, floor_id)
+        tpl = family_template(fm)
+        if tpl:
+            def floor_img():
+                r = template_render(tpl, "floor", MASTER_PX)
+                return r["rgb"], np.ones(r["region"].shape, bool)
+            inc[floor_id] = _blockout_file(name, floor_id, floor_img, "f" + _json.dumps(tpl, sort_keys=True))
+            for q in family_pieces(spec, floor_id).values():
+                inc[q["id"]] = None
+            board = fm.get("board", floor_id)
+            for q in spec["pieces"]:
+                if q["id"] != floor_id and q.get("board", q["id"]) == board and q["id"] not in inc:
+                    inc[q["id"]] = None
+    if wall_id:
+        wm = piece_of(spec, wall_id)
+        tpl = family_template(wm)
+        if tpl:
+            fam = wall_family_settings(wm, spec)
+            pcs = ensure_wall_pieces(name, wall_id)
+            spec = load_set(name)
+            cache = {}
+
+            def elev(door=False):
+                if "e" not in cache:
+                    cache["e"] = template_render(tpl, "wall", MASTER_PX, fam["height"])["rgb"]
+                e = cache["e"]
+                if not door:
+                    return e
+                a = np.asarray(e).copy()
+                x0, x1, y0, _ = door_rect(fam, e.width, iso._KZ * e.width, e.height)
+                a[int(y0):, int(x0):int(x1)] = (88, 58, 38)  # a flat door fill
+                return Image.fromarray(a)
+            key = _json.dumps(tpl, sort_keys=True) + str((fam["height"], fam["door_width"], fam["door_height"]))
+            for k in ("run1", "run2", "run3", "run4", "post", "doorway"):
+                piece = resolved(spec, pcs[k]["id"])
+                inc[piece["id"]] = _blockout_file(name, piece["id"], lambda piece=piece, k=k: project_elevation(
+                    piece, spec["tile"], elev(k == "doorway"), 1), k + key)
+            boards = set(fam["boards"].values())
+            for q in spec["pieces"]:
+                if q.get("kind") == "tile" and q.get("board", q["id"]) in boards and q["id"] not in inc:
+                    inc[q["id"]] = None
+    return inc
+
+
+def template_preview(name, master_id):
+    """A family template on its own: 2 x 2 tiles of floor, or 2 tiles of wall elevation."""
+    spec = load_set(name)
+    m = piece_of(spec, master_id)
+    tpl = family_template(m)
+    if not tpl:
+        raise ValueError("no template")
+    if m.get("method") == "wall_master":
+        fam = wall_family_settings(m, spec)
+        e = template_render(tpl, "wall", 256, fam["height"])["rgb"]
+        return Image.fromarray(np.tile(np.asarray(e), (1, 2, 1)))
+    f = template_render(tpl, "floor", 256)["rgb"]
+    return Image.fromarray(np.tile(np.asarray(f), (2, 2, 1)))
+
+
 def family_info(name, spec, master):
     """What the family board needs about a family: kind, settings, its pieces by size, material, built state."""
     if master.get("method") == "wall_master":
@@ -2135,7 +2243,7 @@ def room_preview(name, tile=None, scale=3, include=None, grid=None, floor_board=
     s = state(name)
     approved = {pid: list(ps.get("approved", [])) for pid, ps in s["pieces"].items()}
     for pid, rel in (include or {}).items():
-        approved[pid] = [rel]
+        approved[pid] = [rel] if rel else []
     roles, by_key = _roles(spec, approved)
     if floor_board:
         roles["."] = roles["R"] = roles["X"] = floor_board

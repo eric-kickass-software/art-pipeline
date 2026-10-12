@@ -325,8 +325,14 @@ def dungeon_get(path, q):
         if g("floor"):
             fp = next((p for p in spec["pieces"] if p["id"] == g("floor")), None)
             fb = fp.get("board", fp["id"]) if fp else None
-        return "application/json", json.dumps(dg.room_preview(name, dg.output_tile(spec), 1, None,
+        inc = dg.blockout_include(name, g("floor") or None, g("wall") or None) if g("blockout") == "1" else None
+        return "application/json", json.dumps(dg.room_preview(name, dg.output_tile(spec), 1, inc,
                                                               dg.room_grid(int(g("w", 14)), int(g("h", 10))), fb, True)).encode()
+    if path == "template":  # a family's layout template on its own
+        return "image/png", dg.png_bytes(dg.template_preview(name, g("piece")))
+    if path == "patterns":  # the pattern list with default params, for the template editor
+        from . import patterns
+        return "application/json", json.dumps(patterns.PATTERNS).encode()
     if path == "family_palette":  # family board: colour drift per image
         return "application/json", json.dumps(dg.family_palette(name, g("piece"))).encode()
     if path == "family_layout":  # live preview: which sprite goes where
