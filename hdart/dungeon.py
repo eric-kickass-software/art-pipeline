@@ -2433,6 +2433,48 @@ def variant_jobs(name, master_id, var_ids=None, sizes=None, n=1, doors=False):
     return jobs
 
 
+def fill_jobs(name, master_id, n=1):
+    """Generation jobs for the family's gaps only: every (variation, size) cell, and for walls every door, that has
+    no candidate yet from the active master (archived ones don't count). n per gap."""
+    spec = load_set(name)
+    master = piece_of(spec, master_id)
+    mrel = master_rel(name, master_id)
+    if not mrel:
+        raise ValueError(f"pick the active master of {master_id} first (Use as master)")
+    if state(name)["pieces"].get(master_id, {}).get("meta", {}).get(mrel, {}).get("draft"):
+        raise ValueError("the active master is a draft: finalize it first (variants keep the master's edges)")
+    wall = master.get("method") == "wall_master"
+    jobs = variant_jobs(name, master_id, None, None, n) + (variant_jobs(name, master_id, None, None, n, doors=True) if wall else [])
+    s = state(name)["pieces"]
+    have = set()
+    for pid, ps in s.items():
+        for r in ps.get("candidates", []):
+            m = ps.get("meta", {}).get(r, {})
+            if m.get("master") == mrel and m.get("variation"):
+                have.add((pid, m["variation"]))
+    return [j for j in jobs if (j["piece"], j["variation"]) not in have]
+
+
+def review_list(name, master_id):
+    """The family's candidates waiting for a decision: from the active master, not approved, not archived
+    (variants of every size, then doors). [{pid, rel}]"""
+    spec = load_set(name)
+    master = piece_of(spec, master_id)
+    mrel = master_rel(name, master_id)
+    s = state(name)["pieces"]
+    if master.get("method") == "wall_master":
+        pcs = wall_family_pieces(spec, master_id)
+        pids = [pcs[k]["id"] for k in ("var1", "var2", "var3", "var4", "door") if k in pcs]
+    else:
+        pids = [p["id"] for _, p in sorted(family_pieces(spec, master_id).items())]
+    out = []
+    for pid in pids:
+        ps = s.get(pid, {})
+        out += [{"pid": pid, "rel": r} for r in ps.get("candidates", [])
+                if r not in ps.get("approved", []) and ps.get("meta", {}).get(r, {}).get("master") == mrel]
+    return out
+
+
 def family_palette(name, master_id):
     """Colour of every image in the family (interior mean) and its distance from the active master (CIE76 ΔE: ~2 is
     barely visible, 5+ obvious, 10+ a different colour), so drifting variants stand out."""

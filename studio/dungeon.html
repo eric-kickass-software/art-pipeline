@@ -667,7 +667,9 @@ function renderFamily() {
       : "floor family: one seamless master, variants repainted from it (they share its edges)"}</span>
       <button id="famDelete" class="danger" style="float:right" title="Remove this family and all its pieces from the set; their images move to archive/families/">Delete family</button>
       ${wall ? "" : `<button id="famMatchWall" style="float:right;margin-right:6px" title="A wall family made to go with this floor: same palette and joints (via the material sheet, filled from this floor if empty), stone module carried over">+ matching wall family</button>`}</h2>
-    <div class="stages" id="famStages"></div>
+    <div class="row" style="align-items:center"><div class="stages" id="famStages" style="flex:1;margin:0"></div>
+      <button id="famFill" title="Queue only what's missing: every variation x size (and door) with no candidate from the active master yet">Fill gaps</button>
+      <button id="famReview" title="Step through every candidate waiting for a decision: A approve, X archive, arrows skip">Review</button></div>
     <h3>Layout template <span class="hint">a repeating layout at a known scale: masters start from it (FLUX keeps the layout and paints the surface), and the preview's blockout shows it before anything is generated</span></h3>
     <div class="row"><label style="display:flex;flex-direction:row;gap:6px;align-items:center" title="Take the palette, stone size and joints from the set's material sheet (left), and follow it when it changes"><input id="famLink" type="checkbox" style="width:auto" ${(f.template || {}).link ? "checked" : ""}> linked to the set's material sheet</label></div>
     <div class="tplrow"><img id="tplImg" alt="" title="the template, 2 tiles"><div id="tplForm" class="tplform"></div></div>
@@ -704,6 +706,8 @@ function renderFamily() {
   renderTemplateForm();
   $("#famAddVer").onclick = () => { famSet().prompts.push(famSet().prompts[famSet().prompts.length - 1] || ""); renderFamPrompts(); saveFamily(); };
   $("#famDelete").onclick = deleteFamily;
+  $("#famFill").onclick = fillFamily;
+  $("#famReview").onclick = reviewFamily;
   $("#famLink").onchange = async () => { try { D.spec = (await post("family/link", {piece: FAM, on: $("#famLink").checked})).spec; await load(); renderFamily(); } catch (e) { famMsg(e.message); } };
   if ($("#famMatchWall")) $("#famMatchWall").onclick = async () => {
     try { const r = await post("family/matching_wall", {piece: FAM}); FAM = r.piece; await load(); setView("family"); notice(`Made ${r.piece}: linked to the material sheet. Generate masters to start.`); }
@@ -741,6 +745,25 @@ async function deleteFamily() {
   } catch (e) { notice(e.message); }
 }
 
+async function fillFamily() {
+  await saveFamily();
+  try {
+    const r = await post("family/fill", {piece: FAM, n: +($("#famN") || {}).value || 1});
+    famMsg(r.jobs.length ? `Queued ${r.jobs.length} to fill the gaps. Review them when they're done.` : "No gaps: every variation and size has a candidate from the active master.");
+    pollJobs();
+  } catch (e) { famMsg(e.message); }
+}
+async function reviewFamily() {
+  let list;
+  try { list = await api(`/api/dun/review?set=${SET}&piece=${encodeURIComponent(FAM)}`); } catch (e) { return famMsg(e.message); }
+  if (!list.length) return famMsg("Nothing waiting: every candidate from the active master is approved or archived.");
+  openImage(list.map(x => ({pid: x.pid, rel: x.rel, kind: "variant"})), 0); IMG.review = true; renderImage();
+}
+async function refreshReviewCount() {
+  if (!$("#famReview")) return;
+  try { const n = (await api(`/api/dun/review?set=${SET}&piece=${encodeURIComponent(FAM)}`)).length; $("#famReview").textContent = n ? `Review (${n})` : "Review"; $("#famReview").classList.toggle("primary", !!n); } catch {}
+}
+
 function renderStages() {
   const el = $("#famStages"); if (!el || !famInfo()?.stages) return;
   const icon = {done: "✓", part: "◐", stale: "⚠", todo: "○"};
@@ -754,7 +777,7 @@ function renderStages() {
 
 function renderFamilyDynamic(keepView = true) {
   if (VIEW !== "family" || !famInfo() || !$("#famMasters")) return;
-  renderStages();
+  renderStages(); refreshReviewCount();
   setupFamCanvas(); renderFamMasters(); renderFamMatrix(); if (famInfo().kind === "wall") renderFamDoors(); renderFamPalette(); loadFamLayout(keepView);
 }
 
@@ -916,7 +939,7 @@ async function saveFamily() {
 // ---- image panel: inspect one family image; approve / use, star, archive, edit (repaint), rescale (masters).
 let IMG = null;  // {list: [{pid, rel, kind}], i, view}
 function openImage(list, i) { IMG = {list, i, view: IMG?.view || "tiled"}; $("#imgPanel").classList.remove("hidden"); renderImage(); }
-function closeImage() { IMG = null; $("#imgPanel").classList.add("hidden"); }
+function closeImage() { if (IMG?.review) refreshReviewCount(); IMG = null; $("#imgPanel").classList.add("hidden"); }
 function stepImage(d) { if (!IMG) return; IMG.i = (IMG.i + d + IMG.list.length) % IMG.list.length; renderImage(); }
 
 function renderImage() {
@@ -939,7 +962,7 @@ function renderImage() {
   $("#ipTitle").textContent = trial ? `variation test · ${it.variation}` : master ? `master · ${it.pid}`
     : p && p.method === "door_repaint" ? `door · ${doorText || "untagged"}`
     : p && p.method === "wall_repaint" ? `${n}-cell wall · ${varText || "untagged"}` : `${n}×${n} · ${varText || "untagged"}`;
-  $("#ipCount").textContent = `${IMG.i + 1} / ${IMG.list.length}`;
+  $("#ipCount").textContent = `${IMG.review ? "review · " : ""}${IMG.i + 1} / ${IMG.list.length}${IMG.review ? " · A approve · X archive · ← → skip" : ""}`;
   $("#ipTabs").innerHTML = views.map(([k, l]) => `<button data-v="${k}" class="${IMG.view === k ? "on" : ""}">${l}</button>`).join("");
   $("#ipTabs").querySelectorAll("button").forEach(b => b.onclick = () => { IMG.view = b.dataset.v; renderImage(); });
   $("#ipImg").src = src; $("#ipImg").classList.toggle("px", IMG.view === "game" && !!D.spec.pixel);
@@ -987,7 +1010,17 @@ function renderImage() {
     <div class="hint" id="ipMsg"></div>`;
   const msg = t => $("#ipMsg").textContent = t;
   const refresh = () => { renderFamilyDynamic(true); renderList(); renderImage(); };
-  if ($("#ipApprove")) $("#ipApprove").onclick = async () => { try { D.state.pieces[it.pid] = (await post("approve", {piece: it.pid, rel: it.rel, on: !on})).piece; refresh(); scheduleBuild(); } catch (e) { msg(e.message); } };
+  if ($("#ipApprove")) $("#ipApprove").onclick = async () => {
+    try {
+      D.state.pieces[it.pid] = (await post("approve", {piece: it.pid, rel: it.rel, on: !on})).piece; scheduleBuild();
+      if (IMG.review && !on) {  // review: approved -> off the list, on to the next
+        IMG.list.splice(IMG.i, 1); renderFamilyDynamic(true); renderList();
+        if (!IMG.list.length) { closeImage(); return famMsg("Review done."); }
+        IMG.i = Math.min(IMG.i, IMG.list.length - 1); renderImage(); return;
+      }
+      refresh();
+    } catch (e) { msg(e.message); }
+  };
   if ($("#ipUse")) $("#ipUse").onclick = async () => { if (on) return; try { D.state.pieces[FAM] = (await post("promote", {piece: FAM, rel: it.rel})).piece; await load(); renderImage(); scheduleBuild(); } catch (e) { msg(e.message); } };
   if ($("#ipFinalize")) $("#ipFinalize").onclick = async () => {
     try { await post("finalize", {piece: it.pid, rel: it.rel}); msg("Queued: the full master appears next to the draft (Use as master when you like it)."); pollJobs(); }
@@ -1111,6 +1144,7 @@ document.addEventListener("keydown", e => {
   if (!IMG || /TEXTAREA|INPUT/.test(document.activeElement.tagName)) return;
   if (e.key === "Escape") closeImage(); else if (e.key === "ArrowLeft") stepImage(-1); else if (e.key === "ArrowRight") stepImage(1);
   else if (e.key === "a" && $("#ipApprove")) $("#ipApprove").click();
+  else if (e.key === "x" && $("#ipArchive")) $("#ipArchive").click();
 });
 
 // ---- live preview: the planner's layout drawn with the cut sprites (what the Unity export ships), pan + zoom.

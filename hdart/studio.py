@@ -303,6 +303,10 @@ def dungeon_post(action, b):
     if action == "family/material":  # use a library material on a family (template / palette / words)
         return {"spec": dg.apply_material(name, b["piece"], b["material"], b.get("use", ["template", "words"]),
                                           float(b.get("strength", 0.65)))}
+    if action == "family/fill":  # queue the family's gaps only (variation x size cells, doors) from the active master
+        jobs = dg.fill_jobs(name, b["piece"], int(b.get("n", 1)))
+        ids = [JOBS.add("dun", j, f"{name} · {j['piece']} · {j['variation']} (fill)")["id"] for j in jobs]
+        return {"jobs": ids}
     if action == "family/build":  # wall families: project the elevations onto the wall pieces
         job = JOBS.add("dun_build", b, f"{name} · {b['piece']} build walls")
         return {"job": job["id"]}
@@ -403,6 +407,8 @@ def dungeon_get(path, q):
         return "application/json", json.dumps(patterns.PATTERNS).encode()
     if path == "family_palette":  # family board: colour drift per image
         return "application/json", json.dumps(dg.family_palette(name, g("piece"))).encode()
+    if path == "review":  # family candidates waiting for a decision
+        return "application/json", json.dumps(dg.review_list(name, g("piece"))).encode()
     if path == "family_layout":  # live preview: which sprite goes where
         lay = dg.family_layout(name, g("piece"), int(g("seed", 0)), int(g("w", 16)), int(g("h", 12)))
         return "application/json", json.dumps({**lay, "rev": dg.preview_rev(name, dg.load_set(name))}).encode()

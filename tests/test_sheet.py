@@ -59,5 +59,17 @@ st = {x['key']: x for x in d.family_stages('zs', d.load_set('zs'), d.piece_of(d.
 assert st['master']['state'] == 'part' and 'finalize' in st['master']['detail'], st['master']
 ws = [x['key'] for x in d.family_stages('zs', d.load_set('zs'), d.piece_of(d.load_set('zs'), wid))]
 assert ws == ['template', 'master', 'variations', 'doors', 'built', 'export'], ws
+# fill gaps: refused on a draft master; else one job per (variation, size) without a candidate from the active master
+try: d.fill_jobs('zs', fid); raise SystemExit('no error')
+except ValueError as e: assert 'draft' in str(e)
+s = d.state('zs'); s['pieces'][fid]['meta'] = {}; d.save_state('zs', s)
+jobs = d.fill_jobs('zs', fid)
+fam = d.family_settings(d.piece_of(d.load_set('zs'), fid))
+assert len(jobs) == len(fam['variations']) * len(fam['sizes']), len(jobs)
+j = jobs[0]; mrel = d.master_rel('zs', fid)
+s = d.state('zs'); ps = s['pieces'].setdefault(j['piece'], {'candidates': [], 'approved': []})
+ps['candidates'].append('candidates/x.png'); ps.setdefault('meta', {})['candidates/x.png'] = {'master': mrel, 'variation': j['variation']}; d.save_state('zs', s)
+assert len(d.fill_jobs('zs', fid)) == len(jobs) - 1
+assert d.review_list('zs', fid) == [{'pid': j['piece'], 'rel': 'candidates/x.png'}]
 shutil.rmtree(tmp)
 print("sheet tests passed")
