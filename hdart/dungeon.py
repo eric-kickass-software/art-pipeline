@@ -1636,11 +1636,13 @@ def project_elevation(piece, tile, elev, period=ELEV_PERIOD, h=None):
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8)), m
 
 
+WALL_SEAMLESS = "seamless horizontally, the pattern continues past the left and right edges, "
+
+
 def wall_texture_prompt(st, text):
     return (f"{style_text(st, ('medium', 'style', 'rendering', 'biome'))}, flat front view of a dungeon wall, "
             f"orthographic elevation, {text}, the wall fills the whole image from its base at the bottom edge to a "
-            f"stone cap at the top edge, no floor, no ceiling, no perspective, seamless horizontally, the pattern "
-            f"continues past the left and right edges, flat even lighting")
+            f"stone cap at the top edge, no floor, no ceiling, no perspective, {WALL_SEAMLESS}flat even lighting")
 
 
 def door_texture_prompt(st, material, text):
@@ -2008,6 +2010,16 @@ def elevation_bands(name, rel, height_units=WALL_UNITS, keep_top=KEEP_TOP, keep_
     return Image.fromarray(np.tile(np.clip(a, 0, 255).astype(np.uint8), (1, repeat, 1)))
 
 
+def feature_zone(w, per, N, seed, outside=0.3, ramp=0.35):
+    """Per-column repaint strength for an N-cell variation: 1 in one band (random centre, 45-80% of the run, at
+    least 1.2 cells, so it crosses a cell boundary), easing to `outside` (a light repaint) elsewhere."""
+    rng = np.random.default_rng(seed)
+    xx = (np.arange(w) + 0.5) / per
+    width = max(1.2, rng.uniform(0.45, 0.8) * N)
+    c = rng.uniform(width / 2 + 0.15, N - width / 2 - 0.15) if N - width > 0.3 else N / 2
+    return outside + (1 - outside) * np.clip(1 - (np.abs(xx - c) - width / 2) / ramp, 0, 1)
+
+
 def gen_wall_variant(name, spec, piece, seed=1, denoise=None, lora=0.0):
     """A wall variation for runs of N cells: the master tiled N times sideways, everything but the kept edges
     (left/right where it meets other pieces, the cap line and the base) repainted. Canvas <= BLOCK_MAX wide."""
@@ -2020,7 +2032,13 @@ def gen_wall_variant(name, spec, piece, seed=1, denoise=None, lora=0.0):
     base = Image.fromarray(np.tile(np.asarray(m), (1, N, 1)))
     w, h = base.size
     mask = elev_keep_mask(w, h, per, iso._KZ * per)
-    out = repaint(base, mask, wall_texture_prompt(set_style(spec), piece["prompt"]), seed,
+    prompt = wall_texture_prompt(set_style(spec), piece["prompt"])
+    if N > 1 and fam.get("span", "once") == "once":
+        # the run is one piece: its feature should happen once across it, not once per cell (FLUX copies the
+        # master tiled N times). Strong repaint in one zone spanning cells, light elsewhere, and no "repeating"
+        mask = mask * feature_zone(w, per, N, seed)[None, :]
+        prompt = prompt.replace(WALL_SEAMLESS, "").replace(piece["prompt"], f"{piece['prompt']}, in a single place on this wall section")
+    out = repaint(base, mask.astype(np.float32), prompt, seed,
                   denoise=float(denoise) if denoise else REPAINT_DENOISE, lora=lora, reference=False)
     return lock_palette(spec, master_id, out, mask, m) if fam["palette_lock"] else out
 
@@ -2087,6 +2105,7 @@ def wall_family_settings(master, spec=None):
     f["height"] = float(f.get("height", WALL_UNITS))
     f["door_height"] = float(f.get("door_height", DOOR_UNITS))
     f["door_width"] = float(f.get("door_width", DOOR_WIDTH))
+    f["span"] = f.get("span", "once")  # multi-cell variations: the feature "once" across the run, or "spread"
     f["boards"] = {**(set_wall_boards(spec) if spec else {"wall": "tile.crypt_wall", "post": "tile.crypt_wall.post", "door": "tile.crypt_door"}),
                    **(master.get("family") or {}).get("boards", {})}
     return f

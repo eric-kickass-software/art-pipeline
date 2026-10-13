@@ -59,6 +59,12 @@ g = np.diff(fj)
 assert len(g) > 5 and g.std() / g.mean() < 0.08, (g.round(3), info)  # evened (from about +-15%)
 crop, ci = d.fit_courses(Image.fromarray(wall), d.WALL_UNITS, first, d.WALL_UNITS - last, "crop")
 assert ci["overall"] > 0 and ci["courses"] == info["courses"]
+# multi-cell variations: one strong zone that crosses a cell boundary, a light repaint elsewhere
+for N in (2, 3, 4):
+    for seed in range(30):
+        z = d.feature_zone(N * 384, 384, N, seed); x = np.flatnonzero(z > 0.99) / 384
+        assert z.min() >= 0.3 - 1e-9 and x.size and np.floor(x.min()) < np.floor(x.max()), (N, seed)
+assert 'continues past' in d.wall_texture_prompt(d.style(), 'x') and d.WALL_SEAMLESS in d.wall_texture_prompt(d.style(), 'x')
 # bands view: kept cap and base tinted, repeated sideways
 import json, shutil, tempfile
 from pathlib import Path
