@@ -303,6 +303,10 @@ def dungeon_post(action, b):
     if action == "family/material":  # use a library material on a family (template / palette / words)
         return {"spec": dg.apply_material(name, b["piece"], b["material"], b.get("use", ["template", "words"]),
                                           float(b.get("strength", 0.65)))}
+    if action == "recipe/save":  # families (and the sheet) as a reusable recipe
+        return {"recipe": dg.save_recipe(name, b["pieces"], b["title"], bool(b.get("with_sheet", True)), b.get("notes", ""))}
+    if action == "recipe/apply":  # new families from a recipe
+        return {"pieces": dg.apply_recipe(name, b["recipe"], b.get("use_sheet", True))}
     if action == "family/fill":  # queue the family's gaps only (variation x size cells, doors) from the active master
         jobs = dg.fill_jobs(name, b["piece"], int(b.get("n", 1)))
         ids = [JOBS.add("dun", j, f"{name} · {j['piece']} · {j['variation']} (fill)")["id"] for j in jobs]
@@ -407,6 +411,8 @@ def dungeon_get(path, q):
         return "application/json", json.dumps(patterns.PATTERNS).encode()
     if path == "family_palette":  # family board: colour drift per image
         return "application/json", json.dumps(dg.family_palette(name, g("piece"))).encode()
+    if path == "recipes":
+        return "application/json", json.dumps(dg.list_recipes()).encode()
     if path == "review":  # family candidates waiting for a decision
         return "application/json", json.dumps(dg.review_list(name, g("piece"))).encode()
     if path == "family_layout":  # live preview: which sprite goes where

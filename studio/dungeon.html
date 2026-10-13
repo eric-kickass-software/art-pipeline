@@ -32,7 +32,7 @@
   .plist .grp.gclick { cursor:pointer; } .plist .grp.gclick:hover, .plist .grp.sel { text-decoration:underline; }
   .stylebox { margin-top:8px; border:1px solid var(--line); border-radius:6px; padding:4px 8px; }
   .stylebox summary { cursor:pointer; color:var(--muted); font-size:12px; }
-  .stylebox summary:not([data-n="0"])::after { content:" · " attr(data-n) " unsaved"; color:var(--accent); } .stylebox[open] summary { margin-bottom:6px; }
+  .stylebox summary[data-n]:not([data-n="0"])::after { content:" · " attr(data-n) " unsaved"; color:var(--accent); } .stylebox[open] summary { margin-bottom:6px; }
   .stylebox .sf { margin-bottom:6px; } .stylebox .sf label { font-size:11px; color:var(--accent); }
   .stylebox .sf textarea { width:100%; } .stylebox .sf.dirty textarea { border-color:var(--accent); }
   .grow { border:1px solid var(--line); border-radius:6px; padding:6px; margin:6px 0; background:var(--card); }
@@ -200,6 +200,7 @@
       <div id="spStyle" class="stylebox" style="border:none;padding:0"><summary style="display:none"></summary><div class="sbody"></div></div>
     </details>
     <details id="sheetPanel" class="stylebox setpanel"><summary>Material sheet</summary><div id="sheetBody"></div></details>
+    <details id="recipePanel" class="stylebox setpanel"><summary>Recipes</summary><div id="recipeBody"></div></details>
     <details id="libSide" class="stylebox setpanel" open><summary>Materials library</summary>
       <div id="libList" class="liblist"></div>
       <div class="row"><button id="libImportBtn" style="width:100%" title="Search ambientCG and Poly Haven (CC0) and import materials">Import from ambientCG / Poly Haven…</button></div>
@@ -358,6 +359,7 @@ async function load() {
   syncPixel();
   renderSetPanel();
   renderSheetPanel();
+  renderRecipes();
   if (!LIB.length) renderLibrary();
   // Start on a floor family (or the walls board) instead of an empty editor; keep the view when it still exists.
   const fams = Object.keys(D.families || {});
@@ -546,6 +548,43 @@ function renderSheetPanel() {
   };
   $("#shAddStone").onclick = () => { D.sheet.palette.stones.push(D.sheet.palette.stones.at(-1)); renderSheetPanel(); $("#sheetPanel").open = true; };
   if ($("#shDelStone")) $("#shDelStone").onclick = () => { D.sheet.palette.stones.pop(); renderSheetPanel(); $("#sheetPanel").open = true; };
+}
+
+// ---- recipes: a family's whole setup (or a set's floor + wall families, with the sheet), reusable in any set.
+async function renderRecipes() {
+  const el = $("#recipeBody"); if (!el) return;
+  let R = [];
+  try { R = await api(`/api/dun/recipes?set=${SET}`); } catch {}
+  const sw = r => r.sheet ? r.sheet.palette.stones.map(c => `<span style="display:inline-block;width:10px;height:10px;background:${c}"></span>`).join("") +
+    `<span style="display:inline-block;width:10px;height:10px;background:${r.sheet.palette.mortar}"></span>` : "";
+  el.innerHTML = `<div class="hint">Start families from a saved setup (prompts, variations, doors, template, switches; a set recipe also brings the material sheet).</div>
+    ${R.map(r => `<div class="row" style="align-items:center" title="${esc(r.notes || "")} (from ${esc(r.from_set)}, ${esc(r.saved)})">
+      <span style="flex:1"><b>${esc(r.title)}</b> <span class="hint">${r.families.map(f => f.kind).join(" + ")}</span> ${sw(r)}</span>
+      <button class="rcUse" data-id="${esc(r.id)}">Use</button></div>`).join("") || `<div class="hint">No recipes yet.</div>`}
+    <div class="row"><button id="rcSaveFam" title="The open family's setup (and the set's material sheet)">Save this family</button>
+      <button id="rcSaveSet" title="Every family of this set (floors and walls) and the material sheet, as one kit">Save set kit</button></div>
+    <div class="hint" id="rcMsg"></div>`;
+  const msg = t => $("#rcMsg").textContent = t;
+  el.querySelectorAll(".rcUse").forEach(b => b.onclick = async () => {
+    const r = R.find(x => x.id === b.dataset.id);
+    let use = true;
+    if (r.sheet && D.spec.sheet) use = confirm(`"${r.title}" has its own material sheet. Replace this set's sheet with it? (Cancel keeps this set's sheet.)`) ? "replace" : false;
+    try {
+      const out = await post("recipe/apply", {recipe: r.id, use_sheet: use});
+      FAM = out.pieces[0]; await load(); setView("family"); $("#recipePanel").open = true;
+      notice(`Made ${out.pieces.join(", ")} from "${r.title}". Draft masters to start.`);
+    } catch (e) { msg(e.message); }
+  });
+  $("#rcSaveFam").onclick = async () => {
+    if (VIEW !== "family" || !famInfo()) return msg("Open a family first.");
+    const t = (prompt("Recipe name:", FAM.replace(/^tile\.[^_]+_/, "").replace(/_(wall_)?master$/, "").replace(/_/g, " ")) || "").trim(); if (!t) return;
+    try { await post("recipe/save", {pieces: [FAM], title: t}); msg(`Saved "${t}".`); renderRecipes(); } catch (e) { msg(e.message); }
+  };
+  $("#rcSaveSet").onclick = async () => {
+    const ids = Object.keys(D.families || {}); if (!ids.length) return msg("No families in this set yet.");
+    const t = (prompt(`Kit name (${ids.length} families + the material sheet):`, `${D.spec.name || SET} kit`) || "").trim(); if (!t) return;
+    try { await post("recipe/save", {pieces: ids, title: t}); msg(`Saved "${t}".`); renderRecipes(); } catch (e) { msg(e.message); }
+  };
 }
 
 // ---- floor families: one master + repainted variants per block size, on one board.

@@ -2731,6 +2731,69 @@ def matching_wall_family(name, floor_id, slug=None):
     return wid
 
 
+# ----------------------------------------------------------------------------- recipes
+# library/recipes/<id>.json (in git, shared by every set): a family's whole setup (prompts, variations, doors,
+# template, switches) or a set's floor + wall families together, optionally with the set's material sheet. Start new
+# families from one instead of from scratch. Board ids and images are never part of a recipe.
+
+RECIPES = ROOT / "library" / "recipes"
+_RECIPE_DROP = ("boards",)  # set-specific
+
+
+def _family_recipe(master):
+    kind = "wall" if master.get("method") == "wall_master" else "floor"
+    fam = {k: v for k, v in (master.get("family") or {}).items() if k not in _RECIPE_DROP}
+    return {"kind": kind, "slug": re.sub(r"^tile\.[^_]+_|_(wall_)?master$", "", master["id"]),
+            "prompt": master.get("prompt", ""), "family": fam}
+
+
+def save_recipe(name, master_ids, title, with_sheet=True, notes=""):
+    """Save one or more families of a set (and its sheet) as a recipe. Returns the recipe."""
+    spec = load_set(name)
+    rid = re.sub(r"[^a-z0-9_]+", "_", title.lower()).strip("_") or "recipe"
+    rec = {"id": rid, "title": title, "notes": notes, "from_set": name, "saved": time.strftime("%Y-%m-%d"),
+           "families": [_family_recipe(piece_of(spec, m)) for m in master_ids]}
+    if with_sheet and spec.get("sheet"):
+        rec["sheet"] = {k: v for k, v in sheet(spec).items() if k != "floor"}
+    RECIPES.mkdir(parents=True, exist_ok=True)
+    (RECIPES / f"{rid}.json").write_text(json.dumps(rec, indent=2) + "\n", encoding="utf-8")
+    return rec
+
+
+def list_recipes():
+    return [json.loads(f.read_text(encoding="utf-8")) for f in sorted(RECIPES.glob("*.json"))] if RECIPES.exists() else []
+
+
+def apply_recipe(name, rid, use_sheet=True):
+    """New families in a set from a recipe (ids made unique), and its sheet when the set has none yet (or
+    use_sheet="replace"). Linked templates take the set's sheet. Returns the new master ids."""
+    f = RECIPES / f"{re.sub(r'[^a-z0-9_]+', '_', rid)}.json"
+    if not f.exists():
+        raise ValueError(f"no recipe {rid}")
+    rec = json.loads(f.read_text(encoding="utf-8"))
+    spec = load_set(name)
+    if rec.get("sheet") and use_sheet and (use_sheet == "replace" or not spec.get("sheet")):
+        update_sheet(name, rec["sheet"])
+    made = []
+    for fr in rec["families"]:
+        spec = load_set(name)
+        wall = fr["kind"] == "wall"
+        base = f"tile.{name}_{fr['slug'] or ('wall' if wall else 'floor')}"
+        pid, n = f"{base}_{'wall_' if wall and not base.endswith('wall') else ''}master", 2
+        while any(p["id"] == pid for p in spec["pieces"]):
+            pid, n = f"{base}{n}_{'wall_' if wall and not base.endswith('wall') else ''}master", n + 1
+        piece = {"id": pid, "prompt": fr["prompt"], "variants": 1, "family": dict(fr["family"]),
+                 **({"kind": "elevation", "shape": "elevation", "method": "wall_master"} if wall else
+                    {"kind": "tile", "shape": "floor", "method": "master", "board": f"tile.{name}_floor"})}
+        upsert_piece(name, piece)
+        made.append(pid)
+    if made and not sheet(load_set(name))["floor"]:
+        floor = next((m for m, fr in zip(made, rec["families"]) if fr["kind"] == "floor"), None)
+        if floor:
+            update_sheet(name, {"floor": floor})
+    return made
+
+
 def apply_material(name, master_id, mid, use=("template", "words"), strength=0.65):
     """Use a library material on a family: its texture as the layout template, its palette on the family's procedural
     template, its words in the master prompt. Records the material on the family (floor and wall families can share

@@ -71,5 +71,18 @@ s = d.state('zs'); ps = s['pieces'].setdefault(j['piece'], {'candidates': [], 'a
 ps['candidates'].append('candidates/x.png'); ps.setdefault('meta', {})['candidates/x.png'] = {'master': mrel, 'variation': j['variation']}; d.save_state('zs', s)
 assert len(d.fill_jobs('zs', fid)) == len(jobs) - 1
 assert d.review_list('zs', fid) == [{'pid': j['piece'], 'rel': 'candidates/x.png'}]
+# recipes: save the set's floor + wall as a kit (with its sheet), use it in a fresh set
+d.RECIPES = tmp / 'recipes'
+rec = d.save_recipe('zs', [fid, wid], 'Basalt Kit', notes='test')
+assert rec['id'] == 'basalt_kit' and [f['kind'] for f in rec['families']] == ['floor', 'wall'] and rec['sheet']['words'] == 'black basalt, green moss'
+assert 'boards' not in rec['families'][1]['family'] and d.list_recipes()[0]['title'] == 'Basalt Kit'
+d.new_set('zt', biome='sewer')
+made = d.apply_recipe('zt', 'basalt_kit')
+spec_t = d.load_set('zt')
+assert len(made) == 2 and d.piece_of(spec_t, made[0])['method'] == 'master' and d.piece_of(spec_t, made[1])['method'] == 'wall_master', made
+assert d.sheet(spec_t)['words'] == 'black basalt, green moss' and d.sheet(spec_t)['floor'] == made[0]
+assert d.family_template(d.piece_of(spec_t, made[1]))['link'] and d.piece_of(spec_t, made[0])['family']['template']['pattern'] == 'flagstone'
+again = d.apply_recipe('zt', 'basalt_kit')
+assert set(again).isdisjoint(made) and len(again) == 2, again  # unique ids the second time
 shutil.rmtree(tmp)
 print("sheet tests passed")
