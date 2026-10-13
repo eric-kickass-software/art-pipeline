@@ -51,5 +51,13 @@ warm = np.asarray(d.match_to_floor("zs", spec, grey)).reshape(-1, 3).mean(0)
 assert warm[0] > warm[2] + 10, warm
 d.update_sheet("zs", {"match": 0})
 assert np.asarray(d.match_to_floor("zs", d.load_set("zs"), grey)).mean() == 128
+# stages: a draft as the active master is 'part' (finalize it); a full one is 'done'; no variations yet = todo
+st = {x['key']: x for x in d.family_stages('zs', d.load_set('zs'), d.piece_of(d.load_set('zs'), fid))}
+assert st['master']['state'] == 'done' and st['variations']['state'] == 'todo' and st['export']['state'] == 'todo', st
+s = d.state('zs'); s['pieces'][fid]['meta'] = {'candidates/' + fid + '/m.png': {'draft': True}}; d.save_state('zs', s)
+st = {x['key']: x for x in d.family_stages('zs', d.load_set('zs'), d.piece_of(d.load_set('zs'), fid))}
+assert st['master']['state'] == 'part' and 'finalize' in st['master']['detail'], st['master']
+ws = [x['key'] for x in d.family_stages('zs', d.load_set('zs'), d.piece_of(d.load_set('zs'), wid))]
+assert ws == ['template', 'master', 'variations', 'doors', 'built', 'export'], ws
 shutil.rmtree(tmp)
 print("sheet tests passed")

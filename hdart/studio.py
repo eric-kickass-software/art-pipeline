@@ -154,7 +154,7 @@ class Jobs:
                                                 float(a["denoise"]) if a.get("denoise") not in (None, "") else None,
                                                 a.get("prompt") or None,
                                                 float(a["lora"]) if a.get("lora") not in (None, "") else None,
-                                                a.get("variation"))
+                                                a.get("variation"), bool(a.get("draft")))
                 elif job["kind"] == "dun_trial":
                     job["result"] = dg.trial(a["set"], a["piece"], a["rel"], a.get("variation", ""), int(a.get("seed", 1)))
                 elif job["kind"] == "dun_edit":
@@ -172,6 +172,8 @@ class Jobs:
                     else:
                         job["result"] = dg.rescale_master(a["set"], a["piece"], a["rel"], float(a["factor"]),
                                                           bool(a.get("redetail")), int(a.get("seed", 1)))
+                elif job["kind"] == "dun_finalize":
+                    job["result"] = dg.finalize_draft(a["set"], a["piece"], a["rel"], a.get("seed"))
                 elif job["kind"] == "dun_build":
                     job["result"] = dg.build_walls(a["set"], a["piece"])
                 elif job["kind"] == "lib_import":
@@ -269,7 +271,10 @@ def dungeon_post(action, b):
     if action == "piece/delete":
         return {"spec": dg.delete_piece(name, b["piece"])}
     if action == "generate":
-        job = JOBS.add("dun", b, f"{name} · {b['piece']} ×{b.get('n', 3)}")
+        job = JOBS.add("dun", b, f"{name} · {b['piece']} ×{b.get('n', 3)}{' draft' if b.get('draft') else ''}")
+        return {"job": job["id"]}
+    if action == "finalize":  # a full master from a draft (same composition)
+        job = JOBS.add("dun_finalize", b, f"{name} · {b['piece']} finalize draft")
         return {"job": job["id"]}
     if action == "approve":
         return {"piece": dg.approve(name, b["piece"], b["rel"], bool(b.get("on", True)))}

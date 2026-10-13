@@ -91,6 +91,12 @@
   .famstage { position:relative; height:460px; border-radius:6px; overflow:hidden; background:#16121c; border:1px solid var(--line); }
   .famstage.full { position:fixed; inset:0; height:auto; z-index:60; border-radius:0; }
   .famstage.busy { border-color:#c9a227; }
+  .stages { display:flex; flex-wrap:wrap; gap:4px; margin:4px 0 10px; }
+  .stage { font-size:11px; padding:3px 8px; border-radius:10px; cursor:pointer; border:1px solid var(--line); }
+  .stage.done { background:#1f3a26; color:#9fe0ad; } .stage.part { background:#3d3418; color:#f0d27a; }
+  .stage.stale { background:#4a2020; color:#ffb4a8; } .stage.todo { background:transparent; color:#8d86a0; }
+  .famcard .draft { position:absolute; top:4px; left:4px; font-size:10px; padding:1px 5px; border-radius:3px; background:#3d3418; color:#f0d27a; }
+  .famcard { position:relative; }
   .pvstatus { font-size:12px; padding:2px 8px; border-radius:10px; white-space:nowrap; cursor:default; }
   .pvstatus.ok { background:#1f3a26; color:#9fe0ad; }
   .pvstatus.busy { background:#3d3418; color:#f0d27a; }
@@ -599,7 +605,7 @@ function renderFamMasters() {
   const label = pr => { const i = versions.indexOf(pr); return i >= 0 ? `${String.fromCharCode(65 + i)} · ${pr}` : `older prompt · ${pr}`; };
   const order = Object.keys(groups).sort((a, b) => (versions.indexOf(a) + 1 || 99) - (versions.indexOf(b) + 1 || 99));
   $("#famMasters").innerHTML = s.candidates.length ? order.map(pr => `<div class="hint famgrp" title="${esc(pr)}">${esc(label(pr))}</div><div class="famcards">` +
-    groups[pr].map(rel => `<div class="famcard ${rel === active ? "active" : ""}" data-rel="${esc(rel)}">
+    groups[pr].map(rel => `<div class="famcard ${rel === active ? "active" : ""}" data-rel="${esc(rel)}">${(meta[rel] || {}).draft ? `<span class="draft" title="a quick draft: open it and Finalize for a full master">DRAFT</span>` : ""}
       <img class="seam" src="/api/dun/seam?set=${SET}&piece=${encodeURIComponent(FAM)}&rel=${encodeURIComponent(rel)}" title="tiled 3×3 (click to inspect)">
       <div class="btns"><button data-a="star" class="${starred.includes(rel) ? "on" : ""}" title="keep for comparing">${starred.includes(rel) ? "★" : "☆"}</button>
         <button data-a="use" class="${rel === active ? "on" : ""}">${rel === active ? "✓ Active master" : "Use as master"}</button>
@@ -636,12 +642,12 @@ function famMsg(t) { const el = $("#famMsg"); if (el) el.textContent = t; }
 let famSaveT = null;
 function saveFamilySoon() { clearTimeout(famSaveT); famSaveT = setTimeout(saveFamily, 600); }
 
-async function generateMasters() {
+async function generateMasters(draft = false) {
   await saveFamily();
-  const k = Math.max(1, +$("#famSeeds").value || 1), vers = famSet().prompts.filter(p => p.trim());
+  const k = Math.max(1, +$("#famSeeds").value || 1) * (draft ? 3 : 1), vers = famSet().prompts.filter(p => p.trim());
   try {
-    for (const pr of vers) for (let i = 0; i < k; i++) await post("generate", {piece: FAM, n: 1, seed: rnd(), prompt: pr.trim()});
-    famMsg(`Queued ${vers.length * k} masters.`); pollJobs();
+    for (const pr of vers) for (let i = 0; i < k; i++) await post("generate", {piece: FAM, n: 1, seed: rnd(), prompt: pr.trim(), draft});
+    famMsg(`Queued ${vers.length * k} ${draft ? "drafts (3× the seeds: they're quick)" : "masters"}.`); pollJobs();
   } catch (e) { famMsg(e.message); }
 }
 
@@ -661,6 +667,7 @@ function renderFamily() {
       : "floor family: one seamless master, variants repainted from it (they share its edges)"}</span>
       <button id="famDelete" class="danger" style="float:right" title="Remove this family and all its pieces from the set; their images move to archive/families/">Delete family</button>
       ${wall ? "" : `<button id="famMatchWall" style="float:right;margin-right:6px" title="A wall family made to go with this floor: same palette and joints (via the material sheet, filled from this floor if empty), stone module carried over">+ matching wall family</button>`}</h2>
+    <div class="stages" id="famStages"></div>
     <h3>Layout template <span class="hint">a repeating layout at a known scale: masters start from it (FLUX keeps the layout and paints the surface), and the preview's blockout shows it before anything is generated</span></h3>
     <div class="row"><label style="display:flex;flex-direction:row;gap:6px;align-items:center" title="Take the palette, stone size and joints from the set's material sheet (left), and follow it when it changes"><input id="famLink" type="checkbox" style="width:auto" ${(f.template || {}).link ? "checked" : ""}> linked to the set's material sheet</label></div>
     <div class="tplrow"><img id="tplImg" alt="" title="the template, 2 tiles"><div id="tplForm" class="tplform"></div></div>
@@ -669,6 +676,7 @@ function renderFamily() {
     <div class="gbar"><button id="famAddVer">+ prompt version</button>
       <label>seeds each<input id="famSeeds" type="number" value="2" min="1" max="8" style="width:52px"></label>
       <label class="${wall ? "hidden" : ""}" title="Even out stone-sized differences in colour (a darker slab, a stain) on new masters: a master repeats every tile, so anything that stands out repeats too. 0 = off">even tone<input id="famEven" type="number" step="0.1" min="0" max="1" value="${f.even_tone ?? 0.8}" style="width:52px"></label>
+      <button id="famDraftMasters" title="Quick looks: a quarter of the pixels, half the steps, no seam repaint (~2 s each). Finalize the one you like into a full master (same composition)">Draft masters</button>
       <button id="famGenMasters" class="primary">Generate masters</button>
       <span class="hint" id="famMsg"></span></div>
     <div id="famMasters"></div>
@@ -701,7 +709,8 @@ function renderFamily() {
     try { const r = await post("family/matching_wall", {piece: FAM}); FAM = r.piece; await load(); setView("family"); notice(`Made ${r.piece}: linked to the material sheet. Generate masters to start.`); }
     catch (e) { famMsg(e.message); }
   };
-  $("#famGenMasters").onclick = generateMasters;
+  $("#famGenMasters").onclick = () => generateMasters(false);
+  $("#famDraftMasters").onclick = () => generateMasters(true);
   $("#famTrialBtn").onclick = testVariation;
   $("#famAddVar").onclick = () => { famSet().variations.push({id: "v" + Date.now().toString(36), text: ""}); renderFamMatrix(); saveFamily();
     const ins = document.querySelectorAll("#famMatrix .vtext"); ins[ins.length - 1]?.focus(); };
@@ -732,8 +741,20 @@ async function deleteFamily() {
   } catch (e) { notice(e.message); }
 }
 
+function renderStages() {
+  const el = $("#famStages"); if (!el || !famInfo()?.stages) return;
+  const icon = {done: "✓", part: "◐", stale: "⚠", todo: "○"};
+  el.innerHTML = famInfo().stages.map((st, i) => `<span class="stage ${st.state}" data-k="${st.key}" title="${esc(st.detail)}">${i + 1} · ${icon[st.state]} ${st.label}</span>`).join('<span class="hint">→</span>');
+  const target = {template: "#tplForm", master: "#famMasters", variations: "#famMatrix", doors: "#famDoors", built: "#famBuild", export: "#famExport"};
+  el.querySelectorAll(".stage").forEach(c => c.onclick = () => {
+    const t = $(target[c.dataset.k]); if (!t) return;
+    t.scrollIntoView({behavior: "smooth", block: "center"}); t.animate([{outline: "2px solid #ffd23c"}, {outline: "2px solid transparent"}], {duration: 1400});
+  });
+}
+
 function renderFamilyDynamic(keepView = true) {
   if (VIEW !== "family" || !famInfo() || !$("#famMasters")) return;
+  renderStages();
   setupFamCanvas(); renderFamMasters(); renderFamMatrix(); if (famInfo().kind === "wall") renderFamDoors(); renderFamPalette(); loadFamLayout(keepView);
 }
 
@@ -926,14 +947,14 @@ function renderImage() {
   $("#ipImg").onload = drawKeepGuides; drawKeepGuides();
   const on = master ? it.rel === active : s.approved.includes(it.rel), stale = !master && !trial && meta.master !== active;
   const rows = [["piece", it.pid], ["prompt", meta.prompt || ""], ["seed", meta.seed ?? ""], ["strength", meta.denoise ?? ""],
-    ["made from", meta.edited_from ? `edit of ${meta.edited_from.split("/").pop()}` : meta.rescaled_from ? `×${Array.isArray(meta.scale) ? meta.scale.join(" wide, ×") + " tall" : meta.scale} of ${meta.rescaled_from.split("/").pop()}` : meta.evened_from ? `even tone ${meta.even} of ${meta.evened_from.split("/").pop()}` : meta.fitted_from ? `fit ${meta.fit.courses} courses (${meta.fit.mode}) of ${meta.fitted_from.split("/").pop()}` : ""],
+    ["made from", meta.edited_from ? `edit of ${meta.edited_from.split("/").pop()}` : meta.rescaled_from ? `×${Array.isArray(meta.scale) ? meta.scale.join(" wide, ×") + " tall" : meta.scale} of ${meta.rescaled_from.split("/").pop()}` : meta.evened_from ? `even tone ${meta.even} of ${meta.evened_from.split("/").pop()}` : meta.fitted_from ? `fit ${meta.fit.courses} courses (${meta.fit.mode}) of ${meta.fitted_from.split("/").pop()}` : meta.finalized_from ? `full master from draft ${meta.finalized_from.split("/").pop()}` : meta.draft ? "draft" : ""],
     ["file", it.rel.split("/").pop()]].filter(r => r[1] !== "");
   $("#ipSide").innerHTML = `
     ${stale ? `<div class="stale">STALE: made from another master. Its edges won't match the active master.</div>` : ""}
     <table>${rows.map(([k, v]) => `<tr><td>${k}</td><td>${esc(v)}</td></tr>`).join("")}</table>
     ${trial ? `<div class="hint">A variation test: not part of the family. Make it a variant by adding the variation and generating its row.</div>` : `
     <div class="row">${master
-      ? `<button id="ipUse" class="${on ? "on" : "primary"}">${on ? "✓ Active master" : "Use as master"}</button><button id="ipStar">${(s.starred || []).includes(it.rel) ? "★ Starred" : "☆ Star"}</button>`
+      ? `${meta.draft ? `<button id="ipFinalize" class="primary" title="Redraw this draft at full resolution with the same composition and make it seamless (~10 s), as a new master">Finalize draft</button>` : ""}<button id="ipUse" class="${on ? "on" : meta.draft ? "" : "primary"}">${on ? "✓ Active master" : "Use as master"}</button><button id="ipStar">${(s.starred || []).includes(it.rel) ? "★ Starred" : "☆ Star"}</button>`
       : `<button id="ipApprove" class="${on ? "on" : "primary"}">${on ? "✓ Approved (unapprove)" : "Approve"}</button>`}
       <button id="ipArchive" class="danger">Archive</button></div>
     <h3>Edit</h3>
@@ -968,6 +989,10 @@ function renderImage() {
   const refresh = () => { renderFamilyDynamic(true); renderList(); renderImage(); };
   if ($("#ipApprove")) $("#ipApprove").onclick = async () => { try { D.state.pieces[it.pid] = (await post("approve", {piece: it.pid, rel: it.rel, on: !on})).piece; refresh(); scheduleBuild(); } catch (e) { msg(e.message); } };
   if ($("#ipUse")) $("#ipUse").onclick = async () => { if (on) return; try { D.state.pieces[FAM] = (await post("promote", {piece: FAM, rel: it.rel})).piece; await load(); renderImage(); scheduleBuild(); } catch (e) { msg(e.message); } };
+  if ($("#ipFinalize")) $("#ipFinalize").onclick = async () => {
+    try { await post("finalize", {piece: it.pid, rel: it.rel}); msg("Queued: the full master appears next to the draft (Use as master when you like it)."); pollJobs(); }
+    catch (e) { msg(e.message); }
+  };
   if ($("#ipStar")) $("#ipStar").onclick = async () => { try { D.state.pieces[FAM] = (await post("star", {piece: FAM, rel: it.rel, on: !(s.starred || []).includes(it.rel)})).piece; refresh(); } catch (e) { msg(e.message); } };
   if ($("#ipArchive")) $("#ipArchive").onclick = async () => {
     try {
@@ -1733,7 +1758,7 @@ async function pollJobs() {
   for (const j of JOBS) {
     if ((j.status === "done" || j.status === "failed") && !seenDone.has(j.id)) {
       seenDone.add(j.id);
-      if (["dun", "dun_trial", "dun_edit", "dun_rescale", "dun_build"].includes(j.kind)) reload = true;
+      if (["dun", "dun_trial", "dun_edit", "dun_rescale", "dun_build", "dun_finalize"].includes(j.kind)) reload = true;
       if (j.kind === "lib_import") { renderLibrary(); if (j.error) notice(j.error); }
       if (j.kind === "dun_capture") { caps = true; if (j.error) $("#exportHint").textContent = j.error; }
     }

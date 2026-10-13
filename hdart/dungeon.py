@@ -174,12 +174,15 @@ def mirrored(piece):
 
 # ----------------------------------------------------------------------------- generation
 
-def _i2i(init, prompt, seed, denoise, lora):
+def _i2i(init, prompt, seed, denoise, lora, steps=8):
     DUN.mkdir(parents=True, exist_ok=True)
-    tmp = DUN / "_tmp_init.png"
+    tmp = DUN / f"_tmp_init_{time.time_ns()}.png"  # unique: drafts can run while another job uses the folder
     init.save(tmp)
-    nodes = comfy.build_img2img(comfy.upload(tmp), prompt, denoise=denoise, seed=seed, lora_strength=lora,
-                                prefix="hdart/dun_tile")
+    try:
+        nodes = comfy.build_img2img(comfy.upload(tmp), prompt, denoise=denoise, seed=seed, lora_strength=lora,
+                                    prefix="hdart/dun_tile", steps=steps)
+    finally:
+        tmp.unlink(missing_ok=True)
     p = comfy.run(nodes, DUN / "tmp")[0]
     return Image.open(p).convert("RGB").resize(init.size, Image.NEAREST)
 
@@ -355,6 +358,32 @@ def _even(piece, img):
     return even_tone(img, k) if k > 0 else img
 
 
+def finalize_draft(name, pid, rel, seed=None, lora=0.0):
+    """A full master from a draft candidate: same composition, redrawn at full resolution (a light img2img, 0.4)
+    and made seamless like any master (the seam repaint; floors also even tone, walls the floor colour match).
+    -> new candidate rel."""
+    spec = load_set(name)
+    piece = resolved(spec, pid)
+    old = state(name)["pieces"].get(pid, {}).get("meta", {}).get(rel, {})
+    if not old.get("draft"):
+        raise ValueError("that's not a draft")
+    seed = int(seed if seed is not None else old.get("seed", 1))
+    piece["prompt"] = old.get("prompt", piece.get("prompt", ""))
+    src = Image.open(candidate_path(name, rel)).convert("RGB")
+    if piece.get("method") == "wall_master":
+        prompt = wall_texture_prompt(set_style(spec), piece["prompt"])
+        gw = 640
+        gh = int(round(gw * src.height / src.width / 16)) * 16
+        img = _i2i(src.resize((gw, gh), Image.LANCZOS), prompt, seed, 0.4, lora).resize(src.size, Image.LANCZOS)
+        out = match_to_floor(name, spec, make_seamless_x(img, prompt, seed))
+    else:
+        prompt = floor_texture_prompt(set_style(spec), piece["prompt"])
+        img = _i2i(src.resize((1024, 1024), Image.LANCZOS), prompt, seed, 0.4, lora).resize((MASTER_PX, MASTER_PX), Image.LANCZOS)
+        out = _even(piece, make_seamless(img, prompt, seed, lora))
+    meta = {"seed": seed, "prompt": piece["prompt"], "finalized_from": rel}
+    return _new_candidate(name, pid, out, meta, f"full{seed}")
+
+
 def even_master(name, pid, rel, strength=EVEN_TONE):
     """A master candidate with stone-sized tone differences evened out (even_tone), as a new candidate."""
     piece = resolved(load_set(name), pid)
@@ -417,12 +446,26 @@ def template_render(tpl, kind, per=MASTER_PX, height_units=WALL_UNITS if "WALL_U
     return patterns.floor_template(tpl, per)
 
 
-def gen_master(piece, seed=1, lora=0.0, st=None):
+DRAFT_PX, DRAFT_STEPS = 512, 4  # drafts: FLUX at a quarter of the pixels and half the steps, no seam repaint
+
+
+def gen_master(piece, seed=1, lora=0.0, st=None, draft=False):
     """A seamless master floor tile (top-down square, MASTER_PX). With a family template: FLUX starts from the
-    template (img2img at its strength), so the layout and scale are the template's and only the surface is painted."""
+    template (img2img at its strength), so the layout and scale are the template's and only the surface is painted.
+    `draft`: a quick look (a few seconds): smaller, fewer steps, edges made periodic without the seam repaint;
+    finalize_draft turns a chosen draft into a full master with the same composition."""
     st = st or style()
     prompt = floor_texture_prompt(st, piece["prompt"])
     tpl = family_template(piece)
+    if draft:
+        if tpl:
+            init = template_render({**tpl, "seed": seed if tpl.get("reseed") else tpl.get("seed", 1)}, "floor", DRAFT_PX)["rgb"]
+            src = _i2i(init, prompt, seed, float(tpl.get("strength", 0.7)), lora, steps=DRAFT_STEPS)
+        else:
+            p = comfy.run(comfy.build_txt2img(prompt, 576, 576, seed=seed, steps=DRAFT_STEPS, lora_strength=lora,
+                                              prefix="hdart/dun_draft"), DUN / "tmp")[0]
+            src = Image.open(p).convert("RGB").crop((32, 32, 544, 544))
+        return _even(piece, periodic_smooth(flatten_light(src.resize((MASTER_PX, MASTER_PX), Image.LANCZOS))))
     if tpl:
         init = template_render({**tpl, "seed": seed if tpl.get("reseed") else tpl.get("seed", 1)}, "floor", 1024)["rgb"]
         src = _i2i(init, prompt, seed, float(tpl.get("strength", 0.7)), lora).resize((MASTER_PX, MASTER_PX), Image.LANCZOS)
@@ -632,7 +675,7 @@ def piece_of(spec, pid):
     return p
 
 
-def generate(name, pid, n=3, seed=1, denoise=None, prompt=None, lora=None, variation=None):
+def generate(name, pid, n=3, seed=1, denoise=None, prompt=None, lora=None, variation=None, draft=False):
     """n candidates for one piece. Returns relative paths (under sprites/dungeon/<set>/)."""
     spec = load_set(name)
     piece = resolved(spec, pid)
@@ -653,7 +696,7 @@ def generate(name, pid, n=3, seed=1, denoise=None, prompt=None, lora=None, varia
         if piece["kind"] == "prop":
             img, mask = gen_prop(piece, sd, lora=lora if lora is not None else 0.0, st=st)
         elif piece.get("method") == "wall_master":
-            img = match_to_floor(name, spec, gen_wall_master(spec, piece, sd, lora if lora is not None else 0.0))
+            img = match_to_floor(name, spec, gen_wall_master(spec, piece, sd, lora if lora is not None else 0.0, draft=draft))
             mask = np.ones(img.size[::-1], bool)
         elif piece.get("method") == "wall_repaint":
             img = gen_wall_variant(name, spec, piece, sd, denoise or piece.get("denoise"), lora if lora is not None else 0.0)
@@ -662,7 +705,7 @@ def generate(name, pid, n=3, seed=1, denoise=None, prompt=None, lora=None, varia
             img = gen_door(name, spec, piece, sd, denoise or piece.get("denoise"), lora if lora is not None else 0.0)
             mask = np.ones(img.size[::-1], bool)
         elif piece.get("method") == "master":
-            img = gen_master(piece, sd, lora if lora is not None else 0.0, st=st)
+            img = gen_master(piece, sd, lora if lora is not None else 0.0, st=st, draft=draft)
             mask = np.ones(img.size[::-1], bool)
         elif piece.get("method") == "repaint":
             img = gen_repaint(name, spec, piece, sd, denoise or piece.get("denoise"), lora if lora is not None else 0.0, st=st)
@@ -685,6 +728,8 @@ def generate(name, pid, n=3, seed=1, denoise=None, prompt=None, lora=None, varia
         made.append(rel)
         meta[rel] = {"seed": sd, "prompt": piece["prompt"], "denoise": denoise, "lora": lora,
                      "on_base": base is not None}
+        if draft and piece.get("method") in ("master", "wall_master"):
+            meta[rel]["draft"] = True
         if piece.get("method") in ("repaint", "wall_repaint", "door_repaint"):  # its master (switching makes it stale)
             meta[rel]["master"] = master_rel(name, piece.get("from"))
         if variation:  # floor family: the variation entry it was made for
@@ -1700,11 +1745,22 @@ def make_seamless_x(img, prompt, seed, band=0.10, ramp=0.06):
     return Image.fromarray(np.roll(np.asarray(fixed), -(w // 2), 1))
 
 
-def gen_wall_master(spec, piece, seed=1, lora=0.0):
+def gen_wall_master(spec, piece, seed=1, lora=0.0, draft=False):
     fam = wall_family_settings(piece)
     w, h = elev_size(fam["height"])  # one tile wide, 3 units tall (512 x 1248)
     prompt = wall_texture_prompt(set_style(spec), piece["prompt"])
     tpl = family_template(piece)
+    if draft:  # see gen_master: small, few steps, edges made periodic without the seam repaint
+        dw = 320
+        dh = int(round(dw * h / w / 16)) * 16
+        if tpl:
+            init = template_render({**tpl, "seed": seed if tpl.get("reseed") else tpl.get("seed", 1)}, "wall", dw, fam["height"])["rgb"]
+            img = _i2i(init.resize((dw, dh), Image.LANCZOS), prompt, seed, float(tpl.get("strength", 0.7)), lora, steps=DRAFT_STEPS)
+        else:
+            p = comfy.run(comfy.build_txt2img(prompt, dw, dh, seed=seed, steps=DRAFT_STEPS, lora_strength=lora,
+                                              prefix="hdart/dun_wdraft"), DUN / "tmp")[0]
+            img = Image.open(p).convert("RGB")
+        return periodic_smooth_x(flatten_light_x(img.resize((w, h), Image.LANCZOS)))
     if tpl:  # start from the layout template (img2img), like floor masters
         init = template_render({**tpl, "seed": seed if tpl.get("reseed") else tpl.get("seed", 1)}, "wall", 640, fam["height"])["rgb"]
         img = _i2i(init, prompt, seed, float(tpl.get("strength", 0.7)), lora).resize((w, h), Image.LANCZOS)
@@ -2663,6 +2719,61 @@ def apply_material(name, master_id, mid, use=("template", "words"), strength=0.6
         return upsert_piece(name, {**m, "family": fam})
 
 
+def export_status(name, spec):
+    """"none" (never exported), "stale" (approvals or the spec changed since), or "ok"."""
+    f = EXPORT / spec["id"] / "set.json"
+    if not f.exists():
+        return "none"
+    newest = max((p.stat().st_mtime for p in (set_dir(name) / "state.json", SETS / f"{name}.json") if p.exists()), default=0)
+    return "stale" if newest > f.stat().st_mtime + 1 else "ok"
+
+
+def family_stages(name, spec, master, exported=None):
+    """Where a family stands, step by step: [{key, label, state (done / part / todo / stale), detail}]. The steps
+    build on each other: layout template -> master (draft, then full) -> variations -> (walls: doors, built) -> export."""
+    s = state(name)["pieces"]
+    wall = master.get("method") == "wall_master"
+    out = []
+    tpl = family_template(master)
+    out.append({"key": "template", "label": "Template", "state": "done" if tpl else "part",
+                "detail": ("linked to the sheet" if tpl.get("link") else tpl["pattern"]) if tpl else "prompt only (no layout template)"})
+    mrel = master_rel(name, master["id"])
+    meta = s.get(master["id"], {}).get("meta", {})
+    drafts = sum(1 for r in s.get(master["id"], {}).get("candidates", []) if meta.get(r, {}).get("draft"))
+    if not mrel:
+        out.append({"key": "master", "label": "Master", "state": "todo", "detail": f"{drafts} drafts, none active" if drafts else "none yet"})
+    elif meta.get(mrel, {}).get("draft"):
+        out.append({"key": "master", "label": "Master", "state": "part", "detail": "the active master is a draft: finalize it"})
+    else:
+        out.append({"key": "master", "label": "Master", "state": "done", "detail": "active"})
+    if wall:
+        fam = wall_family_settings(master, spec)
+        pcs = wall_family_pieces(spec, master["id"])
+        sizes = [int(n) for n in fam["sizes"]]
+        have = {L: [r for r in s.get(pcs[f"var{L}"]["id"], {}).get("approved", [])] if f"var{L}" in pcs else [] for L in sizes}
+        stale = sum(1 for L in sizes for r in have[L] if s[pcs[f"var{L}"]["id"]].get("meta", {}).get(r, {}).get("master") != mrel)
+        n_ok = sum(1 for L in sizes if have[L])
+        doors = len(s.get(pcs["door"]["id"], {}).get("approved", [])) if "door" in pcs else 0
+        b = wall_build_status(name, spec, master)
+        out.append({"key": "variations", "label": "Variations", "state": "stale" if stale else "done" if n_ok == len(sizes) else "part" if n_ok else "todo",
+                    "detail": f"{sum(len(v) for v in have.values())} approved, {n_ok}/{len(sizes)} run lengths" + (f", {stale} from another master" if stale else "")})
+        out.append({"key": "doors", "label": "Doors", "state": "done" if doors else "todo", "detail": f"{doors} approved"})
+        out.append({"key": "built", "label": "Built", "state": "stale" if b["stale"] else "done" if b["built"] else "todo", "detail": b["why"] or "current"})
+    else:
+        fam = family_settings(master)
+        pcs = family_pieces(spec, master["id"])
+        want = {int(n): fam["targets"].get(str(n), 1) for n in fam["sizes"]}
+        have = {n: [r for r in s.get(pcs[n]["id"], {}).get("approved", [])] if n in pcs else [] for n in want}
+        stale = sum(1 for n in want for r in have[n] if s[pcs[n]["id"]].get("meta", {}).get(r, {}).get("master") != mrel)
+        met = sum(1 for n in want if len(have[n]) >= want[n])
+        out.append({"key": "variations", "label": "Variations", "state": "stale" if stale else "done" if met == len(want) else "part" if any(have.values()) else "todo",
+                    "detail": f"{sum(len(v) for v in have.values())} approved, targets met for {met}/{len(want)} sizes" + (f", {stale} from another master" if stale else "")})
+    ex = exported or export_status(name, spec)
+    out.append({"key": "export", "label": "Exported", "state": {"ok": "done", "stale": "stale", "none": "todo"}[ex],
+                "detail": {"ok": "up to date", "stale": "changed since the last export", "none": "not yet"}[ex]})
+    return out
+
+
 def family_info(name, spec, master):
     """What the family board needs about a family: kind, settings, its pieces by size, material, built state."""
     if master.get("method") == "wall_master":
@@ -2672,9 +2783,10 @@ def family_info(name, spec, master):
                 "pieces": {int(k[3:]): p["id"] for k, p in pcs.items() if k.startswith("var")},
                 "door": pcs["door"]["id"] if "door" in pcs else None,
                 "built": [pcs[k]["id"] for k in pcs if k.startswith("run") or k in ("post", "doorway")] if built else [],
-                "build": wall_build_status(name, spec, master)}
+                "build": wall_build_status(name, spec, master), "stages": family_stages(name, spec, master)}
     return {"kind": "floor", "settings": family_settings(master), "material": material_prompt(name, master),
-            "pieces": {n: q["id"] for n, q in family_pieces(spec, master["id"]).items()}}
+            "pieces": {n: q["id"] for n, q in family_pieces(spec, master["id"]).items()},
+            "stages": family_stages(name, spec, master)}
 
 
 def family_layout(name, master_id, seed=0, W=16, H=12):
