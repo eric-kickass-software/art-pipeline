@@ -1880,6 +1880,11 @@ def elevation_joints(img, height_units=WALL_UNITS):
     js = [j for j in _count_joints(prof, max(6, int(0.04 * unit))) if edge <= j <= h - edge]
     if len(js) < 4:  # one very strong line (a hard cap edge) hid the courses: measure against the 98th percentile
         js = [j for j in _count_joints(prof, max(6, int(0.04 * unit)), ref=98) if edge <= j <= h - edge]
+    # an edge peak sits on one side of the mortar line: move each joint to the line's middle (its darkest row
+    # nearby), so cuts and keep lines go through the mortar, not along a brick's edge
+    lum = np.convolve(np.pad(a.mean(1), 2, mode="edge"), np.ones(5) / 5, "valid")
+    r = max(3, int(0.02 * unit))
+    js = sorted({int(max(edge, j - r) + np.argmin(lum[max(edge, j - r):min(h - edge, j + r + 1)])) for j in js})
     out = {"height": height_units, "joints": [round(j / unit, 3) for j in js], "suggest": {"top": 0.0, "bottom": 0.0}}
     if len(js) < 4:
         return out
@@ -1911,6 +1916,79 @@ def elevation_joints(img, height_units=WALL_UNITS):
         if out["suggest"][k] > 0.8:
             out["suggest"][k] = 0.0
     return out
+
+
+FIT_WARN = 0.15  # overall stretch past which brick detail starts to look smeared (one course may change 2x this)
+
+
+def fit_courses(img, height_units=WALL_UNITS, top=0.0, bottom=0.0, mode="keep"):
+    """Whole courses between two lines (units from the top / from the base), each course resampled so they share
+    the space evenly: no partial course at either end, and the stretch is spread over every course instead of one
+    global stretch (uneven rows come out even). A course that spans a missed joint counts as two.
+    mode "keep": the bands above `top` and below `bottom` stay as they are (cap, plinth); the courses between are
+      remapped to fill the space between them.
+    mode "crop": everything outside the lines is dropped; the courses fill the whole wall height.
+    Vertical only (the width stays one tile, so it still repeats sideways). -> (image, info)
+    info: {"courses", "stretch": [per course, +0.06 = 6% taller], "max" (largest per course), "overall" (the whole
+    span), "warn": overall past FIT_WARN or a course past twice that}."""
+    src = img.convert("RGB")
+    a = np.asarray(src)
+    h = a.shape[0]
+    unit = h / height_units
+    y0, y1 = int(round(top * unit)), h - int(round(bottom * unit))
+    if y1 - y0 < 0.3 * unit:
+        raise ValueError("the lines leave too little wall to fit")
+    js = [int(round(u * unit)) for u in elevation_joints(src, height_units)["joints"]]
+    minsep = max(6, int(0.04 * unit))
+    inner = [j for j in js if y0 + minsep <= j <= y1 - minsep]
+    bounds = [y0] + inner + [y1]
+    if len(bounds) < 3:
+        raise ValueError("no joints between the lines")
+    gaps = np.diff(bounds).astype(np.float64)
+    course = float(np.median(gaps))
+    kept = [bounds[0]]  # cracks a fraction of a course from a real joint aren't joints
+    for b in bounds[1:-1]:
+        if b - kept[-1] >= 0.6 * course and bounds[-1] - b >= 0.6 * course:
+            kept.append(b)
+    bounds = kept + [bounds[-1]]
+    gaps = np.diff(bounds).astype(np.float64)
+    weight = np.maximum(1, np.round(gaps / course))  # a missed joint: that segment is two courses
+    out_y0, out_y1 = (y0, y1) if mode == "keep" else (0, h)
+    target = np.diff(np.round(out_y0 + np.concatenate([[0], np.cumsum(weight)]) / weight.sum() * (out_y1 - out_y0))).astype(int)
+    strips = [src.crop((0, b0, a.shape[1], b1)).resize((a.shape[1], int(t)), Image.LANCZOS)
+              for b0, b1, t in zip(bounds, bounds[1:], target) if t > 0]
+    field = np.concatenate([np.asarray(s) for s in strips], 0)
+    res = a.copy() if mode == "keep" else np.zeros_like(a)
+    res[out_y0:out_y0 + len(field)] = field
+    stretch = [round(float(t / g - 1), 3) for t, g in zip(target, gaps)]
+    mx = max(abs(v) for v in stretch)
+    overall = round(float((out_y1 - out_y0) / (bounds[-1] - bounds[0]) - 1), 3)
+    return Image.fromarray(res), {"courses": int(weight.sum()), "stretch": stretch, "max": round(mx, 3), "overall": overall,
+                                  "warn": abs(overall) > FIT_WARN or mx > 2 * FIT_WARN}
+
+
+def fit_wall_master(name, pid, rel, top, bottom, mode="keep", redetail=False, seed=1):
+    """fit_courses on a wall master candidate, saved as a new candidate (optional light re-detail). -> rel"""
+    spec = load_set(name)
+    piece = resolved(spec, pid)
+    if piece.get("method") != "wall_master":
+        raise ValueError("fit courses works on wall masters")
+    fam = wall_family_settings(piece, spec)
+    img, info = fit_courses(Image.open(candidate_path(name, rel)), fam["height"], float(top), float(bottom), mode)
+    old = state(name)["pieces"].get(pid, {}).get("meta", {}).get(rel, {})
+    prompt = old.get("prompt", piece.get("prompt", ""))
+    if redetail:  # stretched courses go a little soft: a light repaint of what was resampled, edges kept
+        h, w = img.height, img.width
+        unit = h / fam["height"]
+        y0, y1 = (int(top * unit), h - int(bottom * unit)) if mode == "keep" else (0, h)
+        yy = np.arange(h)[:, None].astype(np.float64)
+        m = np.clip(np.minimum(yy - y0, y1 - yy) / (0.05 * unit), 0, 1) * np.ones((1, w))
+        xx = (np.arange(w) + 0.5) / w
+        m *= np.clip(np.minimum(xx, 1 - xx) / 0.06, 0, 1)[None, :]  # keep the left/right edges: it still repeats
+        img = repaint(img, m.astype(np.float32), wall_texture_prompt(set_style(spec), prompt), seed, denoise=0.3, reference=True)
+    meta = {"seed": seed, "prompt": prompt, "fitted_from": rel, "fit": {"mode": mode, "top": top, "bottom": bottom, **info},
+            "redetail": bool(redetail)}
+    return _new_candidate(name, pid, img, meta, f"fit{info['courses']}")
 
 
 def elevation_bands(name, rel, height_units=WALL_UNITS, keep_top=KEEP_TOP, keep_bottom=KEEP_BOTTOM, repeat=2):

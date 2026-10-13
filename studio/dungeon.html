@@ -846,12 +846,14 @@ function renderImage() {
   const varText = (famSet().variations.find(v => v.id === meta.variation) || {}).text;
   const n = p ? atlas_n_js(p) : 1;
   const elev = p && p.kind === "elevation";
-  const views = trial ? [["image", "image"], ["game", "in game"]] : elev ? [["tiled", p.method === "door_repaint" ? "between wall slices" : "repeated sideways"], ["image", "image"], ...(master ? [["bands", "keep bands"]] : [])]
+  const views = trial ? [["image", "image"], ["game", "in game"]] : elev ? [["tiled", p.method === "door_repaint" ? "between wall slices" : "repeated sideways"], ["image", "image"], ...(master ? [["bands", "keep bands"], ["fit", "fit preview"]] : [])]
     : [["tiled", master ? "tiled 3×3" : "among master tiles"], ["image", "image"], ["game", "in game"]];
   if (!views.some(v => v[0] === IMG.view)) IMG.view = views[0][0];
   IMG.keepT ??= 0.25; IMG.keepB ??= 0.1;
   const bandsUrl = () => `/api/dun/elev_bands?set=${SET}&piece=${encodeURIComponent(it.pid)}&rel=${encodeURIComponent(it.rel)}&top=0&bottom=0`;
-  const src = IMG.view === "bands" ? bandsUrl() : IMG.view === "image" ? `/api/dun/img?set=${SET}&rel=${encodeURIComponent(it.rel)}`
+  IMG.fitMode ??= "keep";
+  const fitUrl = (kind = "elev_fit") => `/api/dun/${kind}?set=${SET}&piece=${encodeURIComponent(it.pid)}&rel=${encodeURIComponent(it.rel)}&top=${IMG.keepT}&bottom=${IMG.keepB}&mode=${IMG.fitMode}`;
+  const src = IMG.view === "fit" ? fitUrl() : IMG.view === "bands" ? bandsUrl() : IMG.view === "image" ? `/api/dun/img?set=${SET}&rel=${encodeURIComponent(it.rel)}`
     : IMG.view === "tiled" ? `/api/dun/seam?set=${SET}&piece=${encodeURIComponent(it.pid)}&rel=${encodeURIComponent(it.rel)}`
     : natUrl(it.pid, it.rel, OUT(), D.spec.pixel ? viewScale() : 1);
   const doorText = p && p.method === "door_repaint" ? ((famSet().doors || []).find(d => d.id === meta.variation) || {}).text : null;
@@ -862,11 +864,11 @@ function renderImage() {
   $("#ipTabs").innerHTML = views.map(([k, l]) => `<button data-v="${k}" class="${IMG.view === k ? "on" : ""}">${l}</button>`).join("");
   $("#ipTabs").querySelectorAll("button").forEach(b => b.onclick = () => { IMG.view = b.dataset.v; renderImage(); });
   $("#ipImg").src = src; $("#ipImg").classList.toggle("px", IMG.view === "game" && !!D.spec.pixel);
-  IMG.guides = master && elev && IMG.view !== "game" ? it : null;
+  IMG.guides = master && elev && IMG.view !== "game" && IMG.view !== "fit" ? it : null;
   $("#ipImg").onload = drawKeepGuides; drawKeepGuides();
   const on = master ? it.rel === active : s.approved.includes(it.rel), stale = !master && !trial && meta.master !== active;
   const rows = [["piece", it.pid], ["prompt", meta.prompt || ""], ["seed", meta.seed ?? ""], ["strength", meta.denoise ?? ""],
-    ["made from", meta.edited_from ? `edit of ${meta.edited_from.split("/").pop()}` : meta.rescaled_from ? `×${Array.isArray(meta.scale) ? meta.scale.join(" wide, ×") + " tall" : meta.scale} of ${meta.rescaled_from.split("/").pop()}` : meta.evened_from ? `even tone ${meta.even} of ${meta.evened_from.split("/").pop()}` : ""],
+    ["made from", meta.edited_from ? `edit of ${meta.edited_from.split("/").pop()}` : meta.rescaled_from ? `×${Array.isArray(meta.scale) ? meta.scale.join(" wide, ×") + " tall" : meta.scale} of ${meta.rescaled_from.split("/").pop()}` : meta.evened_from ? `even tone ${meta.even} of ${meta.evened_from.split("/").pop()}` : meta.fitted_from ? `fit ${meta.fit.courses} courses (${meta.fit.mode}) of ${meta.fitted_from.split("/").pop()}` : ""],
     ["file", it.rel.split("/").pop()]].filter(r => r[1] !== "");
   $("#ipSide").innerHTML = `
     ${stale ? `<div class="stale">STALE: made from another master. Its edges won't match the active master.</div>` : ""}
@@ -897,7 +899,12 @@ function renderImage() {
         <label title="Bricks per tile width (the wall repeats every tile)">bricks across<input id="ipAcross" type="number" step="1" min="1" max="24" style="width:56px"></label>
         <button id="ipWallScale" class="primary">Rescale</button></div>
       <div class="row"><span class="hint">both ways (same brick shape):</span>${[[0.5, "×½"], [0.75, "×¾"], [1.5, "×1.5"], [2, "×2"]].map(([f, l]) => `<button data-f="${f}" class="ipWScale">${l}</button>`).join("")}</div>
-      <label><input id="ipRedetailW" type="checkbox" checked style="width:auto"> re-detail upscales (light repaint)</label>` : ""}`}
+      <label><input id="ipRedetailW" type="checkbox" checked style="width:auto"> re-detail upscales (light repaint)</label>
+      <h3>Fit courses</h3><div class="hint">Cut at the two lines (they snap to joints) and give every course between them the same height: no partial course at either end, and the stretch is spread over all the courses. Vertical only, so it still repeats sideways. See it in <b>fit preview</b>.</div>
+      <div class="row"><label>mode<select id="ipFitMode" style="width:auto"><option value="keep" ${IMG.fitMode === "keep" ? "selected" : ""}>keep cap &amp; base</option><option value="crop" ${IMG.fitMode === "crop" ? "selected" : ""}>crop to the lines (fill the wall)</option></select></label></div>
+      <div class="hint" id="ipFitInfo">…</div>
+      <div class="row"><button id="ipFitView">fit preview</button><button id="ipFitSave" class="primary">Save fitted master</button></div>
+      <label title="A light repaint (0.3) of the resampled courses, edges kept"><input id="ipFitRedetail" type="checkbox" style="width:auto"> re-detail stretched courses (light repaint)</label>` : ""}`}
     <div class="hint" id="ipMsg"></div>`;
   const msg = t => $("#ipMsg").textContent = t;
   const refresh = () => { renderFamilyDynamic(true); renderList(); renderImage(); };
@@ -927,15 +934,31 @@ function renderImage() {
       if (M.rows) $("#ipRows").value = Math.round(M.rows);
       if (M.across) $("#ipAcross").value = Math.round(M.across);
     };
-    IMG.remeasure = measure;
-    const setKeeps = (t, b) => { IMG.keepT = t; IMG.keepB = b; $("#ipKeepT").value = t; $("#ipKeepB").value = b; drawKeepGuides(); measure(); };
+    const fitInfo = async () => {
+      const el = $("#ipFitInfo"); if (!el) return;
+      try {
+        const F = await api(fitUrl("elev_fit_info"));
+        const pct = v => `${v > 0 ? "+" : ""}${Math.round(v * 100)}%`;
+        el.innerHTML = `${F.courses} courses · overall ${pct(F.overall)} · each course ${pct(Math.min(...F.stretch))} to ${pct(Math.max(...F.stretch))}` +
+          (F.warn ? ` <b style="color:#ffb4a8">· a lot of stretch: details may smear (try lines one joint further in or out)</b>` : "");
+      } catch (e) { el.textContent = e.message; }
+    };
+    IMG.remeasure = () => { measure(); fitInfo(); if (IMG.view === "fit") $("#ipImg").src = fitUrl(); };
+    $("#ipFitMode").onchange = () => { IMG.fitMode = $("#ipFitMode").value; IMG.remeasure(); };
+    $("#ipFitView").onclick = () => { IMG.view = "fit"; renderImage(); };
+    $("#ipFitSave").onclick = async () => {
+      try { await post("rescale", {piece: it.pid, rel: it.rel, fit: true, mode: IMG.fitMode, keep_top: IMG.keepT, keep_bottom: IMG.keepB, redetail: $("#ipFitRedetail").checked, seed: rnd()});
+        msg("Queued: the fitted wall appears as a new master."); pollJobs(); }
+      catch (e) { msg(e.message); }
+    };
+    const setKeeps = (t, b) => { IMG.keepT = t; IMG.keepB = b; $("#ipKeepT").value = t; $("#ipKeepB").value = b; drawKeepGuides(); IMG.remeasure(); };
     const loadJoints = async () => {
       if (IMG.joints && IMG.joints.rel === it.rel) return IMG.joints;
       try { IMG.joints = {rel: it.rel, ...(await api(`/api/dun/elev_joints?set=${SET}&piece=${encodeURIComponent(it.pid)}&rel=${encodeURIComponent(it.rel)}`))}; }
       catch { IMG.joints = {rel: it.rel, joints: [], suggest: {top: IMG.keepT, bottom: IMG.keepB}, height: famSet().height}; }
       drawKeepGuides(); return IMG.joints;
     };
-    loadJoints().then(J => { if (IMG && IMG.keepFor !== it.rel) { IMG.keepFor = it.rel; setKeeps(J.suggest.top, J.suggest.bottom); } else measure(); });
+    loadJoints().then(J => { if (IMG && IMG.keepFor !== it.rel) { IMG.keepFor = it.rel; setKeeps(J.suggest.top, J.suggest.bottom); } else IMG.remeasure(); });
     $("#ipKeepFit").onclick = async () => { const J = await loadJoints(); setKeeps(J.suggest.top, J.suggest.bottom); };
     const keeps = () => { setKeeps(Math.max(0, +$("#ipKeepT").value || 0), Math.max(0, +$("#ipKeepB").value || 0)); };
     $("#ipKeepT").onchange = $("#ipKeepB").onchange = keeps;

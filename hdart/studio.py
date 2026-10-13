@@ -161,7 +161,11 @@ class Jobs:
                     job["result"] = dg.edit_candidate(a["set"], a["piece"], a["rel"], a.get("prompt", ""),
                                                       float(a.get("denoise", 0.5)), int(a.get("seed", 1)))
                 elif job["kind"] == "dun_rescale":
-                    if "fx" in a:  # wall master: brick width / height, cap and base kept
+                    if a.get("fit"):  # wall master: fit courses between the keep lines
+                        job["result"] = dg.fit_wall_master(a["set"], a["piece"], a["rel"], float(a.get("keep_top", 0)),
+                                                           float(a.get("keep_bottom", 0)), a.get("mode", "keep"),
+                                                           bool(a.get("redetail")), int(a.get("seed", 1)))
+                    elif "fx" in a:  # wall master: brick width / height, cap and base kept
                         job["result"] = dg.rescale_wall_master(a["set"], a["piece"], a["rel"], float(a["fx"]), float(a["fy"]),
                                                                float(a.get("keep_top", dg.KEEP_TOP)), float(a.get("keep_bottom", dg.KEEP_BOTTOM)),
                                                                bool(a.get("redetail")), int(a.get("seed", 1)))
@@ -285,7 +289,7 @@ def dungeon_post(action, b):
         dg.clear_preview_caches()
         return {"ok": True}
     if action == "rescale":
-        label = f"×{b['fx']} wide ×{b['fy']} tall" if "fx" in b else f"×{b['factor']}"
+        label = f"fit courses ({b.get('mode', 'keep')})" if b.get("fit") else f"×{b['fx']} wide ×{b['fy']} tall" if "fx" in b else f"×{b['factor']}"
         job = JOBS.add("dun_rescale", b, f"{name} · {b['piece']} {label}")
         return {"job": job["id"]}
     if action == "trial":
@@ -397,6 +401,16 @@ def dungeon_get(path, q):
         fam = dg.wall_family_settings(dg.piece_of(spec, g("piece")), spec)
         from PIL import Image
         return "application/json", json.dumps(dg.elevation_joints(Image.open(dg.candidate_path(name, g("rel"))), fam["height"])).encode()
+    if path in ("elev_fit", "elev_fit_info"):  # fit courses preview (image repeated sideways) / its stretch numbers
+        spec = dg.load_set(name)
+        fam = dg.wall_family_settings(dg.piece_of(spec, g("piece")), spec)
+        from PIL import Image
+        img, info = dg.fit_courses(Image.open(dg.candidate_path(name, g("rel"))), fam["height"], float(g("top", 0)),
+                                   float(g("bottom", 0)), g("mode", "keep"))
+        if path == "elev_fit_info":
+            return "application/json", json.dumps(info).encode()
+        import numpy as np
+        return "image/png", dg.png_bytes(Image.fromarray(np.tile(np.asarray(img), (1, 2, 1))))
     if path == "elev_bands":  # wall master repeated sideways with the kept cap and base tinted
         spec = dg.load_set(name)
         fam = dg.wall_family_settings(dg.piece_of(spec, g("piece")), spec)

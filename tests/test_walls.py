@@ -41,6 +41,24 @@ J = d.elevation_joints(Image.fromarray(im))
 assert len(J["joints"]) > 15 and abs(J["suggest"]["top"] - 0.3) < 0.05, J["suggest"]
 plain = d.elevation_joints(d.template_render({"pattern": "stack_bond", "params": {"across": 4, "course": 0.125, "mortar": 0.012, "bevel": 0.012}}, "wall", 512)["rgb"].resize((w, h)))
 assert plain["suggest"]["bottom"] < 0.2, plain["suggest"]
+# fit courses: uneven courses between two joints come out even; keep mode leaves the cap exact; still wraps sideways
+rng = np.random.default_rng(2)
+ys = np.cumsum(rng.uniform(0.75, 1.25, 40) * 0.12 * unit).astype(int)
+wall = np.full((h, w, 3), 150, np.uint8)
+for y in ys[ys < h - 4]:
+    wall[y - 2:y + 3] = 40
+wall[:cap] = (175, 170, 160); wall[cap - 3:cap + 1] = (40, 40, 45)
+J = d.elevation_joints(Image.fromarray(wall))
+first = min(j for j in J["joints"] if j > 0.35); last = max(j for j in J["joints"] if j < 2.9)
+fit, info = d.fit_courses(Image.fromarray(wall), d.WALL_UNITS, first, d.WALL_UNITS - last, "keep")
+f = np.asarray(fit)
+assert (f[:int(first * unit) - 1] == wall[:int(first * unit) - 1]).all()  # above the top line: untouched
+assert (f[:, 0] == f[:, -1]).all() == (wall[:, 0] == wall[:, -1]).all()  # vertical only: columns stay as they were
+fj = [j for j in d.elevation_joints(fit)["joints"] if first + 0.05 < j < last - 0.05]
+g = np.diff(fj)
+assert len(g) > 5 and g.std() / g.mean() < 0.08, (g.round(3), info)  # evened (from about +-15%)
+crop, ci = d.fit_courses(Image.fromarray(wall), d.WALL_UNITS, first, d.WALL_UNITS - last, "crop")
+assert ci["overall"] > 0 and ci["courses"] == info["courses"]
 # bands view: kept cap and base tinted, repeated sideways
 import json, shutil, tempfile
 from pathlib import Path
