@@ -193,6 +193,7 @@
       <div class="hint">Shared descriptors (every floor, wall and door prompt starts with these; the biome is this set's):</div>
       <div id="spStyle" class="stylebox" style="border:none;padding:0"><summary style="display:none"></summary><div class="sbody"></div></div>
     </details>
+    <details id="sheetPanel" class="stylebox setpanel"><summary>Material sheet</summary><div id="sheetBody"></div></details>
     <details id="libSide" class="stylebox setpanel" open><summary>Materials library</summary>
       <div id="libList" class="liblist"></div>
       <div class="row"><button id="libImportBtn" style="width:100%" title="Search ambientCG and Poly Haven (CC0) and import materials">Import from ambientCG / Poly Haven…</button></div>
@@ -350,6 +351,7 @@ async function load() {
   $("#setSel").innerHTML = D.sets.map(s => `<option ${s === SET ? "selected" : ""}>${s}</option>`).join("");
   syncPixel();
   renderSetPanel();
+  renderSheetPanel();
   if (!LIB.length) renderLibrary();
   // Start on a floor family (or the walls board) instead of an empty editor; keep the view when it still exists.
   const fams = Object.keys(D.families || {});
@@ -494,6 +496,52 @@ function renderSetPanel() {
   };
 }
 
+// ---- set material sheet: what every family of the set is made of (palette, stone module, joints, words).
+// Linked family templates follow it; wall masters are colour-matched to the floor master.
+function renderSheetPanel() {
+  const sh = D.sheet, el = $("#sheetBody"); if (!sh || !el) return;
+  const floors = Object.keys(D.families || {}).filter(id => D.families[id].kind === "floor");
+  const short = id => id.replace(/^tile\./, "").replace(/_master$/, "");
+  const H = 3 * KZ;
+  el.innerHTML = `
+    <div class="hint">Decide once what this set is made of. Families linked to the sheet take its palette, stone size and joints into their layout templates; its words go into every texture prompt; wall masters are colour-matched to the floor master.</div>
+    <div class="row"><span class="hint">stones</span>${sh.palette.stones.map((c, i) => `<input type="color" class="shStone" data-i="${i}" value="${c}" style="width:28px">`).join("")}
+      <button id="shAddStone" title="another tone">+</button>${sh.palette.stones.length > 1 ? `<button id="shDelStone">−</button>` : ""}
+      <span class="hint">joint</span><input type="color" id="shMortar" value="${sh.palette.mortar}" style="width:28px"></div>
+    <div class="row"><label title="A floor stone's size in tiles">floor stone<input id="sh_floor_stone" type="number" step="0.01" min="0.05" max="1" value="${sh.floor_stone}"></label><span class="hint" id="shFs"></span></div>
+    <div class="row"><label title="A wall course's height in units (walls are 3)">wall course<input id="sh_wall_course" type="number" step="0.01" min="0.04" max="1" value="${sh.wall_course}"></label><span class="hint" id="shWc"></span></div>
+    <div class="row"><label title="A wall brick's length in tiles">wall brick<input id="sh_wall_brick" type="number" step="0.01" min="0.05" max="1" value="${sh.wall_brick}"></label><span class="hint" id="shWb"></span></div>
+    <div class="row"><label title="Mortar / grout width in tiles">joint<input id="sh_joint" type="number" step="0.002" min="0" max="0.06" value="${sh.joint}"></label>
+      <label title="Edge rounding in tiles">bevel<input id="sh_bevel" type="number" step="0.002" min="0" max="0.08" value="${sh.bevel}"></label></div>
+    <label>material words<textarea id="sh_words" rows="2" placeholder="e.g. weathered grey granite, dark mortar">${esc(sh.words || "")}</textarea></label>
+    <div class="row"><label title="Pull new wall masters toward the floor master's colours (0 = off)">wall colour match<input id="sh_match" type="number" step="0.1" min="0" max="1" value="${sh.match}"></label>
+      <label title="Lightness added to walls (CIELAB L; walls usually read a little lighter than floors)">wall lighter<input id="sh_wall_light" type="number" step="1" min="-30" max="30" value="${sh.wall_light}"></label></div>
+    <div class="row"><label>floor to match<select id="sh_floor"><option value="">first with a master</option>${floors.map(id => `<option value="${esc(id)}" ${sh.floor === id ? "selected" : ""}>${esc(short(id))}</option>`).join("")}</select></label></div>
+    <div class="row"><button id="shFromFloor" title="Palette from the chosen floor family's active master, stone size from its template (and link it)">Fill from floor master</button>
+      <button id="shSave" class="primary">Save sheet</button></div>
+    <div class="hint" id="shMsg"></div>`;
+  const readouts = () => {
+    $("#shFs").textContent = `≈ ${(1 / +$("#sh_floor_stone").value).toFixed(1)} per tile`;
+    $("#shWc").textContent = `≈ ${(3 / +$("#sh_wall_course").value).toFixed(0)} rows per wall`;
+    $("#shWb").textContent = `≈ ${(1 / +$("#sh_wall_brick").value).toFixed(1)} per tile`;
+  };
+  readouts(); el.querySelectorAll("input[type=number]").forEach(i => i.oninput = readouts);
+  const collect = () => ({
+    palette: {...sh.palette, stones: [...el.querySelectorAll(".shStone")].map(i => i.value), mortar: $("#shMortar").value},
+    floor_stone: +$("#sh_floor_stone").value, wall_course: +$("#sh_wall_course").value, wall_brick: +$("#sh_wall_brick").value,
+    joint: +$("#sh_joint").value, bevel: +$("#sh_bevel").value, words: $("#sh_words").value.trim(),
+    match: +$("#sh_match").value, wall_light: +$("#sh_wall_light").value, floor: $("#sh_floor").value});
+  const done = async (r, m) => { D.spec = r.spec; await load(); $("#sheetPanel").open = true; $("#shMsg").textContent = m; if (VIEW === "family") renderFamily(); };
+  $("#shSave").onclick = async () => { try { done(await post("sheet/update", {fields: collect()}), "Saved: linked families follow it."); } catch (e) { $("#shMsg").textContent = e.message; } };
+  $("#shFromFloor").onclick = async () => {
+    const fid = $("#sh_floor").value || floors.find(id => pstate(id).approved[0]);
+    if (!fid) return $("#shMsg").textContent = "No floor family with an active master yet.";
+    try { done(await post("sheet/from_floor", {piece: fid}), `Filled from ${short(fid)} (now linked).`); } catch (e) { $("#shMsg").textContent = e.message; }
+  };
+  $("#shAddStone").onclick = () => { D.sheet.palette.stones.push(D.sheet.palette.stones.at(-1)); renderSheetPanel(); $("#sheetPanel").open = true; };
+  if ($("#shDelStone")) $("#shDelStone").onclick = () => { D.sheet.palette.stones.pop(); renderSheetPanel(); $("#sheetPanel").open = true; };
+}
+
 // ---- floor families: one master + repainted variants per block size, on one board.
 // Static part (prompt versions, variation phrases, targets, weights) renders once; the master grid, size strips and
 // preview re-render when jobs finish, without touching what's being typed.
@@ -611,8 +659,10 @@ function renderFamily() {
     <h2 style="margin-top:0">${esc(FAM)} <span class="hint">· ${wall
       ? "wall family: one front-view elevation (3 units tall, repeats every tile), wall variations per run length and doors repainted from it, then built onto every wall piece"
       : "floor family: one seamless master, variants repainted from it (they share its edges)"}</span>
-      <button id="famDelete" class="danger" style="float:right" title="Remove this family and all its pieces from the set; their images move to archive/families/">Delete family</button></h2>
+      <button id="famDelete" class="danger" style="float:right" title="Remove this family and all its pieces from the set; their images move to archive/families/">Delete family</button>
+      ${wall ? "" : `<button id="famMatchWall" style="float:right;margin-right:6px" title="A wall family made to go with this floor: same palette and joints (via the material sheet, filled from this floor if empty), stone module carried over">+ matching wall family</button>`}</h2>
     <h3>Layout template <span class="hint">a repeating layout at a known scale: masters start from it (FLUX keeps the layout and paints the surface), and the preview's blockout shows it before anything is generated</span></h3>
+    <div class="row"><label style="display:flex;flex-direction:row;gap:6px;align-items:center" title="Take the palette, stone size and joints from the set's material sheet (left), and follow it when it changes"><input id="famLink" type="checkbox" style="width:auto" ${(f.template || {}).link ? "checked" : ""}> linked to the set's material sheet</label></div>
     <div class="tplrow"><img id="tplImg" alt="" title="the template, 2 tiles"><div id="tplForm" class="tplform"></div></div>
     <h3>1 · Masters <span class="hint">prompt versions × seeds, judged tiled 3×3. Click a master to inspect, ★, use, edit or rescale it.</span></h3>
     <div id="famPrompts"></div>
@@ -646,6 +696,11 @@ function renderFamily() {
   renderTemplateForm();
   $("#famAddVer").onclick = () => { famSet().prompts.push(famSet().prompts[famSet().prompts.length - 1] || ""); renderFamPrompts(); saveFamily(); };
   $("#famDelete").onclick = deleteFamily;
+  $("#famLink").onchange = async () => { try { D.spec = (await post("family/link", {piece: FAM, on: $("#famLink").checked})).spec; await load(); renderFamily(); } catch (e) { famMsg(e.message); } };
+  if ($("#famMatchWall")) $("#famMatchWall").onclick = async () => {
+    try { const r = await post("family/matching_wall", {piece: FAM}); FAM = r.piece; await load(); setView("family"); notice(`Made ${r.piece}: linked to the material sheet. Generate masters to start.`); }
+    catch (e) { famMsg(e.message); }
+  };
   $("#famGenMasters").onclick = generateMasters;
   $("#famTrialBtn").onclick = testVariation;
   $("#famAddVar").onclick = () => { famSet().variations.push({id: "v" + Date.now().toString(36), text: ""}); renderFamMatrix(); saveFamily();
@@ -786,6 +841,7 @@ async function renderTemplateForm() {
     <div class="row"><label>pattern<select id="tplPattern" style="width:auto"><option value="none">none (prompt only)</option>${Object.entries(PATTERNS_DEF).map(([k, v]) => `<option value="${k}" ${k === t.pattern ? "selected" : ""}>${esc(v.label)}</option>`).join("")}${t.pattern === "image" ? `<option value="image" selected>library image: ${esc(t.material || "")}</option>` : ""}</select></label>
       <label title="How much FLUX may change the template: lower keeps the layout tighter">strength<input id="tplStrength" type="number" step="0.05" min="0.3" max="1" value="${t.strength ?? 0.7}" style="width:58px"></label>
       <label title="Layout seed">seed<input id="tplSeed" type="number" value="${t.seed ?? 1}" style="width:58px"></label></div>
+    ${t.link && on && t.pattern !== "image" ? `<div class="hint">Linked: size, joint, bevel and colours come from the material sheet (edits here are replaced by it; untick "linked" to set your own).</div>` : ""}
     ${on && t.pattern !== "image" ? `<div class="row">${TPL_FIELDS.filter(([k]) => k in def).map(([k, l, st, mn, mx, tip]) => `<label title="${tip}">${l}<input class="tplP" data-k="${k}" type="number" step="${st}" min="${mn}" max="${mx}" value="${prm[k]}" style="width:62px"></label>`).join("")}
       ${famInfo().kind === "wall" && prm.course > 0 ? `<label title="Courses up the whole wall (sets course): ${famSet().height} units = ${(famSet().height * KZ).toFixed(2)} tiles">rows<input id="tplRows" type="number" step="1" min="2" max="80" value="${Math.round(famSet().height * KZ / prm.course)}" style="width:52px"></label>` : ""}</div>
     <div class="row"><span class="hint">stones</span>${pal.stones.map((c, i) => `<input type="color" class="tplStone" data-i="${i}" value="${c}">`).join("")}
@@ -803,7 +859,7 @@ async function renderTemplateForm() {
     document.querySelectorAll("#tplForm .tplP").forEach(i => params[i.dataset.k] = +i.value);
     const stones = [...document.querySelectorAll("#tplForm .tplStone")].map(i => i.value);
     return {pattern, params: pattern === t.pattern ? params : {}, palette: {stones: stones.length ? stones : pal.stones, mortar: $("#tplMortar")?.value || pal.mortar},
-            strength: +$("#tplStrength").value, seed: +$("#tplSeed").value};
+            strength: +$("#tplStrength").value, seed: +$("#tplSeed").value, ...(t.link ? {link: true} : {})};
   };
   const changed = async (rerender) => { famSet().template = collect(); await saveFamily(); if (rerender) renderTemplateForm();
     else if ($("#tplImg")) $("#tplImg").src = `/api/dun/template?set=${SET}&piece=${encodeURIComponent(FAM)}&_=${Date.now()}`;
@@ -1087,7 +1143,7 @@ const famWallForRoom = () => famInfo().kind === "wall" ? FAM : Object.keys(D.fam
 const famRoomMode = () => famInfo().kind === "wall" || $("#famBlockout")?.checked || Object.values(D.families || {}).some(f => f.kind === "wall" && f.built.length);
 async function loadFamLayout(keepView) {
   if (!$("#famCanvas")) return;
-  if (!pstate(FAM).approved[0] && !($("#famBlockout")?.checked && famSet().template)) { PV.data = null; $("#famStageMsg").textContent = "Pick an active master (or turn on blockout with a template) to see it in a room."; drawFam(); return; }
+  if (!pstate(FAM).approved[0] && !($("#famBlockout")?.checked && famSet().template)) { PV.req = (PV.req || 0) + 1; PV.loading = false; PV.keys = []; pvTrack(); PV.data = null; $("#famStageMsg").textContent = "Pick an active master (or turn on blockout with a template) to see it in a room."; drawFam(); return; }
   const room = famRoomMode(), w = +$("#famW").value || 14, h = +$("#famH").value || 10;
   const req = PV.req = (PV.req || 0) + 1;  // only the latest request may draw (switching sets/families races)
   PV.loading = true; pvStatus();

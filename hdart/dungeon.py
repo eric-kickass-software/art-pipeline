@@ -653,7 +653,7 @@ def generate(name, pid, n=3, seed=1, denoise=None, prompt=None, lora=None, varia
         if piece["kind"] == "prop":
             img, mask = gen_prop(piece, sd, lora=lora if lora is not None else 0.0, st=st)
         elif piece.get("method") == "wall_master":
-            img = gen_wall_master(spec, piece, sd, lora if lora is not None else 0.0)
+            img = match_to_floor(name, spec, gen_wall_master(spec, piece, sd, lora if lora is not None else 0.0))
             mask = np.ones(img.size[::-1], bool)
         elif piece.get("method") == "wall_repaint":
             img = gen_wall_variant(name, spec, piece, sd, denoise or piece.get("denoise"), lora if lora is not None else 0.0)
@@ -718,6 +718,9 @@ def set_style(spec):
     st = style()
     if spec.get("biome"):
         st["groups"]["biome"]["text"] = spec["biome"]
+    words = ((spec.get("sheet") or {}).get("words") or "").strip()
+    if words:  # the material sheet's words: every floor and wall of the set is made of the same stuff
+        st["groups"]["biome"]["text"] = ", ".join(t for t in (st["groups"]["biome"]["text"].strip(), words) if t)
     return st
 
 
@@ -1202,6 +1205,10 @@ def upsert_piece(name, piece, old_id=None):
         spec = load_set(name)
         old_id = old_id or piece["id"]
         clean = {k: v for k, v in piece.items() if v not in (None, "")}
+        tpl = (clean.get("family") or {}).get("template") or {}
+        if tpl.get("link") and clean.get("method") in ("master", "wall_master"):  # linked: the sheet's values win
+            kind = "wall" if clean["method"] == "wall_master" else "floor"
+            clean["family"] = {**clean["family"], "template": sheet_template(tpl, kind, sheet(spec))}
         i = next((k for k, p in enumerate(spec["pieces"]) if p["id"] == old_id), None)
         if i is None:
             spec["pieces"].append(clean)
@@ -2479,6 +2486,151 @@ def template_preview(name, master_id):
         return Image.fromarray(np.tile(np.asarray(e), (1, 2, 1)))
     f = template_render(tpl, "floor", 256)["rgb"]
     return Image.fromarray(np.tile(np.asarray(f), (2, 2, 1)))
+
+
+# ----------------------------------------------------------------------------- set material sheet
+# One per set (spec["sheet"]): what every family of the set is made of, decided once before generating. Families
+# whose template is linked (template.link) get the sheet's palette, stone module and joints written into their
+# template whenever the sheet changes, so floors and walls share colour and stone size. The sheet's words join the
+# biome in every texture prompt. Wall masters are colour-matched to the floor master (sheet "match", "wall_light").
+
+SHEET_DEFAULT = {"palette": {"stones": ["#7d7c80", "#6f6e73", "#87858a", "#76736f"], "mortar": "#3b3a3f", "variation": 0.08},
+                 "floor_stone": 0.33,   # a floor stone's size, tiles (~3 per tile)
+                 "wall_course": 0.15,   # a wall course's height, units (wall = 3 units)
+                 "wall_brick": 0.33,    # a wall brick's length, tiles
+                 "joint": 0.012, "bevel": 0.012,  # mortar width and edge rounding, tiles
+                 "words": "",           # material words added to every texture prompt
+                 "match": 0.6,          # wall masters: pull toward the floor master's colours (0 = off)
+                 "wall_light": 4.0,     # ... with this much lightness added (CIELAB L; walls usually read lighter)
+                 "floor": ""}           # the floor family walls match (default: the first with an active master)
+
+
+def sheet(spec):
+    s = {**SHEET_DEFAULT, **(spec.get("sheet") or {})}
+    s["palette"] = {**SHEET_DEFAULT["palette"], **(s.get("palette") or {})}
+    return s
+
+
+def sheet_template(tpl, kind, sh):
+    """A procedural family template with the sheet's palette and module written in (image templates: unchanged)."""
+    tpl = dict(tpl or {})
+    pattern = tpl.get("pattern")
+    if pattern in (None, "none", "image"):
+        return tpl
+    defs = patterns.PATTERNS.get(pattern, {})
+    p = dict(tpl.get("params") or {})
+    if kind == "wall":
+        p["across"] = max(1, int(round(1 / max(sh["wall_brick"], 0.04))))
+        if defs.get("course", 0):
+            p["course"] = round(sh["wall_course"] * iso._KZ, 4)
+    else:
+        p["across"] = max(1, int(round(1 / max(sh["floor_stone"], 0.04))))
+        if defs.get("course", 0):
+            p["course"] = round(sh["floor_stone"] / 2, 4)  # bricks / planks on a floor: twice as long as wide
+    p["mortar"], p["bevel"] = sh["joint"], sh["bevel"]
+    tpl.update(params=p, palette=dict(sh["palette"]))
+    return tpl
+
+
+def link_family(spec, master, on=True):
+    """Link (or unlink) a family's template to the sheet. A family with no template gets the kind's default pattern."""
+    fam = dict(master.get("family") or {})
+    tpl = dict(fam.get("template") or {})
+    kind = "wall" if master.get("method") == "wall_master" else "floor"
+    if on:
+        if tpl.get("pattern") in (None, "none"):
+            tpl = {"pattern": "running_bond" if kind == "wall" else "flagstone", "strength": 0.7, "seed": 1}
+        tpl = sheet_template({**tpl, "link": True}, kind, sheet(spec))
+    else:
+        tpl.pop("link", None)
+    fam["template"] = tpl
+    return {**master, "family": fam}
+
+
+def update_sheet(name, fields):
+    """Save sheet fields and rewrite every linked family's template from it. Returns the spec."""
+    with LOCK:
+        spec = load_set(name)
+        sh = {**(spec.get("sheet") or {})}
+        for k, v in fields.items():
+            if k not in SHEET_DEFAULT:
+                raise ValueError(f"unknown sheet field {k}")
+            sh[k] = v if k in ("palette", "words", "floor") else float(v)
+        spec["sheet"] = sh
+        full = sheet(spec)
+        for i, p in enumerate(spec["pieces"]):
+            tpl = (p.get("family") or {}).get("template") or {}
+            if p.get("method") in ("master", "wall_master") and tpl.get("link"):
+                kind = "wall" if p["method"] == "wall_master" else "floor"
+                spec["pieces"][i] = {**p, "family": {**p["family"], "template": sheet_template(tpl, kind, full)}}
+        return save_set(name, spec)
+
+
+def sheet_from_floor(name, master_id):
+    """Fill the sheet's palette from a floor family's active master (k-means of its stones, its darkest tone as the
+    joint) and its stone size from the family's template, then link that family. Returns the spec."""
+    from . import library
+    spec = load_set(name)
+    m = piece_of(spec, master_id)
+    rel = master_rel(name, master_id)
+    fields = {"floor": master_id}
+    if rel:
+        fields["palette"] = library.extract_palette(Image.open(set_dir(name) / rel).convert("RGB"))
+    tpl = family_template(m)
+    if tpl and tpl.get("pattern") != "image":
+        fields["floor_stone"] = round(1 / max(1, int((tpl.get("params") or {}).get("across", 3))), 3)
+    update_sheet(name, fields)
+    with LOCK:
+        spec = load_set(name)
+        return upsert_piece(name, link_family(spec, piece_of(spec, master_id), True))
+
+
+def sheet_floor_master(name, spec):
+    """(floor family id, active master rel) the walls match, or (None, None)."""
+    sh = sheet(spec)
+    ids = ([sh["floor"]] if sh["floor"] else []) + [p["id"] for p in spec["pieces"] if p.get("method") == "master"]
+    for fid in ids:
+        rel = master_rel(name, fid) if any(p["id"] == fid for p in spec["pieces"]) else None
+        if rel:
+            return fid, rel
+    return None, None
+
+
+def match_to_floor(name, spec, img):
+    """A wall master pulled toward the floor master's colours (sheet "match"), lightness offset by "wall_light"."""
+    sh = sheet(spec)
+    k = float(sh["match"])
+    fid, rel = sheet_floor_master(name, spec)
+    if k <= 0 or not rel:
+        return img
+    mean, std = image_lab_stats(name, rel)
+    mean = np.array(mean, np.float32) + np.array([float(sh["wall_light"]), 0, 0], np.float32)
+    return match_palette(img, (mean, std), np.ones(img.size[::-1], np.float32), k)
+
+
+def matching_wall_family(name, floor_id, slug=None):
+    """A wall family made to go with a floor family: the sheet filled from the floor (if it has none yet), a linked
+    running-bond template, the floor's material words in the prompt. Returns the new master's id."""
+    spec = load_set(name)
+    if not spec.get("sheet"):
+        sheet_from_floor(name, floor_id)
+        spec = load_set(name)
+    elif not sheet(spec)["floor"]:
+        update_sheet(name, {"floor": floor_id})
+        spec = load_set(name)
+    floor = piece_of(spec, floor_id)
+    base = re.sub(r"[^a-z0-9_]+", "_", (slug or floor_id.replace("tile.", "").replace(f"{name}_", "").replace("_master", "")).lower()).strip("_")
+    base = re.sub(r"_?floors?$", "", base) or "stone"
+    wid = f"tile.{name}_{base}_wall_master"
+    n = 2
+    while any(p["id"] == wid for p in spec["pieces"]):
+        wid, n = f"tile.{name}_{base}{n}_wall_master", n + 1
+    words = material_prompt(name, floor).split(",")[0].strip() or "stone"
+    prompt = f"a wall of {words}, blocks in courses with mortar, a flat stone cap along the top"
+    piece = {"id": wid, "kind": "elevation", "shape": "elevation", "method": "wall_master", "variants": 1, "prompt": prompt,
+             "family": {"prompts": [prompt], "template": {"pattern": "running_bond", "strength": 0.7, "seed": 1}}}
+    upsert_piece(name, link_family(spec, piece, True))
+    return wid
 
 
 def apply_material(name, master_id, mid, use=("template", "words"), strength=0.65):

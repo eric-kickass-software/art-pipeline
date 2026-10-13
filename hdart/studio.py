@@ -313,6 +313,16 @@ def dungeon_post(action, b):
     if action == "orphan/archive":
         dg.archive_orphan(name, b["piece"])
         return {"ok": True}
+    if action == "sheet/update":  # set material sheet fields; linked family templates follow
+        return {"spec": dg.update_sheet(name, b["fields"])}
+    if action == "sheet/from_floor":  # fill the sheet from a floor family's master and template, link it
+        return {"spec": dg.sheet_from_floor(name, b["piece"])}
+    if action == "family/link":  # link / unlink a family's template to the sheet
+        with dg.LOCK:
+            spec = dg.load_set(name)
+            return {"spec": dg.upsert_piece(name, dg.link_family(spec, dg.piece_of(spec, b["piece"]), bool(b.get("on", True))))}
+    if action == "family/matching_wall":  # a wall family that goes with this floor family
+        return {"piece": dg.matching_wall_family(name, b["piece"], b.get("slug"))}
     if action == "family/archive":  # delete a family: pieces out of the spec, images to archive/families/
         return {"path": str(dg.archive_family(name, b["piece"]))}
     if action == "set/archive":
@@ -365,6 +375,7 @@ def dungeon_get(path, q):
         spec = dg.load_set(name)
         return "application/json", json.dumps({"sets": dg.list_sets(), "spec": spec, "state": dg.state(name),
                                                "orphans": dg.orphans(name),
+                                               "sheet": dg.sheet(spec),
                                                "output_tile": dg.output_tile(spec), "pixel_steps": dg.pixel_steps(spec),
                                                "families": {p["id"]: dg.family_info(name, spec, p)
                                                             for p in spec["pieces"] if p.get("method") in ("master", "wall_master")},
