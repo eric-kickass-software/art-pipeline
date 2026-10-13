@@ -531,11 +531,41 @@ def gen_repaint(name, spec, piece, seed=1, denoise=None, lora=0.0, st=None):
     master = master_image(name, spec, piece).resize((per, per), Image.LANCZOS)
     base = Image.fromarray(np.tile(np.asarray(master), (N, N, 1)))
     mask = block_mask(N, per, float(piece.get("border", 0.08)))
+    den = float(denoise) if denoise else REPAINT_DENOISE
     # No reference image: with one FLUX copies the tiled master almost exactly. Starting from it at 0.85 keeps the
     # master's stone scale but redraws the layout; 1.0 = freer (scale may drift), ~0.6 = subtle changes.
-    out = repaint(base, mask, floor_texture_prompt(st, piece["prompt"]), seed,
-                  denoise=float(denoise) if denoise else REPAINT_DENOISE, lora=lora, reference=False)
+    mp = piece_of(spec, piece.get("from"))
+    material = material_prompt(name, mp)
+    feature = piece["prompt"][len(material):].strip(" ,") if piece["prompt"].startswith(material) else ""
+    if N > 1 and feature and family_settings(mp).get("span", "once") == "once":
+        # a block is one piece: its feature should happen once, not in every tile (FLUX copies the tiled master).
+        # Pass 1 redraws the whole interior plainly (a new layout, so the block doesn't repeat the master); pass 2
+        # paints the feature once, inside a round zone that crosses tile boundaries.
+        # (tested on the Stylized floor: pass 1 at 0.85 invents shapes from style words like "moonlit"; 0.8 doesn't;
+        # pass 2 under 1.0 sometimes paints nothing in the zone)
+        plain = repaint(base, mask, floor_texture_prompt(st, f"{material}, {PLAIN_REROLL}"), seed, denoise=min(den, 0.8),
+                        lora=lora, reference=False)
+        zone = mask * floor_zone(N, per, seed)
+        out = repaint(plain, zone.astype(np.float32), floor_texture_prompt(st, f"{material}, {feature}, just one, in a single place on this floor"),
+                      seed + 1, denoise=1.0, lora=lora, reference=False)
+    else:
+        out = repaint(base, mask, floor_texture_prompt(st, piece["prompt"]), seed, denoise=den, lora=lora, reference=False)
     return lock_palette(spec, piece.get("from"), out, mask, master)
+
+
+PLAIN_REROLL = "the same stones redrawn, different shapes and wear, nothing special, no shapes or patterns painted on the floor"
+
+
+def floor_zone(N, per, seed, frac=0.65, ramp=0.4):
+    """Repaint strength for an NxN floor block's feature: 1 in a round zone (radius frac x half the block, at least
+    0.75 tiles, random centre), 0 outside."""
+    rng = np.random.default_rng(seed)
+    S = N * per
+    yy, xx = (np.mgrid[0:S, 0:S] + 0.5) / per
+    r = max(0.75, frac * N / 2)
+    lo, hi = r * 0.6 + 0.2, N - r * 0.6 - 0.2
+    cx, cy = rng.uniform(lo, hi, 2) if hi - lo > 0.05 else (N / 2, N / 2)
+    return np.clip(1 - (np.hypot(xx - cx, yy - cy) - r) / ramp, 0, 1)
 
 
 def lock_palette(spec, master_id, img, weight, master_img):
@@ -2299,6 +2329,7 @@ def family_settings(master):
     f["variations"] = [v if isinstance(v, dict) else {"id": f"v{i + 1}", "text": v} for i, v in enumerate(f["variations"])]
     f["sizes"] = [int(n) for n in f.get("sizes", FAMILY_SIZES)]
     f["palette_lock"] = bool(f.get("palette_lock", True))
+    f["span"] = f.get("span", "once")  # blocks / runs: the feature "once" across the piece, or "spread"
     f["even_tone"] = float(f.get("even_tone", EVEN_TONE))
     f["targets"] = {str(n): int(v) for n, v in {"1": 3, "2": 2, "3": 1, "4": 1, **f.get("targets", {})}.items()}
     f["weights"] = {str(n): int(v) for n, v in {"2": DEFAULT_WEIGHT, "3": DEFAULT_WEIGHT, "4": DEFAULT_WEIGHT,

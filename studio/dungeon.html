@@ -728,7 +728,7 @@ function renderFamily() {
     <div class="gbar"><button id="famAddVar">+ variation</button>${wall ? "" : `<button id="famAddReroll" title="A plain variation: the same surface with the stones redrawn and nothing special added. Mixed in with the master, these break up the every-tile repeat">+ plain reroll</button>`}
       <label>per cell<input id="famN" type="number" value="1" min="1" max="6" style="width:52px"></label>
       <button id="famGenAll" class="primary">Generate all</button>
-      ${wall ? `<label title="2-4 cell variations are placed as one piece: paint the feature once across the run (a strong repaint in one zone, light elsewhere), or spread it over the whole run (e.g. moss everywhere)">multi-cell features<select id="famSpan" style="width:auto"><option value="once" ${(f.span || "once") === "once" ? "selected" : ""}>once across the run</option><option value="spread" ${f.span === "spread" ? "selected" : ""}>spread over the run</option></select></label>` : ""}
+      <label title="${wall ? "2-4 cell variations are placed as one piece: paint the feature once across the run (a strong repaint in one zone, light elsewhere), or spread it over the whole run (e.g. moss everywhere)" : "2x2-4x4 blocks are placed as one piece: redraw the block, then paint the feature once in a zone that crosses tiles (two passes), or spread it over the block (one pass, the old way)"}">multi-cell features<select id="famSpan" style="width:auto"><option value="once" ${(f.span || "once") === "once" ? "selected" : ""}>once across the ${wall ? "run" : "block"}</option><option value="spread" ${f.span === "spread" ? "selected" : ""}>spread over the ${wall ? "run" : "block"}</option></select></label>
       <span class="hint">▶ on a row = that variation at every ticked size · ▶ on a column = that size for every variation</span></div>
     ${wall ? `<h3>3 · Doors <span class="hint">each door is painted into a one-tile slice of the active elevation (only the 2-unit opening changes, so it keeps the wall's stone and colours)</span></h3>
     <div id="famDoors"></div>
@@ -968,7 +968,7 @@ async function generateVariants(varIds, sizes, doors = false) {
 async function saveFamily() {
   clearTimeout(famSaveT);
   const m = piece(FAM), f = famSet();
-  const family = {prompts: f.prompts, variations: f.variations, sizes: f.sizes, weights: f.weights, palette_lock: f.palette_lock, template: f.template || null};
+  const family = {prompts: f.prompts, variations: f.variations, sizes: f.sizes, weights: f.weights, palette_lock: f.palette_lock, template: f.template || null, span: f.span || "once"};
   if (famInfo().kind !== "wall") family.even_tone = f.even_tone;
   if (famInfo().kind === "wall") Object.assign(family, {doors: f.doors, height: f.height, door_height: f.door_height, door_width: f.door_width, span: f.span || "once"});
   try { D.spec = (await post("piece/save", {piece: {...m, prompt: f.prompts[0] || m.prompt, family}})).spec; }

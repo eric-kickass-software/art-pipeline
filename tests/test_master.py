@@ -46,4 +46,10 @@ assert after < before * 0.4, (before, after)
 assert e[::64].mean() < e[8:56, 8:56].mean() - 40  # joints still dark
 wrap = np.abs(e[0] - e[-1]).mean(), np.abs(t[0] - t[-1]).mean(); assert wrap[0] < wrap[1] + 15, wrap
 print(f"even tone: dark slab {before:.0f} -> {after:.0f} off the others")
+# floor blocks: the feature zone crosses tile boundaries both ways (the block's kept border protects its edges)
+for N in (2, 3, 4):
+    for seed in range(20):
+        z = d.floor_zone(N, 64, seed); ys, xs = np.nonzero(z > 0.99)
+        assert xs.size and xs.max() // 64 > xs.min() // 64 and ys.max() // 64 > ys.min() // 64, (N, seed)
+assert d.family_settings({'family': {}})['span'] == 'once'
 print("master tests passed")
