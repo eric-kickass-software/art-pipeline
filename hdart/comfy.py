@@ -113,13 +113,19 @@ def build_edit(image_name, prompt, seed=0, steps=4, lora_strength=0.0, prefix="h
 
 
 def build_img2img(image_name, prompt, denoise=0.75, seed=0, steps=8, lora_strength=0.0, prefix="hdart/i2i",
-                  ref_images=()):
+                  ref_images=(), mask_name=None):
     """FLUX.2-klein img2img: start from `image_name` (layout + colours) at partial denoise; optional reference
-    images (appearance) via ReferenceLatent. Keeps composition, redraws the surface."""
+    images (appearance) via ReferenceLatent. Keeps composition, redraws the surface. `mask_name` (greyscale, red
+    channel read) limits the sampling: white = redraw, black = keep the init exactly (Differential Diffusion)."""
     g = Graph()
     model, clip, vae = _klein_model(g, lora_strength)
+    if mask_name:
+        model = g.add("DifferentialDiffusion", model=model[0], strength=1.0)
     load = g.add("LoadImage", image=image_name)
     lat = g.add("VAEEncode", pixels=load[0], vae=vae[0])
+    if mask_name:
+        lat = g.add("SetLatentNoiseMask", samples=lat[0],
+                    mask=g.add("LoadImageMask", image=mask_name, channel="red")[0])
     pos = g.add("CLIPTextEncode", clip=clip[0], text=prompt)
     neg = g.add("ConditioningZeroOut", conditioning=pos[0])
     for name in ref_images:

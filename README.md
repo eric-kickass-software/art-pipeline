@@ -236,7 +236,20 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
 
 ## Workshop (curated AI character parts)
 1. **Mannequins** tab: generate and approve the male/female/slim base (front, then a back made from the mirrored front, clamped to the
-   same silhouette so the card's two sides line up). ✕ on a candidate archives it; **Archive unapproved** (per front/back)
+   same silhouette so the card's two sides line up). How the back is made (`back_from_front`, tested 2026-10-20 on
+   4 seeds, `tests/test_workshop_backs.py`):
+   - The silhouette is `figure_mask`: the foreground plus enclosed holes **above the chin**. Eye whites are pure white,
+     so the foreground test misses them; left as holes they came back as white glints on the back of the head.
+   - Starting image: the mirrored front, blurred, with a 3 px dark **outline** on the silhouette edge. Sampling is
+     **masked** to the silhouette (`comfy.build_img2img(mask_name=...)`, Differential Diffusion), so the outside stays
+     white and FLUX fills the shape up to the line. Without the mask it drew its own straighter pose (and props), and the
+     clamp smeared colour into the difference: silhouette fill 89% → 99.8%.
+   - Holes FLUX still leaves inside the silhouette get one small masked repaint (`_gap_repaint`), then the clamp.
+   - Tried and dropped: denoise 0.65 (blurry), a flat skin-tone fill (flatter, more glitches), filling the head with
+     skin before the blur (flat heads, ears lost), a "fills the outlined shape" prompt (no measurable gain).
+   - Front shadows: the style avoids the word "shadow" and says "floating in empty space" / "nothing beneath the feet"
+     (shadows on 4 of 4 seeds before, 0 of 4 after). Removing them afterwards missed tinted shadows.
+   ✕ on a candidate archives it; **Archive unapproved** (per front/back)
    archives every candidate that isn't approved, plus the older files in that build's `_base` folder the tab no longer lists
    (`archive_base`, `/api/ws/base/archive`). They move to `archive/workshop/` (same relative paths). The approved one never moves.
    Tests: `tests/test_workshop_archive.py`.

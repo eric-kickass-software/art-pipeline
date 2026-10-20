@@ -14,16 +14,16 @@
       "hint": "Models drift to realistic proportions unless pushed. 'super deformed' + 'oversized head' matter most."
     },
     "view": {
-      "text": "full body, three-quarter view facing left, standing idle pose, arms relaxed at the sides, feet together",
+      "text": "full body, three-quarter view facing left, standing idle pose, arms relaxed at the sides, feet together, floating in empty space",
       "hint": "Keep identical for every generation so parts line up. The back base is made by editing the front one."
     },
     "rendering": {
-      "text": "clean dark outlines, cel shading with two-tone shadows, hard edges, crisp pixels, limited palette",
+      "text": "clean dark outlines, two-tone cel shading, hard edges, crisp pixels, limited palette",
       "hint": "Line and shading language. Useful extras: 'selective outlines', 'dithering', 'high contrast', 'muted earthy colours'."
     },
     "framing": {
-      "text": "single character, centered, game asset, isolated on a pure flat white background",
-      "hint": "Plain white background is required: the cutter uses it to find the sprite. If FLUX adds a ground shadow, reword this (e.g. \"floating\", \"isolated\")."
+      "text": "single character, centered, game asset, isolated on a pure flat white background, nothing beneath the feet",
+      "hint": "Plain white background is required: the cutter uses it to find the sprite. Ground shadow: keep \"nothing beneath the feet\" here and \"floating in empty space\" in view, and avoid the word \"shadow\" anywhere (tested 2026-10-20: shadows on 4 of 4 seeds before, 0 of 4 after)."
     },
     "world": {
       "text": "dark fantasy adventurer",
