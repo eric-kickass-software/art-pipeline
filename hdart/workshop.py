@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 STATE = ai_kit.AI_DIR / "workshop.json"
 CAND = ai_kit.AI_DIR / "candidates"
 STYLE = ROOT / "specs" / "ai_style.json"
+ARCHIVE = ROOT / "archive"  # git-ignored, shared with the Dungeon Forge
 ORDER = ("medium", "style", "proportions", "view", "rendering", "framing", "world")
 QA_COLORS = {"hair": (214, 70, 200), "skin": (240, 190, 150), "eyes": (60, 200, 90), "cloth1": (70, 110, 230),
              "cloth2": (60, 200, 220), "leather": (140, 90, 50), "metal": (170, 170, 185), "wood": (220, 140, 40),
@@ -256,6 +257,35 @@ def approve_base(build, facing, file):
         for f in ("front", "back"):
             ai_kit.build_base_part(build, f)
     return b
+
+
+# archive/workshop/<rel>: archived mannequin candidates, same relative path as under sprites/ai/ (nothing is deleted;
+# delete archive/ by hand once you're sure)
+
+def archive_base(build, facing, file=None):
+    """Archive mannequin candidates of one build + facing: just `file`, or (no file) every candidate that isn't
+    approved, plus the older files in the _base folder the board no longer lists. The approved one never moves.
+    Returns how many files moved."""
+    s = load_state()
+    b = s["builds"].get(build, {}).get(facing, {})
+    approved = b.get("approved")
+    if file:
+        if file == approved:
+            raise ValueError("That's the approved mannequin. Approve another one first.")
+        rels = {file}
+    else:
+        rels = {c for c in b.get("candidates", []) if c != approved}
+        rels |= {rel(p) for p in (CAND / build / "_base").glob(f"{facing}_*.png")} - {approved}
+    for r in rels:
+        src = ai_kit.AI_DIR / r
+        if src.exists():
+            dst = ARCHIVE / "workshop" / r
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), str(dst))
+    if b:
+        b["candidates"] = [c for c in b.get("candidates", []) if c not in rels]
+        save_state(s)
+    return len(rels)
 
 
 # ----------------------------------------------------------------------------- stage 2: part candidates

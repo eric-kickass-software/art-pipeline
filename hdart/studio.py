@@ -212,6 +212,8 @@ def workshop_post(st, action, b):
     if action == "base/approve":
         ws.approve_base(b["build"], b["facing"], b["file"])
         return {"ok": True}
+    if action == "base/archive":
+        return {"archived": ws.archive_base(b["build"], b["facing"], b.get("file"))}
     if action == "part/generate":
         return {"candidates": ws.gen_part(b["part"], b["build"], b["facing"], b["text"], int(b.get("n", 4)),
                                           int(b.get("seed", 5)), float(b.get("lora", 0.6)))}

@@ -236,7 +236,10 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
 
 ## Workshop (curated AI character parts)
 1. **Mannequins** tab: generate and approve the male/female/slim base (front, then a back made from the mirrored front, clamped to the
-   same silhouette so the card's two sides line up).
+   same silhouette so the card's two sides line up). ✕ on a candidate archives it; **Archive unapproved** (per front/back)
+   archives every candidate that isn't approved, plus the older files in that build's `_base` folder the tab no longer lists
+   (`archive_base`, `/api/ws/base/archive`). They move to `archive/workshop/` (same relative paths). The approved one never moves.
+   Tests: `tests/test_workshop_archive.py`.
 2. **Board**: each cell is part × build. Generate candidates, approve a raw image (its back is queued automatically), then **Cut**:
    auto threshold/speck, brush keep/remove, magic wand, undo, native-grid QA. **Fix region**: paint an area, prompt a
    correction, and FLUX redoes only that area. Approve → the kit rebuilds.

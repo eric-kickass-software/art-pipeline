@@ -112,8 +112,10 @@
       <label>Seed</label><input id="bSeed" type="number" value="1" style="max-width:90px"></div>
     <div class="row"><label>Description</label><textarea id="bDesc" rows="2" style="flex:1"></textarea></div>
     <div class="card"><h2 style="margin-top:0">Front · ¾ facing left</h2><button class="primary" data-bgen="front">Queue front candidates</button>
+      <button data-barch="front" style="float:right" title="Move every front candidate that isn't approved to archive/workshop/">Archive unapproved</button>
       <div class="cands bcands" id="bFront"></div></div>
     <div class="card"><h2 style="margin-top:0">Back · the reverse side of the approved front (same silhouette, mirrored)</h2><button class="primary" data-bgen="back">Queue back candidates</button>
+      <button data-barch="back" style="float:right" title="Move every back candidate that isn't approved to archive/workshop/">Archive unapproved</button>
       <div class="cands bcands" id="bBack"></div></div>
     <p class="hint">A new front base means that build's parts must be regenerated (they're drawn onto the base).</p>
   </section>
@@ -415,11 +417,19 @@ function renderBase() {
   for (const f of ["front", "back"]) {
     const data = bs[f] || {};
     $(f === "front" ? "bFront" : "bBack").innerHTML = (data.candidates || []).map(c => `<div class="cand ${c === data.approved ? "on" : ""}">
-      <img loading="lazy" src="${img(c)}"><button data-bap="${c}" data-f="${f}">${c === data.approved ? "✓ approved" : "Approve"}</button></div>`).join("") || `<p class="hint">No candidates yet.</p>`;
+      <img loading="lazy" src="${img(c)}"><div class="row" style="gap:4px;margin:0"><button data-bap="${c}" data-f="${f}" style="flex:1">${c === data.approved ? "✓ approved" : "Approve"}</button>${c === data.approved ? "" :
+      `<button data-bdel="${c}" data-f="${f}" title="Archive (moves to archive/workshop/)" style="width:auto;padding:2px 8px">✕</button>`}</div></div>`).join("") || `<p class="hint">No candidates yet.</p>`;
   }
   document.querySelectorAll("[data-bap]").forEach(btn => btn.onclick = guard(async () => {
     await api("/api/ws/base/approve", { build: $("bBuild").value, facing: btn.dataset.f, file: btn.dataset.bap }); await refresh(); }));
+  document.querySelectorAll("[data-bdel]").forEach(btn => btn.onclick = guard(async () => {
+    await api("/api/ws/base/archive", { build: $("bBuild").value, facing: btn.dataset.f, file: btn.dataset.bdel }); await refresh(); }));
 }
+document.querySelectorAll("[data-barch]").forEach(btn => btn.onclick = guard(async () => {
+  const f = btn.dataset.barch, b = $("bBuild").value;
+  if (!confirm(`Archive every ${b} ${f} mannequin that isn't approved? They move to archive/workshop/.`)) return;
+  await api("/api/ws/base/archive", { build: b, facing: f }); await refresh();
+}));
 $("bBuild").onchange = renderBase;
 document.querySelectorAll("[data-bgen]").forEach(btn => btn.onclick = guard(async () => {
   const f = btn.dataset.bgen, b = $("bBuild").value;
