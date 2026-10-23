@@ -87,6 +87,7 @@
 <header>
   <h1>Sprite Workshop</h1>
   <button class="tab on" data-t="board">Board</button>
+  <button class="tab" data-t="races">Races</button>
   <button class="tab" data-t="base">Mannequins</button>
   <button class="tab" data-t="style">Style</button>
   <button class="tab" data-t="ramps">Ramps</button>
@@ -117,6 +118,23 @@
         <span class="st redo-back">redo back</span> (made before backs became the card's reverse side)</div>
     </div>
     <table class="board" id="boardTable"></table>
+  </section>
+
+  <!-- RACES -->
+  <section id="races">
+    <p class="hint">A race is three puppet-ready A-pose mannequins: the <b>unisex</b> base, then <b>male</b> and <b>female</b> as edits of it
+      (same head, face, pose, scale and feet; only the body changes). Approving a front queues its back (a 3/4 back view made from the
+      front). If a newer unisex is approved, candidates made from the old one are flagged. Specs: <code>specs/races.json</code>.</p>
+    <div class="card"><div class="row"><label>Race</label><select id="raceSel" style="max-width:220px"></select><button id="raceNew">New race</button>
+      <label>Candidates</label><input id="raceN" type="number" value="4" min="1" max="8" style="max-width:70px">
+      <label>Seed</label><input id="raceSeed" type="number" value="1" style="max-width:90px"></div>
+      <div class="row"><label>Traits</label><textarea id="raceTraits" rows="1" style="flex:1"></textarea></div>
+      <div class="row"><label>Starts from</label><select id="raceFrom" style="max-width:160px"></select>
+        <span class="hint">another race's approved unisex, edited (shared proportions)</span></div>
+      <div class="row" id="raceFromRow"><label>Edit</label><textarea id="raceFromEdit" rows="2" style="flex:1"></textarea></div>
+      <div class="row"><button class="primary" id="raceSave">Save race</button><span class="hint" id="raceStatus"></span></div>
+      <div class="row"><label>Skin tones</label><div id="raceRampList" class="chips" style="flex:1"></div><button id="raceRamps">Edit in Ramps →</button></div></div>
+    <div id="raceGrid"></div>
   </section>
 
   <!-- MANNEQUINS -->
@@ -641,6 +659,76 @@ async function saveRamp() {
   RS.name = name; listRamps(); $("rStatus").textContent = ` saved ${RS.group}.${name}`;
 }
 document.querySelector('.tab[data-t="ramps"]').addEventListener("click", guard(initRamps));
+
+// ------------------------------------------------------------------ races
+const RC = { race: null, st: null, inited: false };
+async function initRaces() {
+  if (!RC.inited) {
+    RC.inited = true;
+    $("raceSel").onchange = guard(async () => { RC.race = $("raceSel").value; await loadRace(); });
+    $("raceSave").onclick = guard(saveRaceSpec);
+    $("raceNew").onclick = guard(async () => {
+      const id = (prompt("New race id (lowercase, e.g. dwarf):") || "").trim(); if (!id) return;
+      const doc = RC.st.spec; if (doc.races[id]) throw new Error(`${id} already exists.`);
+      doc.races[id] = { name: id[0].toUpperCase() + id.slice(1), traits: id };
+      await api("/api/ws/race/spec", { spec: doc }); RC.race = id; await loadRace(); });
+    $("raceRamps").onclick = () => document.querySelector('.tab[data-t="ramps"]').click();
+  }
+  await loadRace();
+}
+async function loadRace() {
+  const first = await api("/api/ws/race/state", { race: RC.race || "human" });
+  RC.race = first.race; RC.st = first;
+  const doc = RC.st.spec;
+  $("raceSel").innerHTML = Object.entries(doc.races).map(([id, r]) => `<option value="${id}" ${id===RC.race?"selected":""}>${r.name} (${id})</option>`).join("");
+  const r = doc.races[RC.race];
+  if (document.activeElement !== $("raceTraits")) $("raceTraits").value = r.traits || "";
+  $("raceFrom").innerHTML = `<option value="">(generated)</option>` + Object.keys(doc.races).filter(x => x !== RC.race)
+    .map(x => `<option ${x===r.from?"selected":""}>${x}</option>`).join("");
+  if (document.activeElement !== $("raceFromEdit")) $("raceFromEdit").value = r.from_edit || "";
+  $("raceFromRow").style.display = r.from ? "" : "none";
+  $("raceFrom").onchange = () => { $("raceFromRow").style.display = $("raceFrom").value ? "" : "none"; };
+  const ramps = Object.entries(RC.st.ramps);
+  $("raceRampList").innerHTML = ramps.length ? ramps.map(([n, e]) => `<span class="ritem" title="${n}"><span class="nm">${n}</span><span class="strip">${(e.colors || []).map(c => `<i style="background:${c}"></i>`).join("")}</span></span>`).join("")
+    : `<span class="hint">No skin ramps tagged "${RC.race}" yet: tag them in the Ramps tab (Races field).</span>`;
+  renderRaceGrid();
+}
+function renderRaceGrid() {
+  const rows = { unisex: "Unisex (the race's base)", male: "Male (edit of the unisex)", female: "Female (edit of the unisex)" };
+  $("raceGrid").innerHTML = Object.entries(rows).map(([sex, label]) => `<div class="card"><h2 style="margin-top:0">${label}</h2>
+    <div class="grid2">${["front", "back"].map(f => {
+      const d = RC.st.builds[sex][f];
+      const cands = d.candidates.map(c => `<div class="cand ${c===d.approved?"on":""}"><img loading="lazy" src="${img(c)}">
+        ${d.stale[c] ? `<div class="hint" style="color:var(--warn)">made from an older source</div>` : ""}
+        <div class="row" style="gap:4px;margin:0"><button data-rap="${c}" data-sex="${sex}" data-f="${f}" style="flex:1">${c===d.approved?"✓ approved":"Approve"}</button>
+        ${c===d.approved ? "" : `<button data-rdel="${c}" data-sex="${sex}" data-f="${f}" title="Archive (moves to archive/workshop/)" style="width:auto;padding:2px 8px">✕</button>`}</div></div>`).join("");
+      return `<div><div class="row"><b>${f}</b>
+        ${d.ready === true ? `<button class="primary" data-rgen="${sex}" data-f="${f}">Queue candidates</button>` : `<span class="hint">${d.ready}</span>`}</div>
+        <div class="cands bcands">${cands || `<p class="hint">No candidates yet.</p>`}</div></div>`; }).join("")}</div></div>`).join("");
+  document.querySelectorAll("[data-rgen]").forEach(btn => btn.onclick = guard(async () => {
+    const sex = btn.dataset.rgen, f = btn.dataset.f, n = +$("raceN").value, seed = +$("raceSeed").value;
+    await queue([{ kind: "race", race: RC.race, sex, facing: f, n, seed, label: `${RC.race} · ${sex} · ${f}` }]);
+    $("raceSeed").value = seed + n; }));
+  document.querySelectorAll("[data-rap]").forEach(btn => btn.onclick = guard(async () => {
+    await api("/api/ws/race/approve", { build: `${RC.race}.${btn.dataset.sex}`, facing: btn.dataset.f, file: btn.dataset.rap }); await loadRace(); }));
+  document.querySelectorAll("[data-rdel]").forEach(btn => btn.onclick = guard(async () => {
+    await api("/api/ws/base/archive", { build: `${RC.race}.${btn.dataset.sex}`, facing: btn.dataset.f, file: btn.dataset.rdel }); await loadRace(); }));
+}
+async function saveRaceSpec() {
+  const doc = RC.st.spec, r = doc.races[RC.race];
+  r.traits = $("raceTraits").value.trim();
+  if ($("raceFrom").value) { r.from = $("raceFrom").value; r.from_edit = $("raceFromEdit").value.trim(); }
+  else { delete r.from; delete r.from_edit; }
+  await api("/api/ws/race/spec", { spec: doc }); $("raceStatus").textContent = " saved"; await loadRace();
+}
+document.querySelector('.tab[data-t="races"]').addEventListener("click", guard(initRaces));
+RC.busy = false;
+setInterval(() => {   // refresh while race jobs run, and once more when the queue goes idle
+  if (!RC.inited || !document.querySelector('.tab[data-t="races"]').classList.contains("on")) return;
+  const busy = jobs.some(j => j.status === "running" || j.status === "queued");
+  if (busy || RC.busy) loadRace().catch(() => {});
+  RC.busy = busy;
+}, 4000);
 
 function renderAll() { renderBoard(); renderBase(); renderStyle(); renderSets(); renderDrawer(false); }
 refresh().then(pollJobs).catch(e => err(e.message));

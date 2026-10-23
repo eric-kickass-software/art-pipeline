@@ -184,6 +184,8 @@ class Jobs:
                 elif job["kind"] == "base":
                     job["result"] = ws.gen_base(a["build"], a["facing"], int(a.get("n", 4)), int(a.get("seed", 1)),
                                                 a.get("description"))
+                elif job["kind"] == "race":
+                    job["result"] = ws.gen_race(a["race"], a["sex"], a["facing"], int(a.get("n", 4)), int(a.get("seed", 1)))
                 elif job["kind"] == "part":
                     job["result"] = ws.gen_part(a["part"], a["build"], a["facing"], a["text"], int(a.get("n", 4)),
                                                 int(a.get("seed", 5)), float(a.get("lora", 0.6)))
@@ -212,6 +214,17 @@ def workshop_post(st, action, b):
     if action == "base/approve":
         ws.approve_base(b["build"], b["facing"], b["file"])
         return {"ok": True}
+    if action == "race/state":
+        return ws.race_state(b["race"])
+    if action == "race/spec":
+        return ws.save_races(b["spec"])
+    if action == "race/approve":
+        out = ws.approve_race(b["build"], b["facing"], b["file"])
+        if b["facing"] == "front" and b.get("auto_back", True):  # queue the matching back view right away
+            race, sex = b["build"].split(".", 1)
+            JOBS.add("race", {"race": race, "sex": sex, "facing": "back", "n": b.get("n", 3), "seed": 11},
+                     f"{race} · {sex} · back")
+        return out
     if action == "ramp/preview":
         return ws.ramp_preview(b["build"])
     if action == "ramp/palettes":

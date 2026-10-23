@@ -1,0 +1,21 @@
+{
+  "_doc": "Races for the Workshop's Races tab. Each race has three mannequin builds (<race>.unisex, <race>.male, <race>.female) in the puppet-ready A-pose. The unisex front is generated from the style + pose + race traits (or, with `from`, as an edit of that race's approved unisex front using `from_edit`); male and female fronts are edits of the race's approved unisex front that keep the head, face, pose, scale and feet; every back is an edit of its approved front. Skin tones: ramps in specs/palettes.json (group skin) whose `races` include the race id.",
+  "pose": "full body, three-quarter view facing left, seen slightly from above, standing in an A-pose: both arms held straight out and down at about 30 degrees away from the body with white space between each arm and the torso, legs apart at shoulder width, feet flat, floating in empty space",
+  "sexes": {
+    "unisex": "androgynous adult, neutral average build, bald head, plain grey sleeveless undershirt",
+    "male": "an adult male body: broader shoulders, flatter chest, narrower hips, a little more muscular arms, plain grey sleeveless undershirt",
+    "female": "an adult female body: narrower shoulders, a modest bust, wider hips and a defined waist, plain grey tank top"
+  },
+  "races": {
+    "human": {
+      "name": "Human",
+      "traits": "human, rounded human ears"
+    },
+    "elf": {
+      "name": "Elf",
+      "traits": "elf, long pointed elf ears, slender graceful features",
+      "from": "human",
+      "from_edit": "Give this character long pointed elf ears and slightly more slender, graceful facial features. Keep the body, pose, scale, position, clothing and art style exactly the same."
+    }
+  }
+}

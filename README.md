@@ -235,6 +235,19 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
   - Wall-run join edges and white outline bleed are cleaned up automatically when pieces are cut.
 
 ## Workshop (curated AI character parts)
+0. **Races** tab (2026-10-22): a race = three puppet-ready **A-pose** mannequins, `<race>.unisex`, `<race>.male`,
+   `<race>.female` (specs: `specs/races.json`; state in `sprites/ai/workshop.json` next to the older builds).
+   - **Unisex front:** txt2img from the style with the race pose (`races.json` `pose`), traits and the unisex body. A race
+     with `from` (Elf → Human) instead edits that race's approved unisex with `from_edit`, so the races share proportions.
+   - **Male / female front:** FLUX edit of the race's approved unisex front that keeps head, face, skin, pose, scale and
+     feet and changes only the body (Eric: same head, pose, feet).
+   - **Backs:** FLUX edit of the approved front, a 3/4 back view in the same A-pose (perspective-correct; the mirrored
+     silhouette only works for flat cards). Approving a front queues its back and drops the old back.
+   - Each candidate records the image it was made from; when a newer source is approved it's flagged "made from an
+     older source". Order is enforced (`race_needs`). ✕ archives like the Mannequins tab.
+   - Skin tones: the race lists the `skin` ramps whose `races` include it (tag them in the Ramps tab).
+   - API: `race/state {race}`, `race/spec {spec}`, `race/approve {build, facing, file}`; queue job kind `race`
+     `{race, sex, facing, n, seed}`. Tests: `tests/test_races.py` (ComfyUI stubbed).
 1. **Mannequins** tab: generate and approve the male/female/slim base (front, then a back made from the mirrored front, clamped to the
    same silhouette so the card's two sides line up). How the back is made (`back_from_front`, tested 2026-10-20 on
    4 seeds, `tests/test_workshop_backs.py`):
