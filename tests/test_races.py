@@ -35,12 +35,14 @@ assert "front first" in err(ws.gen_race, "human", "unisex", "back", 1)
 # unisex = txt2img with the A-pose and the race traits; result 512 px
 c = ws.gen_race("human", "unisex", "front", 2, seed=1)
 assert len(c) == 2 and calls[-1][0] == "txt2img" and "A-pose" in calls[-1][1] and "rounded human ears" in calls[-1][1]
+assert "unclothed" in calls[-1][1] and "Adventurer" not in calls[-1][1] and "shorts" not in calls[-1][1]   # smooth base, no gear
 assert Image.open(ak.AI_DIR / c[0]).size == (ak.BIG, ak.BIG)
 ws.approve_race("human.unisex", "front", c[0])
 
 # male = edit of the approved unisex, keeping head/pose/feet; back = edit of the approved front
 m = ws.gen_race("human", "male", "front", 1)
 assert calls[-1][0] == "edit" and calls[-1][1] == Path(c[0]).name and "Keep this exact character's head" in calls[-1][2]
+assert "unclothed" in calls[-1][2] and "male build" in calls[-1][2]
 ws.approve_race("human.male", "front", m[0])
 bk = ws.gen_race("human", "male", "back", 1)
 assert calls[-1][1] == Path(m[0]).name and "from behind" in calls[-1][2]

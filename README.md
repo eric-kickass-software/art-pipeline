@@ -237,7 +237,12 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
 ## Workshop (curated AI character parts)
 0. **Races** tab (2026-10-22): a race = three puppet-ready **A-pose** mannequins, `<race>.unisex`, `<race>.male`,
    `<race>.female` (specs: `specs/races.json`; state in `sprites/ai/workshop.json` next to the older builds).
-   - **Unisex front:** txt2img from the style with the race pose (`races.json` `pose`), traits and the unisex body. A race
+   - **Prompts are visible and editable** in the tab: per race `traits` + `description`; shared (all races) `pose`,
+     `base_body`, the unisex/male/female bodies and `style_groups` (which Style groups are included; medium/world are off
+     because they add adventurer gear). Each step shows the exact prompt sent. The Mannequins tab is gone (2026-10-22).
+   - **Base body (Eric):** unclothed and completely smooth, like a plastic toy doll, no anatomical detail, so clothing is
+     generated per gender later. Kept through the male/female and back edits.
+   - **Unisex front:** txt2img from the chosen style groups with the race pose, traits, description, unisex body and base body. A race
      with `from` (Elf → Human) instead edits that race's approved unisex with `from_edit`, so the races share proportions.
    - **Male / female front:** FLUX edit of the race's approved unisex front that keeps head, face, skin, pose, scale and
      feet and changes only the body (Eric: same head, pose, feet).

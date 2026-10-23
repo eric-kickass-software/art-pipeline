@@ -88,7 +88,6 @@
   <h1>Sprite Workshop</h1>
   <button class="tab on" data-t="board">Board</button>
   <button class="tab" data-t="races">Races</button>
-  <button class="tab" data-t="base">Mannequins</button>
   <button class="tab" data-t="style">Style</button>
   <button class="tab" data-t="ramps">Ramps</button>
   <button class="tab" data-t="sets">Sets</button>
@@ -128,12 +127,24 @@
     <div class="card"><div class="row"><label>Race</label><select id="raceSel" style="max-width:220px"></select><button id="raceNew">New race</button>
       <label>Candidates</label><input id="raceN" type="number" value="4" min="1" max="8" style="max-width:70px">
       <label>Seed</label><input id="raceSeed" type="number" value="1" style="max-width:90px"></div>
-      <div class="row"><label>Traits</label><textarea id="raceTraits" rows="1" style="flex:1"></textarea></div>
+      <div class="row"><label>Traits</label><textarea id="raceTraits" rows="1" style="flex:1" placeholder="short tags: elf, long pointed ears"></textarea></div>
+      <div class="row"><label>Description</label><textarea id="raceDesc" rows="2" style="flex:1" placeholder="free text about the race's look (face, build, skin features); used by the unisex and male/female steps"></textarea></div>
       <div class="row"><label>Starts from</label><select id="raceFrom" style="max-width:160px"></select>
         <span class="hint">another race's approved unisex, edited (shared proportions)</span></div>
       <div class="row" id="raceFromRow"><label>Edit</label><textarea id="raceFromEdit" rows="2" style="flex:1"></textarea></div>
       <div class="row"><button class="primary" id="raceSave">Save race</button><span class="hint" id="raceStatus"></span></div>
       <div class="row"><label>Skin tones</label><div id="raceRampList" class="chips" style="flex:1"></div><button id="raceRamps">Edit in Ramps →</button></div></div>
+    <details class="card" id="racePrompts"><summary><b>Shared prompts</b> <span class="hint">(all races: pose, base body, gender bodies, style groups)</span></summary>
+      <div class="row"><label style="min-width:90px">Pose</label><textarea id="rpPose" rows="2" style="flex:1"></textarea></div>
+      <div class="row"><label style="min-width:90px">Base body</label><textarea id="rpBody" rows="2" style="flex:1"></textarea></div>
+      <div class="hint">The base body is kept smooth and unclothed for every race and gender, so clothing is generated per gender later.</div>
+      <div class="row"><label style="min-width:90px">Unisex</label><textarea id="rpUnisex" rows="1" style="flex:1"></textarea></div>
+      <div class="row"><label style="min-width:90px">Male</label><textarea id="rpMale" rows="2" style="flex:1"></textarea></div>
+      <div class="row"><label style="min-width:90px">Female</label><textarea id="rpFemale" rows="2" style="flex:1"></textarea></div>
+      <div class="row"><label style="min-width:90px">Style groups</label><span id="rpGroups" class="chips"></span>
+        <span class="hint">from the Style tab; medium/world add adventurer gear, so they're off by default</span></div>
+      <div class="row"><button class="primary" id="rpSave">Save shared prompts</button><span class="hint" id="rpStatus"></span></div>
+    </details>
     <div id="raceGrid"></div>
   </section>
 
@@ -322,8 +333,8 @@ function renderBoard() {
     cell.querySelector("input").onclick = (ev) => { ev.stopPropagation(); ev.target.checked ? selected.add(key) : selected.delete(key); cell.classList.toggle("sel", ev.target.checked); count(); };
     cell.onclick = () => openDrawer(cell.dataset.part, cell.dataset.build);
   });
-  document.querySelectorAll("[data-gobase]").forEach(a => a.onclick = (ev) => { ev.preventDefault(); $("bBuild").value = a.dataset.gobase;
-    document.querySelector('[data-t="base"]').click(); renderBase(); });
+  document.querySelectorAll("[data-gobase]").forEach(a => a.onclick = (ev) => { ev.preventDefault();   // mannequins now live in Races
+    document.querySelector('[data-t="races"]').click(); });
   $("qPick").innerHTML = B.builds.map(b => `<option value="missing|${b}">all missing for ${b}</option>`).join("") +
     `<option value="redo-back|*">all "redo back"</option>` +
     `<option value="missing|*">all missing (every build)</option><option value="pick|*">everything waiting for a pick</option>`;
@@ -673,8 +684,25 @@ async function initRaces() {
       doc.races[id] = { name: id[0].toUpperCase() + id.slice(1), traits: id };
       await api("/api/ws/race/spec", { spec: doc }); RC.race = id; await loadRace(); });
     $("raceRamps").onclick = () => document.querySelector('.tab[data-t="ramps"]').click();
+    $("rpSave").onclick = guard(async () => {
+      const doc = RC.st.spec;
+      doc.pose = $("rpPose").value.trim(); doc.base_body = $("rpBody").value.trim();
+      doc.sexes = { unisex: $("rpUnisex").value.trim(), male: $("rpMale").value.trim(), female: $("rpFemale").value.trim() };
+      doc.style_groups = [...document.querySelectorAll("#rpGroups input:checked")].map(i => i.dataset.g);
+      await api("/api/ws/race/spec", { spec: doc }); $("rpStatus").textContent = " saved"; await loadRace(); });
   }
   await loadRace();
+}
+function fillSharedPrompts() {
+  const doc = RC.st.spec, keep = id => document.activeElement === $(id);
+  if (!keep("rpPose")) $("rpPose").value = doc.pose || "";
+  if (!keep("rpBody")) $("rpBody").value = doc.base_body || "";
+  if (!keep("rpUnisex")) $("rpUnisex").value = doc.sexes.unisex || "";
+  if (!keep("rpMale")) $("rpMale").value = doc.sexes.male || "";
+  if (!keep("rpFemale")) $("rpFemale").value = doc.sexes.female || "";
+  const on = new Set(doc.style_groups || []);
+  if (!$("rpGroups").contains(document.activeElement))
+    $("rpGroups").innerHTML = ORDER.map(g => `<label class="chip"><input type="checkbox" data-g="${g}" style="width:auto" ${on.has(g)?"checked":""}> ${g}</label>`).join("");
 }
 async function loadRace() {
   const first = await api("/api/ws/race/state", { race: RC.race || "human" });
@@ -683,6 +711,8 @@ async function loadRace() {
   $("raceSel").innerHTML = Object.entries(doc.races).map(([id, r]) => `<option value="${id}" ${id===RC.race?"selected":""}>${r.name} (${id})</option>`).join("");
   const r = doc.races[RC.race];
   if (document.activeElement !== $("raceTraits")) $("raceTraits").value = r.traits || "";
+  if (document.activeElement !== $("raceDesc")) $("raceDesc").value = r.description || "";
+  fillSharedPrompts();
   $("raceFrom").innerHTML = `<option value="">(generated)</option>` + Object.keys(doc.races).filter(x => x !== RC.race)
     .map(x => `<option ${x===r.from?"selected":""}>${x}</option>`).join("");
   if (document.activeElement !== $("raceFromEdit")) $("raceFromEdit").value = r.from_edit || "";
@@ -704,6 +734,7 @@ function renderRaceGrid() {
         ${c===d.approved ? "" : `<button data-rdel="${c}" data-sex="${sex}" data-f="${f}" title="Archive (moves to archive/workshop/)" style="width:auto;padding:2px 8px">✕</button>`}</div></div>`).join("");
       return `<div><div class="row"><b>${f}</b>
         ${d.ready === true ? `<button class="primary" data-rgen="${sex}" data-f="${f}">Queue candidates</button>` : `<span class="hint">${d.ready}</span>`}</div>
+        <details><summary class="hint">prompt (${d.mode === "edit" ? "FLUX edit of the source image" : "text to image"})</summary><div class="prompt">${d.prompt}</div></details>
         <div class="cands bcands">${cands || `<p class="hint">No candidates yet.</p>`}</div></div>`; }).join("")}</div></div>`).join("");
   document.querySelectorAll("[data-rgen]").forEach(btn => btn.onclick = guard(async () => {
     const sex = btn.dataset.rgen, f = btn.dataset.f, n = +$("raceN").value, seed = +$("raceSeed").value;
@@ -717,6 +748,7 @@ function renderRaceGrid() {
 async function saveRaceSpec() {
   const doc = RC.st.spec, r = doc.races[RC.race];
   r.traits = $("raceTraits").value.trim();
+  r.description = $("raceDesc").value.trim();
   if ($("raceFrom").value) { r.from = $("raceFrom").value; r.from_edit = $("raceFromEdit").value.trim(); }
   else { delete r.from; delete r.from_edit; }
   await api("/api/ws/race/spec", { spec: doc }); $("raceStatus").textContent = " saved"; await loadRace();

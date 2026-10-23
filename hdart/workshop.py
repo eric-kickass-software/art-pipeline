@@ -388,18 +388,22 @@ def race_needs(race, sex, facing, s=None, doc=None):
 def race_prompt(race, sex, facing, doc=None, st=None):
     doc = doc or races_doc(); st = st or style()
     r = doc["races"][race]
+    body = doc.get("base_body", "")
     if facing == "back":
         return ("Show this exact character from behind: a three-quarter back view facing away to the right, seen slightly "
                 "from above, back of the head, no face visible, the same A-pose (both arms straight out and down about 30 "
-                "degrees from the body with white space between arm and torso, legs apart at shoulder width), same "
-                "clothing, barefoot, no ground shadow. " + RACE_TAIL)
+                "degrees from the body with white space between arm and torso, legs apart at shoulder width), the same "
+                f"{body}, no ground shadow. " + RACE_TAIL)
     if sex == "unisex" and r.get("from"):
         return r["from_edit"] + " " + RACE_TAIL
     if sex == "unisex":
-        st = json.loads(json.dumps(st)); st["groups"]["view"]["text"] = doc["pose"]
-        return f"{style_text(st)}, {r['traits']}, {doc['sexes']['unisex']}, {st['base']['text']}"
+        groups = [g for g in doc.get("style_groups", ORDER) if g in st["groups"]]
+        parts = [style_text(st, tuple(groups)), doc["pose"], r["traits"], r.get("description", ""),
+                 doc["sexes"]["unisex"], body]
+        return ", ".join(p.strip() for p in parts if p and p.strip())
+    desc = f" {r['description'].strip()}." if r.get("description", "").strip() else ""
     return (f"Keep this exact character's head, face, skin, pose, scale, position and feet exactly the same and change only "
-            f"the body into {doc['sexes'][sex]}. Same {r['traits']}. " + RACE_TAIL)
+            f"the body into {doc['sexes'][sex]}. Keep {body}. Same {r['traits']}.{desc} " + RACE_TAIL)
 
 
 def gen_race(race, sex, facing, n=4, seed=1):
@@ -461,6 +465,8 @@ def race_state(race):
                 src, ready = None, str(e)
             meta = d.get("meta", {})
             row[f] = {"candidates": d.get("candidates", []), "approved": d.get("approved"), "ready": ready,
+                      "prompt": race_prompt(race, sex, f, doc), "mode": "edit" if (f == "back" or sex != "unisex" or
+                                                                                 doc["races"][race].get("from")) else "txt2img",
                       "stale": {c: bool(meta.get(c, {}).get("from")) and meta[c]["from"] != src for c in d.get("candidates", [])}}
         out["builds"][sex] = row
     pal = palettes_doc()
