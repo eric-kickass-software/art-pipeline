@@ -734,7 +734,37 @@ function puppetBlock(sex) {   // the puppet template step: skeleton + rigid piec
   return `<div style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px"><div class="row"><b>Puppet</b> ${btn} ${status}
     <span class="hint">skeleton (blue = shoulder/hip, red = elbow/knee, orange = wrist/ankle, cyan = hip cut), rigid pieces, test walk</span></div>
     ${p.made ? `<div class="row" style="align-items:flex-start">${im("skeleton_front.png", 220)}${im("skeleton_back.png", 220)}${im("walk_front.gif", 220)}${im("walk_back.gif", 220)}${im("walk_4dir_64.gif", 440)}</div>
-    <details><summary class="hint">pieces (front / back)</summary>${im("pieces_front.png", 1000)}<br>${im("pieces_back.png", 1000)}</details>` : ""}</div>`;
+    <details><summary class="hint">pieces (front / back)</summary>${im("pieces_front.png", 1000)}<br>${im("pieces_back.png", 1000)}</details>
+    <details data-jed="${sex}"><summary class="hint">edit joints (drag the dots, then Save &amp; rebuild)</summary>
+      <div class="row" style="align-items:flex-start"><canvas data-jcv="${sex}|front" width="512" height="512" style="width:420px;cursor:grab;background:#fff;border-radius:4px"></canvas>
+      <canvas data-jcv="${sex}|back" width="512" height="512" style="width:420px;cursor:grab;background:#fff;border-radius:4px"></canvas></div>
+      <div class="row"><button class="primary" data-jsave="${sex}">Save joints &amp; rebuild</button><button data-jreset="${sex}">Back to detected</button>
+      <span class="hint">blue = shoulder/hip, red = elbow/knee, orange = wrist/ankle; hand-placed joints are kept on rebuilds</span></div></details>` : ""}</div>`;
+}
+const JE = {};   // joint editor state per sex: {view: {limb: {pivot, mid, end}}}
+async function openJointEditor(sex) {
+  const build = `${RC.race}.${sex}`, tpl = await api("/api/ws/puppet/template", { build });
+  JE[sex] = {};
+  for (const v of ["front", "back"]) {
+    JE[sex][v] = JSON.parse(JSON.stringify(tpl.views[v].joints));
+    const cv = document.querySelector(`[data-jcv="${sex}|${v}"]`), x = cv.getContext("2d");
+    const art = new Image(); art.src = img(tpl.from[v]);
+    await new Promise(ok => art.onload = ok);
+    const COL = { pivot: "#2a50ff", mid: "#ff2a2a", end: "#ff9a00" };
+    const draw = () => { x.drawImage(art, 0, 0, 512, 512);
+      for (const [k, j] of Object.entries(JE[sex][v])) {
+        x.strokeStyle = "#ff2a2a"; x.lineWidth = 2; x.beginPath(); x.moveTo(...j.pivot); x.lineTo(...j.mid); x.lineTo(...j.end); x.stroke();
+        x.strokeStyle = "#2a50ff"; x.beginPath(); x.arc(j.pivot[0], j.pivot[1], j.R, 0, 7); x.stroke();
+        for (const n of ["pivot", "mid", "end"]) { x.fillStyle = COL[n]; x.beginPath(); x.arc(j[n][0], j[n][1], 6, 0, 7); x.fill(); } } };
+    draw();
+    let drag = null;
+    const pos = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * 512 / r.width, (e.clientY - r.top) * 512 / r.height]; };
+    cv.onmousedown = e => { const p = pos(e); let best = 12;
+      for (const [k, j] of Object.entries(JE[sex][v])) for (const n of ["pivot", "mid", "end"]) {
+        const d = Math.hypot(j[n][0] - p[0], j[n][1] - p[1]); if (d < best) { best = d; drag = [k, n]; } } };
+    cv.onmousemove = e => { if (!drag) return; JE[sex][v][drag[0]][drag[1]] = pos(e).map(Math.round); draw(); };
+    window.addEventListener("mouseup", () => drag = null);
+  }
 }
 function renderRaceGrid() {
   const rows = { unisex: "Unisex (the race's base)", male: "Male (edit of the unisex)", female: "Female (edit of the unisex)" };
@@ -751,6 +781,15 @@ function renderRaceGrid() {
         <div class="cands bcands">${cands || `<p class="hint">No candidates yet.</p>`}</div></div>`; }).join("")}</div>${puppetBlock(sex)}</div>`).join("");
   document.querySelectorAll("[data-pbuild]").forEach(btn => btn.onclick = guard(async () => {
     await queue([{ kind: "puppet", build: `${RC.race}.${btn.dataset.pbuild}`, label: `${RC.race} · ${btn.dataset.pbuild} · puppet` }]); }));
+  document.querySelectorAll("[data-jed]").forEach(d => d.addEventListener("toggle", guard(async () => { if (d.open) await openJointEditor(d.dataset.jed); })));
+  document.querySelectorAll("[data-jsave]").forEach(btn => btn.onclick = guard(async () => {
+    const sex = btn.dataset.jsave, build = `${RC.race}.${sex}`;
+    for (const v of ["front", "back"]) await api("/api/ws/puppet/joints", { build, view: v, joints: JE[sex][v] });
+    await queue([{ kind: "puppet", build, label: `${RC.race} · ${sex} · puppet` }]); }));
+  document.querySelectorAll("[data-jreset]").forEach(btn => btn.onclick = guard(async () => {
+    const sex = btn.dataset.jreset, build = `${RC.race}.${sex}`;
+    for (const v of ["front", "back"]) await api("/api/ws/puppet/joints", { build, view: v, joints: null });
+    await queue([{ kind: "puppet", build, label: `${RC.race} · ${sex} · puppet` }]); }));
   document.querySelectorAll("[data-papp]").forEach(btn => btn.onclick = guard(async () => {
     await api("/api/ws/puppet/approve", { build: `${RC.race}.${btn.dataset.papp}`, on: btn.dataset.on === "1" }); await loadRace(); }));
   document.querySelectorAll("[data-rgen]").forEach(btn => btn.onclick = guard(async () => {

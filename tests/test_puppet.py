@@ -39,5 +39,15 @@ assert len(list((out / "front").glob("*.png"))) == 14
 p = ws.load_state()["builds"]["test.male"]["puppet"]
 assert p["approved"] is False and p["from"]["back"] == "candidates/test/male/back.png"
 assert pp.approve("test.male")["approved"] is True
+# hand-placed joints win and survive a rebuild
+j = meta["views"]["front"]["joints"]["legB"]
+moved = {"legB": {"pivot": j["pivot"], "mid": [j["mid"][0], j["mid"][1] - 12], "end": j["end"]}}
+pp.set_joints("test.male", "front", moved)
+pp.template("test.male", frames=2)
+meta2 = json.loads((out / "template.json").read_text())
+assert abs(meta2["views"]["front"]["joints"]["legB"]["mid"][1] - (j["mid"][1] - 12)) < 0.6, meta2["views"]["front"]["joints"]["legB"]
+assert ws.load_state()["builds"]["test.male"]["puppet"]["joints"]["front"]["legB"]["mid"][1] == j["mid"][1] - 12
+pp.set_joints("test.male", "front", None)
+assert "front" not in ws.load_state()["builds"]["test.male"]["puppet"]["joints"]
 shutil.rmtree(tmp)
 print("ok")

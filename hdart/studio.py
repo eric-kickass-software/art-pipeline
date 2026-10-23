@@ -218,6 +218,13 @@ def workshop_post(st, action, b):
     if action == "base/approve":
         ws.approve_base(b["build"], b["facing"], b["file"])
         return {"ok": True}
+    if action == "puppet/joints":
+        from . import puppet
+        importlib.reload(puppet)
+        return puppet.set_joints(b["build"], b["view"], b.get("joints"))
+    if action == "puppet/template":
+        from . import puppet
+        return json.loads((puppet.out_dir(b["build"]) / "template.json").read_text(encoding="utf-8"))
     if action == "puppet/approve":
         from . import puppet
         importlib.reload(puppet)

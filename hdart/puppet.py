@@ -273,7 +273,7 @@ def ang(v):
 
 # ----------------------------------------------------------------------------- build one view
 
-def _build(img, view, hip_frac):
+def _build(img, view, hip_frac, overrides=None):
     """Test 3: rounded joints with pivots inside them, torso complete underneath, chest never on an arm,
     shorts stay on the torso (legs start inside them, drawn under the torso)."""
     img = img.convert("RGB")
@@ -405,6 +405,19 @@ def _build(img, view, hip_frac):
                 cy_ = float(pts[np.argmax((pts[:, 0] - root[0]) * sgn), 1]) if len(pts) else root[1] - R
             cands = [np.array([cpx + sgn * tv, cy_ + dv]) for tv in np.linspace(0.3 * R, 4.0 * R, 38) for dv in (-0.3 * R, 0.0, 0.3 * R)]
             other = (xx - cpx) * sgn < 0                                    # the other leg's side
+            if crotch is not None:  # hip circle at the crotch's height, diameter = the leg's width there (overlaps the V)
+                cyc = int(crotch[1])
+                for yy_ in range(cyc, min(PX - 1, cyc + 40)):  # first row below the crotch where the legs are apart
+                    row = m[yy_]; x_ = int(cpx + sgn * 2)
+                    while 0 <= x_ < PX and not row[x_]:
+                        x_ += int(sgn)
+                    x0_ = x_
+                    while 0 <= x_ < PX and row[x_]:
+                        x_ += int(sgn)
+                    if abs(x_ - x0_) > 8:
+                        break
+                R = max(6.0, abs(x_ - x0_) / 2.0)
+                cands = [np.array([(x0_ + x_ - sgn) / 2.0, float(cyc)])]
         pivot, best = root.copy(), None
         for cpt in cands:  # inscribed circle touching the outline, off the top's fabric / the other leg
             if not (0 <= cpt[0] < PX and 0 <= cpt[1] < PX) or not m[int(cpt[1]), int(cpt[0])]:
@@ -420,12 +433,20 @@ def _build(img, view, hip_frac):
         if best is not None:
             pivot = best[1]
         mid = path_at(c, pivot, 0.5)                                         # elbow / knee
-        if k.startswith("leg"):  # knee: the thinnest point between thigh and calf (35-75% from hip to ankle)
-            cand = [path_at(c, pivot, fr_) for fr_ in np.linspace(0.30, 0.60, 31)]
-            def wid(q):
-                d_ = unit(c["end"] - pivot); n_ = np.array([-d_[1], d_[0]])
-                return width_in(m, q, n_)
-            mid = min(cand, key=wid)
+        if k.startswith("leg"):  # knee: the thinnest point between the thigh and the calf bulge
+            d_ = unit(c["end"] - pivot); n_ = np.array([-d_[1], d_[0]])
+            frs = np.linspace(0.2, 0.85, 66)
+            pts_ = [path_at(c, pivot, fr_) for fr_ in frs]
+            ws_ = np.array([width_in(m, q, n_) for q in pts_], float)
+            ws_ = np.convolve(ws_, np.ones(5) / 5, mode="same")             # smooth out outline noise
+            lo_ = (frs >= 0.55) & (frs <= 0.85)
+            calf = int(np.argmax(np.where(lo_, ws_, -1)))                   # the calf's widest point (lower half)
+            span = np.nonzero((frs >= 0.38) & (frs <= frs[calf] - 0.06))[0]
+            mid = pts_[int(span[np.argmin(ws_[span])])] if len(span) else path_at(c, pivot, 0.45)
+        ov = (overrides or {}).get(k)  # hand-placed joints from the Workshop's joint editor win
+        if ov:
+            pivot = np.array(ov.get("pivot", pivot), float); mid = np.array(ov.get("mid", mid), float)
+            c["end"] = np.array(ov.get("end", c["end"]), float)
         c["mid"] = mid
         cap = disc(pivot, R)
         past = halfplane(m.shape, pivot, unit(mid - pivot))
@@ -442,7 +463,7 @@ def _build(img, view, hip_frac):
             torso_arms_guard |= regions[k]
         else:
             # lower-torso cut traced along lines drawn in the art: crotch -> outer hip near the top of the hip circle
-            hip_target = pivot + nout * R * 1.2 - np.array([0, 1.0]) * R * 2.2  # high-cut: up the side of the hip
+            hip_target = pivot + nout * R * 1.3 - np.array([0, 1.0]) * R * 1.3  # high-cut: up the side of the hip
             on_out = E[(E[:, 0] - cpx) * sgn > 0]
             hip_pt = on_out[int(np.argmin(np.hypot(*(on_out - hip_target).T)))]
             cp = crotch.copy() if crotch is not None else root.copy()
@@ -862,7 +883,8 @@ def template(build, frames=8):
     out = out_dir(build); out.mkdir(parents=True, exist_ok=True)
     hip_frac, views = {}, {}
     for v in ("back", "front"):  # the back first: the front takes its hip height from the back view's buttocks
-        views[v] = _build(Image.open(ai_kit.AI_DIR / src[v]), v, hip_frac)
+        ovr = (b.get("puppet") or {}).get("joints", {}).get(v)
+        views[v] = _build(Image.open(ai_kit.AI_DIR / src[v]), v, hip_frac, ovr)
     meta = {"build": build, "from": src, "made": int(time.time()), "views": {}}
     for v in ("front", "back"):
         B = views[v]
@@ -875,11 +897,13 @@ def template(build, frames=8):
         _skeleton_img(B).save(out / f"skeleton_{v}.png")
         meta["views"][v] = {"order": order, "pivots": {n: [round(float(x), 1) for x in pieces[n][1]] for n in order},
                             "bones": {n: pieces[n][2] for n in order},
-                            "joints": {k: {"pivot": [round(float(x), 1) for x in B["joints"][k]["pivot"]], "R": round(float(B["joints"][k]["R"]), 1)}
+                            "joints": {k: {"pivot": [round(float(x), 1) for x in B["joints"][k]["pivot"]], "R": round(float(B["joints"][k]["R"]), 1),
+                                           "mid": [round(float(x), 1) for x in B["C"][k]["mid"]],
+                                           "end": [round(float(x), 1) for x in B["C"][k]["end"]]}
                                        for k in ("armA", "armB", "legA", "legB")}}
         imgs = [on_bg(render(B, v, i / frames)) for i in range(frames)]
         imgs[0].save(out / f"walk_{v}.gif", save_all=True, append_images=imgs[1:], duration=120, loop=0)
-        imgs[2].save(out / f"walk_{v}_frame.png")
+        imgs[min(2, len(imgs) - 1)].save(out / f"walk_{v}_frame.png")
     # 64 px, four directions (front, front mirrored, back, back mirrored), shown 4x
     grid = []
     for i in range(frames):
@@ -892,9 +916,26 @@ def template(build, frames=8):
     grid[0].save(out / "walk_4dir_64.gif", save_all=True, append_images=grid[1:], duration=120, loop=0)
     (out / "template.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
     s = ws.load_state()
+    keep = (s["builds"][build].get("puppet") or {}).get("joints")
     s["builds"][build]["puppet"] = {"from": src, "made": meta["made"], "approved": False}
+    if keep:
+        s["builds"][build]["puppet"]["joints"] = keep
     ws.save_state(s)
     return {"build": build, "dir": ws.rel(out), "files": sorted(p.name for p in out.glob("*.*"))}
+
+
+def set_joints(build, view, joints):
+    """Hand-placed joints for one view: {limb: {pivot, mid, end}} in 512-px art coords; None clears them. The next
+    template build uses them instead of the detected ones."""
+    s = ws.load_state()
+    p = s["builds"].get(build, {}).setdefault("puppet", {})
+    allj = p.setdefault("joints", {})
+    if joints:
+        allj[view] = {k: {n: [float(x) for x in v[n]] for n in ("pivot", "mid", "end") if n in v} for k, v in joints.items()}
+    else:
+        allj.pop(view, None)
+    ws.save_state(s)
+    return p
 
 
 def approve(build, on=True):
