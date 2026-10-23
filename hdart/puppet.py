@@ -436,6 +436,9 @@ def _build(img, view, hip_frac):
             corridor = (limbline < 1.1 * R) | (P[k] & beyond_el)           # the upper arm is only as wide as the arm
             regions[k] = component((m & past & ~keep_top & corridor) | (cap & m), (int(mid[1]), int(mid[0]))) | cap
             torso &= ~(m & past & ~cloth & ~cap & corridor)                  # the whole bicep leaves the torso
+            ua = unit(mid - pivot); na = np.array([-ua[1], ua[0]]); na = na if na[1] < 0 else -na
+            top_side = ((xx - pivot[0]) * na[0] + (yy - pivot[1]) * na[1]) > 0
+            torso &= ~(m & past & ~cap & top_side & (limbline < 1.6 * R) & ~grow(cloth, 2))  # the raised arm's top outline (no stub)
             torso_arms_guard |= regions[k]
         else:
             # lower-torso cut traced along lines drawn in the art: crotch -> outer hip near the top of the hip circle
@@ -711,6 +714,9 @@ def two_bone(hip, target, l1, l2, fwd):
     return max(cands, key=lambda k: (k - (hip + target) / 2) @ fwd)
 
 
+STANCE = 0.3  # how far the standing foot stays toward its drawn A-pose spot (0 = right under the hip, 1 = as drawn)
+
+
 def pose(B, view, phase, clip):
     """For every bone: (rest pivot, new pivot, rotation). Feet drive the legs; arms hang and swing gently."""
     J, C, jt = B["J"], B["C"], B["joints"]; f = FWD[view]
@@ -723,6 +729,10 @@ def pose(B, view, phase, clip):
     for i, k in enumerate(("legA", "legB")):
         hip0, knee0, ank0 = jt[k]["pivot"], C[k]["mid"], C[k]["end"]
         l1, l2 = np.linalg.norm(knee0 - hip0), L[k][1]; hip = hip0 + off
+        # stance: the art is an A-pose (feet wide apart); stand the foot nearly under the hip on an almost straight leg,
+        # otherwise the splayed legs bend sideways on screen (bowlegged)
+        under = np.array([hip0[0] + STANCE * (ank0[0] - hip0[0]), ank0[1]])
+        base = hip0 + unit(under - hip0) * 0.97 * (l1 + l2)
         if clip == "walk":
             t = (phase + 0.5 * i) % 1.0; S = 0.24 * leg_len; H = 0.13 * leg_len
             if t < 0.5:
@@ -739,9 +749,9 @@ def pose(B, view, phase, clip):
                 roll = math.radians(28) * (1 - u2 / 0.35) if u2 < 0.35 else                        -math.radians(14) * math.sin(math.pi * min(1.0, (u2 - 0.6) / 0.4)) if u2 > 0.6 else 0.0
                 heel = 0.0
             foot_ang = math.copysign(1.0, f[0]) * roll                                       # + = toes down
-            target = ank0 + f * s + np.array([0.0, -lift - heel])
+            target = base + f * s + np.array([0.0, -lift - heel])
         else:
-            target = ank0.copy(); foot_ang = 0.0
+            target = base.copy(); foot_ang = 0.0
         knee = two_bone(hip, target, l1, l2, f)
         lim = math.radians(20)  # the hip can't swing the thigh more than 20 degrees from rest
         d_th = (ang(knee - hip) - ang(knee0 - hip0) + math.pi) % (2 * math.pi) - math.pi
