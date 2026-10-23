@@ -330,6 +330,106 @@ def approve_base(build, facing, file):
     return b
 
 
+# ----------------------------------------------------------------------------- ramps (Workshop "Ramps" tab)
+# A skin tone is a palette ramp (specs/palettes.json, group "skin"): the art stores cel levels, the game colours them.
+
+PALETTES = ROOT / "specs" / "palettes.json"
+
+
+def skin_mask(a):
+    """Skin pixels of an RGB array: warm (red over blue) and saturated enough, not the grey clothes or the outline."""
+    a = a.astype(int)
+    mx, mn = a.max(-1), a.min(-1)
+    m = (a[..., 0] > a[..., 2] + 18) & ((mx - mn) > 0.16 * np.maximum(mx, 1)) & (mx > 70)
+    lum = a.mean(-1)
+    grey = ((mx - mn) < 0.12 * np.maximum(mx, 1)) & (lum < 200)
+    near = np.roll(m, 1, 0) | np.roll(m, -1, 0) | np.roll(m, 1, 1) | np.roll(m, -1, 1)
+    bg = ~ai_kit.foreground(Image.fromarray(a.astype(np.uint8)))
+    return m | (near & ~bg & (lum > 90) & ~grey)  # light anti-aliased skin edges count too
+
+
+def skin_levels(img, size=5, seed=0):
+    """Cel levels of the skin: k-means on the skin colours, sorted dark -> light. Returns (level map: -1 = not skin,
+    the level centres as RGB)."""
+    a = np.asarray(img.convert("RGB"))
+    m = skin_mask(a)
+    px = a[m].astype(float)
+    if len(px) < size:
+        return np.full(m.shape, -1, np.int16), []
+    lum = px.sum(1); order0 = np.argsort(lum)  # start from evenly spread brightness percentiles (deterministic)
+    cent = px[order0[(np.linspace(0.08, 0.92, size) * (len(px) - 1)).astype(int)]]
+    for _ in range(30):
+        lab = ((px[:, None] - cent[None]) ** 2).sum(-1).argmin(1)
+        cent = np.array([px[lab == i].mean(0) if (lab == i).any() else cent[i] for i in range(size)])
+    order = np.argsort(cent.sum(1))
+    cent = cent[order]
+    lab = ((px[:, None] - cent[None]) ** 2).sum(-1).argmin(1)
+    lev = np.full(m.shape, -1, np.int16)
+    lev[m] = lab
+    return lev, [[int(round(c)) for c in cc] for cc in cent]
+
+
+def ramp_preview(build):
+    """For the ramp editor: the approved mannequin front/back plus a level map per facing (PNG data URLs: R = level, A = skin)."""
+    s = load_state()
+    b = s["builds"].get(build, {})
+    out = {"build": build, "facings": {}}
+    for f in ("front", "back"):
+        rel_ = b.get(f, {}).get("approved")
+        if not rel_:
+            continue
+        img = Image.open(ai_kit.AI_DIR / rel_).convert("RGB")
+        lev, cent = skin_levels(img, json.loads(PALETTES.read_text(encoding="utf-8")).get("rampSize", 5))
+        enc = np.zeros(lev.shape + (4,), np.uint8)
+        enc[..., 0] = np.clip(lev, 0, 255)
+        enc[..., 3] = np.where(lev >= 0, 255, 0)
+        buf = io.BytesIO(); Image.fromarray(enc).save(buf, "PNG")
+        out["facings"][f] = {"art": rel_, "levels": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode(),
+                             "key": cent}
+    return out
+
+
+def palettes_doc():
+    return json.loads(PALETTES.read_text(encoding="utf-8"))
+
+
+def save_ramp(group, name, base=None, tune=None, colors=None, races=None, old_name=None):
+    """Create or update one ramp in specs/palettes.json. `colors` (resolved hex, darkest first) is what the game uses;
+    `base` and `tune` are kept so the ramp editor can reopen it."""
+    if not name or not all(ch.isalnum() or ch in "_-" for ch in name):
+        raise ValueError("Ramp names are letters, digits, _ and - only.")
+    doc = palettes_doc()
+    grp = doc["groups"].setdefault(group, {})
+    if old_name and old_name != name:
+        if name in grp:
+            raise ValueError(f"{group}.{name} already exists.")
+        grp = {(name if k == old_name else k): v for k, v in grp.items()}
+        doc["groups"][group] = grp
+    e = grp.setdefault(name, {})
+    if base:
+        e["base"] = base
+    if tune:
+        e["tune"] = tune
+    if colors:
+        if len(colors) != doc.get("rampSize", 5):
+            raise ValueError(f"A ramp has {doc.get('rampSize', 5)} colours.")
+        e["colors"] = colors
+    if races is not None:
+        if races:
+            e["races"] = races
+        else:
+            e.pop("races", None)
+    PALETTES.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
+    return doc
+
+
+def delete_ramp(group, name):
+    doc = palettes_doc()
+    doc["groups"].get(group, {}).pop(name, None)
+    PALETTES.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
+    return doc
+
+
 # archive/workshop/<rel>: archived mannequin candidates, same relative path as under sprites/ai/ (nothing is deleted;
 # delete archive/ by hand once you're sure)
 

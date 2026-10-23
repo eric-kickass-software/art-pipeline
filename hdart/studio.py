@@ -212,6 +212,15 @@ def workshop_post(st, action, b):
     if action == "base/approve":
         ws.approve_base(b["build"], b["facing"], b["file"])
         return {"ok": True}
+    if action == "ramp/preview":
+        return ws.ramp_preview(b["build"])
+    if action == "ramp/palettes":
+        return ws.palettes_doc()
+    if action == "ramp/save":
+        return ws.save_ramp(b["group"], b["name"], b.get("base"), b.get("tune"), b.get("colors"), b.get("races"),
+                            b.get("old_name"))
+    if action == "ramp/delete":
+        return ws.delete_ramp(b["group"], b["name"])
     if action == "base/archive":
         return {"archived": ws.archive_base(b["build"], b["facing"], b.get("file"))}
     if action == "part/generate":

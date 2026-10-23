@@ -258,6 +258,20 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
    correction, and FLUX redoes only that area. Approve → the kit rebuilds.
 3. **Style** tab: the descriptor groups (`specs/ai_style.json`). **Sets**: save the approved parts as a named set; the Studio can switch sets.
 4. Cards: backs whose file name has `_card_` are silhouette-matched. Older backs show as `redo-back` on the board.
+5. **Ramps** tab: edit the colour ramps in `specs/palettes.json` (any group; skin tones are the `skin` group). A tone is a
+   5-colour ramp, darkest first; the art keeps its cel levels and the game colours them, so one mannequin and one puppet rig
+   serve every tone (decided 2026-10-22, see the vault's Art Pipeline note).
+   - Base (midtone) colour with the **Monk Skin Tone Scale** (Google, 10 tones) as presets; sliders for saturation, hue
+     offset, shadow depth / hue shift / hue target / saturation, highlight lift / hue shift / hue target / desaturation.
+     At the default sliders the ramp equals `hdart.palette.ramp_from_base` (checked against the JS in `tests/test_ramps.py`).
+   - Click a swatch to set that colour by hand, right-click to reset it. `races` tags which races may use the ramp.
+   - Live preview on an approved mannequin (front/back, full and 64 px): the skin is quantized into the ramp's levels
+     (`skin_levels`: k-means on the skin colours, seeded from brightness percentiles; anti-aliased skin edges included),
+     then coloured in the browser. "Every ramp in the group" shows them all side by side.
+   - Save writes `base`, `tune` and the resolved `colors` (the game export uses `colors`). API: `/api/ws/ramp/palettes`,
+     `ramp/preview {build}`, `ramp/save {group, name, old_name, base, tune, colors, races}`, `ramp/delete`.
+   - Raw Monk values are photographic and muted: game ramps need more saturation (~×1.4), and very dark tones a lifted
+     shadow end so the cel bands stay readable against the outline (skin-tone test, 2026-10-22).
 
 ## Status and next steps (2026-10-11, for whoever picks this up)
 - **Dungeon:** crypt v2 approved and exported. Not done:

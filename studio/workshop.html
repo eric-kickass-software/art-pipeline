@@ -67,6 +67,19 @@
   .job .s { color:var(--muted); } .job .s.running { color:var(--info); } .job .s.done { color:var(--ok); } .job .s.failed { color:var(--bad); }
   .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
   .bcands .cand { width:200px; } .bcands .cand img { width:190px; height:190px; }
+  .rampgrid { display:grid; grid-template-columns: 420px 1fr; gap:14px; }
+  .rlist { display:flex; flex-direction:column; gap:4px; max-height:260px; overflow:auto; }
+  .ritem { display:flex; align-items:center; gap:8px; padding:3px 6px; border-radius:4px; border:1px solid transparent; cursor:pointer; }
+  .ritem:hover { border-color:var(--line); } .ritem.on { border-color:var(--accent); background:#2f2838; }
+  .ritem .nm { width:90px; font-size:12px; } .strip { display:flex; } .strip i { width:18px; height:14px; display:block; }
+  .sw { display:flex; gap:6px; margin:6px 0; } .sw div { text-align:center; font-size:10px; color:var(--muted); }
+  .sw span { width:52px; height:40px; display:block; border-radius:4px; border:2px solid #0006; cursor:pointer; }
+  .sw span.ovr { border-color:var(--warn); }
+  .sl { display:grid; grid-template-columns: 140px 1fr 48px; gap:6px; align-items:center; font-size:12px; color:var(--muted); }
+  .sl input { width:100%; }
+  .monk { display:flex; gap:3px; flex-wrap:wrap; } .monk span { width:26px; height:20px; border-radius:3px; cursor:pointer; border:1px solid #0008; font-size:9px; text-align:center; line-height:20px; }
+  .pv { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; } .pv figure { margin:0; } .pv canvas { image-rendering:pixelated; background:#c4c6cc; border-radius:4px; display:block; }
+  .pv figcaption { color:var(--muted); font-size:11px; }
   .prompt { font-family: ui-monospace, Consolas, monospace; font-size:12px; color:#c9c0d6; background:#1b1722; padding:8px; border-radius:4px; white-space:pre-wrap; }
 </style>
 </head>
@@ -76,6 +89,7 @@
   <button class="tab on" data-t="board">Board</button>
   <button class="tab" data-t="base">Mannequins</button>
   <button class="tab" data-t="style">Style</button>
+  <button class="tab" data-t="ramps">Ramps</button>
   <button class="tab" data-t="sets">Sets</button>
   <button id="jobsBtn">Queue: idle</button>
   <a href="/">Sprite Studio →</a>
@@ -133,6 +147,37 @@
         <button class="primary" id="saveStyle">Save style</button><span class="hint" id="styleStatus"></span>
       </div>
     </div>
+  </section>
+
+  <!-- RAMPS -->
+  <section id="ramps">
+    <p class="hint">A skin tone (or any colour) is a ramp of colours, darkest first. The art keeps its cel levels and the game colours them
+      from the chosen ramp, so one mannequin and one puppet rig serve every tone. Saved to <code>specs/palettes.json</code>.</p>
+    <div class="rampgrid">
+      <div>
+        <div class="card"><div class="row"><label>Group</label><select id="rGroup" style="max-width:140px"></select>
+          <button id="rNew">New ramp</button><button id="rDup">Duplicate</button><button id="rDel">Delete</button></div>
+          <div class="rlist" id="rList"></div></div>
+        <div class="card">
+          <div class="row"><label>Name</label><input id="rName" style="max-width:140px"><label>Races</label><input id="rRaces" placeholder="e.g. human, elf" style="flex:1"></div>
+          <div class="row"><label>Base (mid)</label><input type="color" id="rBase" style="width:48px;padding:0"><input id="rBaseHex" style="max-width:90px"></div>
+          <div class="hint">Monk Skin Tone Scale presets (Google, 10 tones) as the midtone. Photo swatches are muted: raise saturation for game art.</div>
+          <div class="monk" id="rMonk"></div>
+          <div class="sw" id="rSw"></div>
+          <div class="hint">Click a swatch to set that colour by hand (yellow border = hand-set); right-click to reset it.</div>
+          <div id="rSliders"></div>
+          <div class="row"><button class="primary" id="rSave">Save ramp</button><button id="rReset">Reset sliders</button><span class="hint" id="rStatus"></span></div>
+        </div>
+      </div>
+      <div>
+        <div class="card"><div class="row"><label>Mannequin</label><select id="rBuild" style="max-width:160px"></select>
+          <label><input type="checkbox" id="rAll" style="width:auto"> every ramp in the group</label></div>
+          <div class="pv" id="rPrev"></div>
+          <div class="hint" id="rKey"></div></div>
+        <div class="card" id="rAllCard" style="display:none"><h2 style="margin-top:0">All ramps (64 px, front)</h2><div class="pv" id="rAllPrev"></div></div>
+      </div>
+    </div>
+    <input type="color" id="rPick" style="position:absolute;left:-9999px">
   </section>
 
   <!-- SETS -->
@@ -471,6 +516,131 @@ function renderSets() {
   document.querySelectorAll("[data-use]").forEach(btn => btn.onclick = guard(async () => { await api("/api/set/use", { name: btn.dataset.use }); }));
 }
 $("setSave").onclick = guard(async () => { await api("/api/ws/set/save", { name: $("setName").value, include_unreviewed: $("setUnrev").checked }); await refresh(); });
+
+// ------------------------------------------------------------------ ramps
+const MONK = ["#f6ede4","#f3e7db","#f7ead0","#eadaba","#d7bd96","#a07e56","#825c43","#604134","#3a312a","#292420"];
+const TUNE0 = { hueOffset:0, saturation:1, shadowHue:0.72, shadowShift:0.12, shadowSat:0.25, shadowDark:0.55,
+                lightHue:0.15, lightShift:0.08, lightDesat:0.30, lightLift:0.55 };
+const SLIDERS = [["saturation","Saturation ×",0,2.5,0.01],["hueOffset","Hue offset",-0.1,0.1,0.002],
+  ["shadowDark","Shadow depth",0,0.9,0.01],["shadowShift","Shadow hue shift",0,0.4,0.005],["shadowHue","Shadow hue target",0,1,0.005],
+  ["shadowSat","Shadow saturation +",0,1,0.01],["lightLift","Highlight lift",0,1,0.01],["lightShift","Highlight hue shift",0,0.4,0.005],
+  ["lightHue","Highlight hue target",0,1,0.005],["lightDesat","Highlight desaturate",0,1,0.01]];
+const RS = { doc:null, group:"skin", name:null, base:"#c98d63", tune:{...TUNE0}, over:{}, prev:null, imgs:{}, inited:false };
+const hex2rgb = h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16));
+const rgb2hex = c => "#" + c.map(v => Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,"0")).join("");
+function rgb2hsv([r,g,b]) { r/=255; g/=255; b/=255; const mx=Math.max(r,g,b), mn=Math.min(r,g,b), d=mx-mn; let h=0;
+  if (d) h = mx===r ? ((g-b)/d)%6 : mx===g ? (b-r)/d+2 : (r-g)/d+4; h=(h/6+1)%1; return [h, mx? d/mx:0, mx]; }
+function hsv2rgb(h,s,v) { const i=Math.floor(h*6), f=h*6-i, p=v*(1-s), q=v*(1-f*s), t=v*(1-(1-f)*s);
+  const [r,g,b] = [[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]][((i%6)+6)%6]; return [r*255,g*255,b*255]; }
+const shiftHue = (h, target, amt) => (h + ((((target - h + 0.5) % 1) + 1) % 1 - 0.5) * amt + 1) % 1;
+function rampFrom(base, t, size) {   // = hdart.palette.ramp_from_base at the default tune, plus the editor's knobs
+  let [h,s,v] = rgb2hsv(hex2rgb(base)); h = (h + t.hueOffset + 1) % 1; s = Math.min(1, s * t.saturation);
+  const mid = Math.floor(size/2), out = [];
+  for (let i=0;i<size;i++) { const k = (i-mid)/Math.max(mid,1); let hh, ss, vv;
+    if (k < 0) { hh = shiftHue(h, t.shadowHue, t.shadowShift * -k); ss = Math.min(1, s*(1 + t.shadowSat*-k) + 0.05*-k); vv = v*(1 + t.shadowDark*k); }
+    else { hh = shiftHue(h, t.lightHue, t.lightShift*k); ss = s*(1 - t.lightDesat*k); vv = Math.min(1, v + (1-v)*t.lightLift*k + 0.08*k); }
+    out.push(hsv2rgb(hh, ss, vv)); }
+  return out; }
+function curRamp() { const size = RS.doc ? RS.doc.rampSize : 5; const r = rampFrom(RS.base, RS.tune, size);
+  return r.map((c,i) => RS.over[i] ? hex2rgb(RS.over[i]) : c); }
+function rampOf(e) { const size = RS.doc.rampSize; return e.colors ? e.colors.map(hex2rgb) : rampFrom(e.base, {...TUNE0, ...(e.tune||{})}, size); }
+
+async function initRamps() {
+  if (!RS.inited) {
+    RS.inited = true;
+    $("rMonk").innerHTML = MONK.map((h,i) => `<span style="background:${h};color:${i>4?'#fffa':'#000a'}" data-h="${h}" title="Monk ${i+1} ${h}">${i+1}</span>`).join("");
+    $("rMonk").onclick = e => { const h = e.target.dataset.h; if (h) { RS.base = h; drawRamp(); } };
+    $("rSliders").innerHTML = SLIDERS.map(([k,l,a,b,st]) => `<div class="sl"><span>${l}</span><input type="range" min="${a}" max="${b}" step="${st}" data-k="${k}"><span data-v="${k}"></span></div>`).join("");
+    document.querySelectorAll("#rSliders input").forEach(inp => inp.oninput = () => { RS.tune[inp.dataset.k] = +inp.value; drawRamp(); });
+    $("rBase").oninput = () => { RS.base = $("rBase").value; drawRamp(); };
+    $("rBaseHex").onchange = () => { if (/^#[0-9a-f]{6}$/i.test($("rBaseHex").value)) { RS.base = $("rBaseHex").value.toLowerCase(); drawRamp(); } };
+    $("rReset").onclick = () => { RS.tune = {...TUNE0}; RS.over = {}; drawRamp(); };
+    $("rGroup").onchange = () => { RS.group = $("rGroup").value; RS.name = null; $("rName").value = ""; listRamps(); };
+    $("rBuild").onchange = guard(loadPreview);
+    $("rAll").onchange = drawAll;
+    $("rNew").onclick = () => { RS.name = null; $("rName").value = "new_tone"; RS.base = "#c98d63"; RS.tune = {...TUNE0}; RS.over = {}; $("rRaces").value = ""; listRamps(); drawRamp(); };
+    $("rDup").onclick = () => { RS.name = null; $("rName").value = ($("rName").value || "tone") + "_copy"; listRamps(); };
+    $("rDel").onclick = guard(async () => { if (!RS.name || !confirm(`Delete ${RS.group}.${RS.name}?`)) return;
+      RS.doc = await api("/api/ws/ramp/delete", { group: RS.group, name: RS.name }); RS.name = null; $("rName").value = ""; listRamps(); });
+    $("rSave").onclick = guard(saveRamp);
+    $("rPick").oninput = () => { RS.over[RS.pick] = $("rPick").value; drawRamp(); };
+  }
+  RS.doc = await api("/api/ws/ramp/palettes", {});
+  $("rGroup").innerHTML = Object.keys(RS.doc.groups).map(g => `<option ${g===RS.group?"selected":""}>${g}</option>`).join("");
+  const builds = Object.keys(S.state.builds).filter(b => S.state.builds[b].front && S.state.builds[b].front.approved);
+  const keep = $("rBuild").value; $("rBuild").innerHTML = builds.map(b => `<option>${b}</option>`).join(""); if (keep) $("rBuild").value = keep;
+  listRamps(); await loadPreview();
+}
+function listRamps() {
+  const grp = RS.doc.groups[RS.group] || {};
+  if (RS.name === null && $("rName").value === "") { const first = Object.keys(grp)[0]; if (first) { selectRamp(first); return; } }
+  $("rList").innerHTML = Object.entries(grp).map(([n,e]) => `<div class="ritem ${n===RS.name?"on":""}" data-n="${n}"><span class="nm">${n}</span>
+    <span class="strip">${rampOf(e).map(c => `<i style="background:${rgb2hex(c)}"></i>`).join("")}</span>
+    <span class="hint">${(e.races||[]).join(", ")}</span></div>`).join("") || `<p class="hint">No ramps in this group.</p>`;
+  document.querySelectorAll("#rList .ritem").forEach(el => el.onclick = () => selectRamp(el.dataset.n));
+  drawAll();
+}
+function selectRamp(n) {
+  const e = RS.doc.groups[RS.group][n]; RS.name = n; $("rName").value = n;
+  RS.base = e.base || (e.colors ? e.colors[Math.floor(e.colors.length/2)] : "#c98d63");
+  RS.tune = {...TUNE0, ...(e.tune || {})}; RS.over = {};
+  if (e.colors) { const gen = rampFrom(RS.base, RS.tune, RS.doc.rampSize).map(rgb2hex);   // hand-set colours = overrides
+    e.colors.forEach((c,i) => { if (c.toLowerCase() !== gen[i]) RS.over[i] = c; }); }
+  $("rRaces").value = (e.races || []).join(", ");
+  listRamps(); drawRamp();
+}
+function drawRamp() {
+  $("rBase").value = RS.base; $("rBaseHex").value = RS.base;
+  document.querySelectorAll("#rSliders input").forEach(inp => { inp.value = RS.tune[inp.dataset.k];
+    document.querySelector(`[data-v="${inp.dataset.k}"]`).textContent = (+RS.tune[inp.dataset.k]).toFixed(3); });
+  const r = curRamp();
+  $("rSw").innerHTML = r.map((c,i) => `<div><span class="${RS.over[i]?"ovr":""}" data-i="${i}" style="background:${rgb2hex(c)}"></span>${rgb2hex(c)}</div>`).join("");
+  document.querySelectorAll("#rSw span").forEach(sp => {
+    sp.onclick = () => { RS.pick = +sp.dataset.i; $("rPick").value = rgb2hex(r[RS.pick]); $("rPick").click(); };
+    sp.oncontextmenu = ev => { ev.preventDefault(); delete RS.over[+sp.dataset.i]; drawRamp(); }; });
+  drawPreview();
+}
+async function loadPreview() {
+  const b = $("rBuild").value; if (!b) { $("rPrev").innerHTML = `<p class="hint">Approve a mannequin front first.</p>`; return; }
+  RS.prev = await api("/api/ws/ramp/preview", { build: b }); RS.imgs = {};
+  const load = src => new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = src; });
+  for (const [f, v] of Object.entries(RS.prev.facings)) RS.imgs[f] = { art: await load(img(v.art)), lev: await load(v.levels) };
+  $("rKey").textContent = Object.entries(RS.prev.facings).map(([f,v]) => `${f} skin levels found in the art: ${v.key.map(rgb2hex).join(" ")}`).join(" · ");
+  drawPreview(); drawAll();
+}
+function recolor(f, ramp) {   // the mannequin with its skin levels coloured from `ramp`
+  const I = RS.imgs[f], W = I.art.naturalWidth, H = I.art.naturalHeight;
+  const c = document.createElement("canvas"); c.width = W; c.height = H; const x = c.getContext("2d"); x.drawImage(I.art, 0, 0);
+  const d = x.getImageData(0, 0, W, H);
+  const l = document.createElement("canvas"); l.width = W; l.height = H; const lx = l.getContext("2d"); lx.drawImage(I.lev, 0, 0, W, H);
+  const ld = lx.getImageData(0, 0, W, H).data;
+  for (let p = 0; p < ld.length; p += 4) if (ld[p+3] > 0) { const col = ramp[Math.min(ramp.length-1, ld[p])]; d.data[p]=col[0]; d.data[p+1]=col[1]; d.data[p+2]=col[2]; }
+  x.putImageData(d, 0, 0); return c;
+}
+function small(src, n) { const c = document.createElement("canvas"); c.width = n; c.height = n; const x = c.getContext("2d");
+  x.imageSmoothingEnabled = true; x.imageSmoothingQuality = "high"; x.drawImage(src, 0, 0, n, n); return c; }
+function shown(c, css, cap) { c.style.width = css + "px"; c.style.height = css + "px";
+  const fig = document.createElement("figure"); fig.appendChild(c); const fc = document.createElement("figcaption"); fc.textContent = cap; fig.appendChild(fc); return fig; }
+function drawPreview() {
+  if (!RS.prev) return; const el = $("rPrev"); el.innerHTML = ""; const ramp = curRamp();
+  for (const f of Object.keys(RS.imgs)) { const full = recolor(f, ramp);
+    el.appendChild(shown(full, 300, `${f}, full`)); el.appendChild(shown(small(full, 64), 256, `${f}, 64 px`)); }
+}
+function drawAll() {
+  $("rAllCard").style.display = $("rAll").checked ? "" : "none";
+  if (!$("rAll").checked || !RS.imgs.front || !RS.doc) return;
+  const el = $("rAllPrev"); el.innerHTML = "";
+  for (const [n, e] of Object.entries(RS.doc.groups[RS.group] || {}))
+    el.appendChild(shown(small(recolor("front", n === RS.name ? curRamp() : rampOf(e)), 64), 128, n));
+}
+async function saveRamp() {
+  const name = $("rName").value.trim();
+  const races = $("rRaces").value.split(",").map(s => s.trim()).filter(Boolean);
+  RS.doc = await api("/api/ws/ramp/save", { group: RS.group, name, old_name: RS.name, base: RS.base, tune: RS.tune,
+                                            colors: curRamp().map(rgb2hex), races });
+  RS.name = name; listRamps(); $("rStatus").textContent = ` saved ${RS.group}.${name}`;
+}
+document.querySelector('.tab[data-t="ramps"]').addEventListener("click", guard(initRamps));
 
 function renderAll() { renderBoard(); renderBase(); renderStyle(); renderSets(); renderDrawer(false); }
 refresh().then(pollJobs).catch(e => err(e.message));
