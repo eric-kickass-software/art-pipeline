@@ -184,6 +184,10 @@ class Jobs:
                 elif job["kind"] == "base":
                     job["result"] = ws.gen_base(a["build"], a["facing"], int(a.get("n", 4)), int(a.get("seed", 1)),
                                                 a.get("description"))
+                elif job["kind"] == "puppet":
+                    from . import puppet
+                    importlib.reload(puppet)
+                    job["result"] = puppet.template(a["build"])
                 elif job["kind"] == "race":
                     job["result"] = ws.gen_race(a["race"], a["sex"], a["facing"], int(a.get("n", 4)), int(a.get("seed", 1)))
                 elif job["kind"] == "part":
@@ -214,6 +218,10 @@ def workshop_post(st, action, b):
     if action == "base/approve":
         ws.approve_base(b["build"], b["facing"], b["file"])
         return {"ok": True}
+    if action == "puppet/approve":
+        from . import puppet
+        importlib.reload(puppet)
+        return puppet.approve(b["build"], b.get("on", True))
     if action == "race/state":
         return ws.race_state(b["race"])
     if action == "race/spec":
@@ -549,7 +557,7 @@ def serve(renders, spec, palettes, port=4321, open_browser=True):
                     from . import workshop
                     data = workshop.image(q["path"][0])
                     self.send_response(200)
-                    self.send_header("Content-Type", "image/png")
+                    self.send_header("Content-Type", "image/gif" if q["path"][0].endswith(".gif") else "image/png")
                     self.send_header("Cache-Control", "max-age=3600")
                     self.end_headers()
                     self.wfile.write(data)

@@ -468,6 +468,11 @@ def race_state(race):
                       "prompt": race_prompt(race, sex, f, doc), "mode": "edit" if (f == "back" or sex != "unisex" or
                                                                                  doc["races"][race].get("from")) else "txt2img",
                       "stale": {c: bool(meta.get(c, {}).get("from")) and meta[c]["from"] != src for c in d.get("candidates", [])}}
+        pup = b.get("puppet")
+        cur = {f: b.get(f, {}).get("approved") for f in ("front", "back")}
+        row["puppet"] = {"ready": bool(cur["front"] and cur["back"]), "made": pup.get("made") if pup else None,
+                         "approved": bool(pup and pup.get("approved")), "stale": bool(pup) and pup.get("from") != cur,
+                         "dir": f"puppet/{build}"}
         out["builds"][sex] = row
     pal = palettes_doc()
     out["ramps"] = {n: e for n, e in pal["groups"].get("skin", {}).items() if race in e.get("races", [])}

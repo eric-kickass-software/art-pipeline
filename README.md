@@ -251,7 +251,16 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
    - Each candidate records the image it was made from; when a newer source is approved it's flagged "made from an
      older source". Order is enforced (`race_needs`). ✕ archives like the Mannequins tab.
    - Skin tones: the race lists the `skin` ramps whose `races` include it (tag them in the Ramps tab).
-   - API: `race/state {race}`, `race/spec {spec}`, `race/approve {build, facing, file}`; queue job kind `race`
+   - **Puppet** step per gender row (2026-10-23, `hdart/puppet.py`): once the front and back are approved, "Build puppet
+     template" (queue job kind `puppet {build}`, ~20 s) finds the skeleton in the art (shoulder/elbow/wrist,
+     hip/knee/ankle), limb-width shoulder/hip circles owned by the limb, the torso complete underneath with a flesh
+     armpit, a curved leotard cut at the hips, and cuts 14 rigid pieces per view (child joint ends tucked under the
+     parent; thighs get a soft band from pelvis to thigh). Writes `sprites/ai/puppet/<build>/`: `front/`, `back/` (one
+     PNG per piece), `template.json` (order, pivots, bones, joints), `skeleton_*.png`, `pieces_*.png`, `walk_*.gif` (a
+     foot-driven IK marionette walk) and `walk_4dir_64.gif`. Review and "Approve template"; flagged if the front/back
+     changed since. Method and history: the puppet tests of 2026-10-21 (scripts in `work/puppet_test2/scripts`, vault
+     note). Test: `tests/test_puppet.py` (uses the real approved human.male pair; skipped without it).
+   - API: `race/state {race}`, `race/spec {spec}`, `race/approve {build, facing, file}`, `puppet/approve {build, on}`; queue job kind `race`
      `{race, sex, facing, n, seed}`. Tests: `tests/test_races.py` (ComfyUI stubbed).
 1. **Mannequins** tab: generate and approve the male/female/slim base (front, then a back made from the mirrored front, clamped to the
    same silhouette so the card's two sides line up). How the back is made (`back_from_front`, tested 2026-10-20 on

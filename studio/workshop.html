@@ -723,6 +723,19 @@ async function loadRace() {
     : `<span class="hint">No skin ramps tagged "${RC.race}" yet: tag them in the Ramps tab (Races field).</span>`;
   renderRaceGrid();
 }
+function puppetBlock(sex) {   // the puppet template step: skeleton + rigid pieces + test walk from the approved pair
+  const p = RC.st.builds[sex].puppet, t = p.made ? `&t=${p.made}` : "";
+  const im = (name, w) => `<a href="${img(p.dir + "/" + name)}${t}" target="_blank"><img src="${img(p.dir + "/" + name)}${t}" style="width:${w}px;image-rendering:pixelated;background:#c4c6cc;border-radius:4px"></a>`;
+  const btn = !p.ready ? `<span class="hint">Approve the front and back first.</span>`
+    : `<button class="primary" data-pbuild="${sex}">${p.made ? "Rebuild" : "Build"} puppet template</button>`;
+  const status = !p.made ? "" : p.stale ? `<span class="hint" style="color:var(--warn)">made from an older front/back: rebuild</span>`
+    : p.approved ? `<span class="hint" style="color:var(--ok)">✓ approved</span> <button data-papp="${sex}" data-on="0">Unapprove</button>`
+    : `<button data-papp="${sex}" data-on="1">Approve template</button>`;
+  return `<div style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px"><div class="row"><b>Puppet</b> ${btn} ${status}
+    <span class="hint">skeleton (blue = shoulder/hip, red = elbow/knee, orange = wrist/ankle, cyan = hip cut), rigid pieces, test walk</span></div>
+    ${p.made ? `<div class="row" style="align-items:flex-start">${im("skeleton_front.png", 220)}${im("skeleton_back.png", 220)}${im("walk_front.gif", 220)}${im("walk_back.gif", 220)}${im("walk_4dir_64.gif", 440)}</div>
+    <details><summary class="hint">pieces (front / back)</summary>${im("pieces_front.png", 1000)}<br>${im("pieces_back.png", 1000)}</details>` : ""}</div>`;
+}
 function renderRaceGrid() {
   const rows = { unisex: "Unisex (the race's base)", male: "Male (edit of the unisex)", female: "Female (edit of the unisex)" };
   $("raceGrid").innerHTML = Object.entries(rows).map(([sex, label]) => `<div class="card"><h2 style="margin-top:0">${label}</h2>
@@ -735,7 +748,11 @@ function renderRaceGrid() {
       return `<div><div class="row"><b>${f}</b>
         ${d.ready === true ? `<button class="primary" data-rgen="${sex}" data-f="${f}">Queue candidates</button>` : `<span class="hint">${d.ready}</span>`}</div>
         <details><summary class="hint">prompt (${d.mode === "edit" ? "FLUX edit of the source image" : "text to image"})</summary><div class="prompt">${d.prompt}</div></details>
-        <div class="cands bcands">${cands || `<p class="hint">No candidates yet.</p>`}</div></div>`; }).join("")}</div></div>`).join("");
+        <div class="cands bcands">${cands || `<p class="hint">No candidates yet.</p>`}</div></div>`; }).join("")}</div>${puppetBlock(sex)}</div>`).join("");
+  document.querySelectorAll("[data-pbuild]").forEach(btn => btn.onclick = guard(async () => {
+    await queue([{ kind: "puppet", build: `${RC.race}.${btn.dataset.pbuild}`, label: `${RC.race} · ${btn.dataset.pbuild} · puppet` }]); }));
+  document.querySelectorAll("[data-papp]").forEach(btn => btn.onclick = guard(async () => {
+    await api("/api/ws/puppet/approve", { build: `${RC.race}.${btn.dataset.papp}`, on: btn.dataset.on === "1" }); await loadRace(); }));
   document.querySelectorAll("[data-rgen]").forEach(btn => btn.onclick = guard(async () => {
     const sex = btn.dataset.rgen, f = btn.dataset.f, n = +$("raceN").value, seed = +$("raceSeed").value;
     await queue([{ kind: "race", race: RC.race, sex, facing: f, n, seed, label: `${RC.race} · ${sex} · ${f}` }]);
