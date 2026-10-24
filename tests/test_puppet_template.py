@@ -5,7 +5,7 @@ import numpy as np
 import hdart.puppet_template as pt
 
 spec = pt.load()
-assert spec["schemaVersion"] == 1 and set(spec["views"]) == {"front", "back"}
+assert spec["schemaVersion"] == 2 and set(spec["views"]) == {"front", "back"}
 for v in ("front", "back"):
     V = spec["views"][v]
     assert len(V["limbs"]) == 12 and len(V["order"]) == 14 and len(V["shapes"]["torso"]["points"]) >= 10
@@ -34,7 +34,7 @@ syn = {"views": {"front": {
                "legA": {"pivot": [230, 330], "mid": [225, 390], "end": [222, 440], "tip": [205, 455], "R": 22},
                "legB": {"pivot": [270, 330], "mid": [275, 390], "end": [278, 440], "tip": [295, 455], "R": 22},
                "neck": [250, 180], "pelvis": [250, 320], "crotch": [250, 340]},
-    "limbs": {f"{k}.{s}": {"from": f"{k}.{a}", "to": f"{k}.{b}", "widths": [24, 24]}
+    "limbs": {f"{k}.{s}": {"from": f"{k}.{a}", "to": f"{k}.{b}", "points": [[0.2, 12], [0.5, 13], [0.8, 12], [1.15, 0], [0.8, -12], [0.5, -13], [0.2, -12], [-0.15, 0]]}
               for k in pt.LIMBS for s, a, b in pt.SEGS},
     "shapes": {"torso": {"points": [[230, 176], [270, 176], [312, 204], [300, 260], [298, 320], [262, 350],
                                     [238, 350], [202, 320], [200, 260], [188, 204]]},
@@ -60,17 +60,24 @@ for v in ("front", "back"):
 import copy, json, tempfile
 from pathlib import Path
 tmp = Path(tempfile.mkdtemp()) / "puppet_template.json"; tmp.write_text(json.dumps(spec)); pt.SPEC = tmp
-e = copy.deepcopy(spec); e["views"]["front"]["limbs"]["armB.upper"]["widths"][0] = 40
+e = copy.deepcopy(spec); e["views"]["front"]["limbs"]["armB.upper"]["points"][2] = [0.5, 30]
 out = pt.save(e)
-assert out["views"]["front"]["joints"]["armB"]["R"] == 20 and out["edited"] and out["from"] == spec["from"]
+assert out["views"]["front"]["limbs"]["armB.upper"]["points"][2] == [0.5, 30] and out["edited"] and out["from"] == spec["from"]
 def refused(mut):
     b = copy.deepcopy(spec); mut(b)
     try: pt.save(b)
     except ValueError: return True
     return False
 assert refused(lambda b: b["views"].pop("back"))
-assert refused(lambda b: b["views"]["front"]["limbs"]["legA.lower"]["widths"].__setitem__(1, 0))
+assert refused(lambda b: b["views"]["front"]["limbs"]["legA.lower"].__setitem__("points", [[0, 1]] * 3))
+assert refused(lambda b: b["views"]["front"]["limbs"]["legA.lower"]["points"].__setitem__(0, [9, 0]))
 assert refused(lambda b: b["views"]["back"]["shapes"]["torso"].__setitem__("points", [[1, 1]] * 3))
 assert refused(lambda b: b["views"]["front"]["joints"]["neck"].__setitem__(0, "x"))
-assert json.loads(tmp.read_text())["views"]["front"]["joints"]["armB"]["R"] == 20   # refused saves wrote nothing
+assert json.loads(tmp.read_text())["views"]["front"]["limbs"]["armB.upper"]["points"][2] == [0.5, 30]   # refused saves wrote nothing
+
+# limb outlines live in their bone's frame: moving a joint carries the outline along
+V = copy.deepcopy(spec["views"]["front"]); L = V["limbs"]["armB.lower"]
+before = np.array(pt.limb_world(V, L)); V["joints"]["armB"]["mid"] = [c + 10 for c in V["joints"]["armB"]["mid"]]
+V["joints"]["armB"]["end"] = [c + 10 for c in V["joints"]["armB"]["end"]]
+assert np.allclose(np.array(pt.limb_world(V, L)) - before, 10)
 print("ok")

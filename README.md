@@ -262,9 +262,11 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
      note). Test: `tests/test_puppet.py` (uses the real approved human.male pair; skipped without it).
    - **Clean puppet template** (2026-10-23, `hdart/puppet_template.py`, `specs/puppet_template.json`): the generic
      unisex body as **whole, separately drawn parts** (Klei symbol / Live2D template style), so nothing is cut from a
-     figure. The spec is numbers in 512 px rig space per view: joints; per limb segment a bone + two widths, one
-     circle at each joint, and the outline is the true path around them (the circles joined by their tangent lines,
-     `capsule()`), so every joint end is round; the torso as ~13 landmarks (neck,
+     figure. The spec (schemaVersion 2) is numbers in 512 px rig space per view: joints; per limb segment a bone +
+     an outline of points in the bone's own frame (`[t, n]`: t = 0 at the start joint, 1 at the end joint; n = px to
+     the side; `limb_world()`), joined by a smooth closed curve, so moving a joint carries the outline along. Measured:
+     a round cap of 3 points around each joint (the overlap under the parent) and both sides of the limb at five
+     stations (calf, bicep, knee), ~16 points per segment; the torso as ~13 landmarks (neck,
      shoulders, armpits, waist, hips, leg holes, crotch) joined by a Catmull-Rom curve, complete under the arms; the
      head as a smooth outline; seams (waistband; leg holes = the torso's lower edge). `measure(build)` takes the
      numbers from an approved build's puppet rig (hand-fixed joints included); `render(spec, view, s)` draws every
@@ -277,8 +279,8 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
      plus joints, guides and art; hide any of them, click one to select it; remembered per browser); mouse-wheel
      **zoom** up to 8× around the cursor, pan with right/middle-drag or Space+drag, "Reset zoom"; drag joints
      (shoulder/hip, elbow/knee, wrist/ankle, fingertip/toe, neck/pelvis/crotch) and the waistband; click a part
-     (selected in both views) for its two joint circles (limbs; an upper arm/thigh's first circle is the shoulder/hip
-     circle) or outline points (torso, head: double-click the outline to add one, Alt-click to remove); Ctrl+Z undoes. Save validates and writes the spec
+     (selected in both views) for its outline points (every piece: limbs, torso, head; double-click the outline to add
+     one, Alt-click to remove; limb points are stored in their bone's frame); Ctrl+Z undoes. Save validates and writes the spec
      (`tpl/save`); "Save & render preview" also queues job kind `tpl`; "Re-measure" queues `tpl_measure` (throws the
      edits away, measures again from human.unisex). Next: painting all parts of a view as one parts sheet in one
      FLUX pass. Test: `tests/test_puppet_template.py`.
