@@ -260,6 +260,18 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
      foot-driven IK marionette walk) and `walk_4dir_64.gif`. Review and "Approve template"; flagged if the front/back
      changed since. Method and history: the puppet tests of 2026-10-21 (scripts in `work/puppet_test2/scripts`, vault
      note). Test: `tests/test_puppet.py` (uses the real approved human.male pair; skipped without it).
+   - **Clean puppet template** (2026-10-23, `hdart/puppet_template.py`, `specs/puppet_template.json`): the generic
+     unisex body as **whole, separately drawn parts** (Klei symbol / Live2D template style), so nothing is cut from a
+     figure. The spec is numbers in 512 px rig space per view: joints; per limb segment a bone + a smoothed width
+     profile (the outline is a sweep of discs, so every joint end is round); the torso as ~13 landmarks (neck,
+     shoulders, armpits, waist, hips, leg holes, crotch) joined by a Catmull-Rom curve, complete under the arms; the
+     head as a smooth outline; seams (waistband; leg holes = the torso's lower edge). `measure(build)` takes the
+     numbers from an approved build's puppet rig (hand-fixed joints included); `render(spec, view, s)` draws every
+     part from the spec alone (clay shading lit from the top left, full outline, guide lines on a separate layer);
+     `preview()` writes `sprites/ai/puppet_template/` (`front/`, `back/` parts + `.guides.png`, `parts_*.png`,
+     `template_sheet.png`, `walk_*.gif` on the existing IK walk, all rigid). Next: a Workshop editor for the
+     landmarks/widths, then painting all parts of a view as one parts sheet in one FLUX pass. Test:
+     `tests/test_puppet_template.py`.
    - API: `race/state {race}`, `race/spec {spec}`, `race/approve {build, facing, file}`, `puppet/approve {build, on}`; queue job kind `race`
      `{race, sex, facing, n, seed}`. Tests: `tests/test_races.py` (ComfyUI stubbed).
 1. **Mannequins** tab: generate and approve the male/female/slim base (front, then a back made from the mirrored front, clamped to the
