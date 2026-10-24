@@ -28,7 +28,7 @@ class FakeComfy:
 ppt.comfy = FakeComfy
 shutil.copy(ppt.SPEC, tmp / "paint.json"); ppt.SPEC = tmp / "paint.json"
 body, clothes = ppt.prompts("human.female")
-assert "female" in body and "eyelashes" in body and "sports bra" in clothes
+assert "female" in body and ppt.spec()["sexes"]["female"]["extra"] in body and "sports bra" in clothes
 
 # the paint prompts are a spec edited in the Workshop: saving changes what gets sent, bad input is refused
 sp = ppt.spec(); sp["sexes"]["female"]["clothes"] = "a red tunic"; sp["figure"]["front"] = "Hero {body} wearing {clothes}."
@@ -59,6 +59,20 @@ for v in ("front", "back"):
         assert im.shape == (1024, 1024, 4) and (im[..., 3] > 127).sum() > 200, (v, n)
 head = np.asarray(Image.open(d / "parts" / "front" / "head.png"))
 assert ((head[..., :3].astype(int).sum(-1) < 160) & (head[..., 3] > 0)).sum() > 100   # face marks + outline are in
+
+assert not (d / "progress.json").exists()   # progress is only there while it's being painted
+
+# a paint that fails keeps its progress (stage "failed" + the error); never stale, never used as the build's paint
+real_run = FakeComfy.run
+FakeComfy.run = staticmethod(lambda nodes, out_dir: (_ for _ in ()).throw(RuntimeError("ComfyUI fell over")))
+try:
+    ppt.paint("human.female", n=1, seed=77); raise SystemExit("no error")
+except RuntimeError:
+    pass
+FakeComfy.run = real_run
+bad = [c for c in ppt.state("human.female")["candidates"] if c["progress"]]
+assert len(bad) == 1 and bad[0]["progress"]["stage"] == "failed" and "fell over" in bad[0]["progress"]["error"] and not bad[0]["stale"]
+ppt.archive("human.female", bad[0]["id"])
 
 st = ppt.state("human.female")
 assert st["candidates"][0]["id"] == c[0] and st["candidates"][0]["stale"] is False and st["approved"] is None

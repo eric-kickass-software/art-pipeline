@@ -299,7 +299,11 @@ tab is gone: its descriptor groups are there, its mannequin clothing / builds / 
      block shows the exact prompts it sends. Queue job `paint {build, n, seed}`
      (~1 min each). Candidates in `sprites/ai/paint/<build>/<id>/`: `parts/<view>/<part>.png` (1024 px, rest pose),
      `figure_*.png`, `sheet_*.png`, `rest_*.png`, `walk_*.gif`, `walkstrip_*.png`, `meta.json`, and the template they
-     were painted on (`template.json`, `template/<view>/`); flagged when the template changed since. Approve / Archive
+     were painted on (`template.json`, `template/<view>/`); flagged when the template changed since. While it's being
+     made a candidate has `progress.json` (step / stage / seed, or stage "failed" + the error; hair and face candidates
+     too): its card shows the step and a progress bar instead of its images (✕ when it failed or stalled 10+ min), and
+     it's never used as the build's paint. The Studio's job worker survives SystemExit from `comfy.run` (it used to
+     kill the worker and stall the queue). Approve / Archive
      (to `archive/workshop/paint/`). API: `paint/state|spec|approve|archive|parts|save|revert` (`paint/spec {spec?, build?}`
      saves/returns the paint prompts and the composed ones of a build).
    - **Parts** tab (Parts editor): touch up a paint candidate part by part (Races → Paint → Edit parts). Every part

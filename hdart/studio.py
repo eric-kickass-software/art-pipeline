@@ -220,8 +220,8 @@ class Jobs:
                     job["result"] = ws.fix_region(a["target"], a["build"], a["facing"], a["image"], a["mask"],
                                                   a["prompt"], int(a.get("seed", 7)), a.get("part"))
                 job["status"] = "done"
-            except Exception as e:
-                job["status"], job["error"] = "failed", str(e)
+            except BaseException as e:   # comfy.run raises SystemExit (ComfyUI down / workflow rejected): that would kill
+                job["status"], job["error"] = "failed", str(e) or type(e).__name__   # this worker and stall the queue
 
 
 JOBS = None

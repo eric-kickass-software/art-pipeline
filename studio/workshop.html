@@ -72,6 +72,8 @@
   .pcands .pcand { background:var(--card); border:2px solid transparent; border-radius:6px; padding:4px; width:316px; }
   .pcands .pcand.on { border-color:var(--ok); } .pcands .pcand img { width:150px; height:150px; display:block; }
   .pcands .pcand button { margin-top:4px; padding:2px 6px; font-size:12px; }
+  .pwork { min-height:150px; min-width:300px; display:flex; flex-direction:column; justify-content:center; gap:8px; padding:8px; font-size:12px; }
+  .pbar { height:6px; background:#1b1722; border-radius:3px; overflow:hidden; } .pbar i { display:block; height:100%; background:var(--accent); }
   .rampgrid { display:grid; grid-template-columns: 420px 1fr; gap:14px; }
   .rlist { display:flex; flex-direction:column; gap:4px; max-height:260px; overflow:auto; }
   .ritem { display:flex; align-items:center; gap:8px; padding:3px 6px; border-radius:4px; border:1px solid transparent; cursor:pointer; }
@@ -915,11 +917,21 @@ function promptField(key, label, saved, rows = 2, hint = "") {
   return `<div class="row" style="margin:4px 0"><label style="min-width:120px">${label}</label>
     <textarea data-draft="${key}" rows="${rows}" style="flex:1">${esc(draft(key, saved))}</textarea></div>${hint ? `<div class="hint">${hint}</div>` : ""}`;
 }
+function progressCard(pr, arcAttrs) {   // a candidate still being made (or failed): its progress instead of its images
+  const failed = pr.stage === "failed", pct = failed ? 100 : Math.max(4, Math.round((pr.step - 0.5) / pr.of * 100));
+  const mins = Math.floor((Date.now() / 1000 - (pr.at || 0)) / 60), stalled = !failed && mins >= 10;   // a job that died mid-way
+  const msg = failed ? `<span style="color:var(--bad)">seed ${pr.seed} failed: ${esc(pr.error || "")}</span>`
+    : `⏳ seed ${pr.seed}: step ${pr.step} of ${pr.of}, ${esc(pr.stage)}${mins >= 2 ? ` <span class="hint">(${mins} min on this step${stalled ? ": stalled? a busy GPU slows FLUX down; a Studio restart stops it" : ""})</span>` : ""}`;
+  return `<div class="pcand"><div class="pwork"><div>${msg}</div>
+    <div class="pbar"><i style="width:${pct}%;${failed ? "background:var(--bad)" : ""}"></i></div></div>
+    ${failed || stalled ? `<div class="row" style="margin:0"><button ${arcAttrs} title="Archive it" style="width:auto;padding:2px 8px">✕ archive</button></div>` : ""}</div>`;
+}
 function paintBlock(sex) {   // the Paint step: the clean template painted as this build (figure first, then hidden areas)
   const p = (RC.paint || {})[sex], build = `${RC.race}.${sex}`, ps = RC.pspec;
   if (!p || !ps) return "";
   const e = ps.spec.sexes[sex] || {}, comp = (RC.pcomposed || {})[sex];
   const cands = p.candidates.slice().reverse().map(c => {
+    if (c.progress) return progressCard(c.progress, `data-pparc="${c.id}" data-sex="${sex}"`);
     const u = (f) => `${img(c.dir + "/" + f)}&t=${c.stamp}`, on = c.id === p.approved;
     const has = (f) => c.files.includes(f);
     return `<div class="pcand ${on ? "on" : ""}">
@@ -1479,6 +1491,7 @@ function fcCard(kind) {
   const st = FC.st, r = st.spec.races[FC.race] || {}, sex = $("fcSex").value, comp = st.composed[sex];
   const group = kind === "hair" ? "hair" : "eyes", pal = (RS.doc || {}).groups ? (RS.doc.groups[group] || {}) : (FC.pal || {})[group] || {};
   const cands = st.kinds[kind].slice().reverse().map(c => {
+    if (c.progress) return progressCard(c.progress, `data-fcarc="${c.id}" data-kind="${kind}"`);
     const u = (f) => FC.urls[`${kind}|${c.id}|${f}`] || `${img(c.dir + "/" + f)}&t=${c.stamp}`;
     const files = kind === "hair" ? ["prev_male_front.png", "prev_male_back.png", "prev_female_front.png", "prev_female_back.png"] : ["head_male.png", "head_female.png"];
     const keyed = c.meta.keyed || {}, nokey = Object.values(keyed).some(n => n === 0);
@@ -1557,8 +1570,10 @@ document.querySelector('.tab[data-t="face"]').addEventListener("click", guard(in
 setInterval(() => {   // when a face job finishes: reload the candidates
   if (!FC.inited) return;
   const done = jobs.filter(j => j.kind === "face_gen" && (j.status === "done" || j.status === "failed")).length;
+  const running = jobs.some(j => j.kind === "face_gen" && j.status === "running");
   if (FC.done === undefined) { FC.done = done; return; }
-  if (done !== FC.done) { FC.done = done; fcLoad().catch(e => err(e.message)); }
+  const onTab = document.querySelector('.tab[data-t="face"]').classList.contains("on");
+  if (done !== FC.done || (running && onTab)) { FC.done = done; fcLoad().catch(e => err(e.message)); }   // live progress
 }, 2500);
 
 function renderAll() { renderBoard(); renderBase(); renderStyle(); renderSets(); renderDrawer(false); }

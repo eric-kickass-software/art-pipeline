@@ -417,6 +417,12 @@ def render_previews(d, spec, frames=8):
         pt._save(rest, d / f"rest_{v}.png")
 
 
+def _progress(d, step, of, stage, seed, error=None):
+    """progress.json of a candidate being made (the Workshop shows it); removed when the candidate is done."""
+    (d / "progress.json").write_text(json.dumps({"step": step, "of": of, "stage": stage, "seed": seed, "error": error,
+                                                 "at": int(time.time())}), encoding="utf-8")
+
+
 def paint(build, n=1, seed=1):
     """Queue job: n paint candidates for a race build (each = front + back)."""
     race, sex = build.split(".", 1)
@@ -430,17 +436,32 @@ def paint(build, n=1, seed=1):
     for i in range(n):
         sd = seed + i; cid = f"s{sd}_{int(time.time())}"
         d = out_dir(build) / cid; (d / "parts").mkdir(parents=True, exist_ok=True)
+        try:
+            _paint_one(build, d, cid, sd, spec, rendered, lays, ramp, P, guide)
+        except Exception as e:
+            _progress(d, 0, 5, "failed", sd, str(e)); raise
+        (d / "progress.json").unlink(missing_ok=True)
+        made.append(cid)
+    return made
+
+
+def _paint_one(build, d, cid, sd, spec, rendered, lays, ramp, P, guide):
+    """One paint candidate (figure + completion pass per view, cleanup, outline, previews), reporting its progress."""
+    if True:
         ref = None; meta = {"build": build, "seed": sd, "made": int(time.time()), "template_edited": spec.get("edited"),
                             "template_made": spec.get("made"), "prompts": {}}
+        step = 0
         for v in VIEWS:
             V = spec["views"][v]; order = V["order"]; parts = rendered[v]
             inits = inits_for(spec, v, parts, ramp, guide)
             fprompt = P[v]["figure"]
+            step += 1; _progress(d, step, 5, f"figure pass ({v})", sd)
             fpaint, fig_px = figure_pass(order, inits, fprompt, sd, f"{build}_{cid}_{v}_fig", [ref] if ref else [])
             fpaint.save(d / f"figure_{v}.png")
             if v == "front":
                 ref = d / "figure_front.png"
             cprompt = P[v]["complete"]
+            step += 1; _progress(d, step, 5, f"hidden ends + cleanup + outline ({v})", sd)
             csheet, raw = complete_pass(order, lays[v], inits, fig_px, owners(parts, order), cprompt, sd,
                                         f"{build}_{cid}_{v}_cmp", [ref])
             csheet.save(d / f"sheet_{v}.png")
@@ -455,9 +476,8 @@ def paint(build, n=1, seed=1):
             (d / "template" / v).mkdir(parents=True, exist_ok=True)
             for name, (rgba, _, _) in rendered[v].items():
                 Image.fromarray(rgba).save(d / "template" / v / f"{name}.png")
+        _progress(d, 5, 5, "walk previews", sd)
         render_previews(d, spec)
-        made.append(cid)
-    return made
 
 
 def _spec_for(d):
@@ -471,11 +491,12 @@ def candidates(build):
     if not d.exists():
         return []
     out = []
-    for c in sorted((p for p in d.iterdir() if p.is_dir() and not p.name.startswith("_")), key=lambda p: p.name):
+    for c in sorted((p for p in d.iterdir() if p.is_dir() and not p.name.startswith("_")), key=lambda p: p.stat().st_ctime):   # oldest first
         meta = json.loads((c / "meta.json").read_text(encoding="utf-8")) if (c / "meta.json").exists() else {}
         files = sorted(f.name for f in c.glob("*.*"))
+        prog = json.loads((c / "progress.json").read_text(encoding="utf-8")) if (c / "progress.json").exists() else None
         out.append({"id": c.name, "dir": ws.rel(c), "meta": meta, "files": files, "edited": (c / "parts_orig").exists(),
-                    "stamp": int(max((f.stat().st_mtime for f in c.glob("*.*")), default=0))})
+                    "progress": prog, "stamp": int(max((f.stat().st_mtime for f in c.glob("*.*")), default=0))})
     return out
 
 
@@ -483,8 +504,8 @@ def state(build):
     s = ws.load_state(); p = s["builds"].get(build, {}).get("paint", {})
     spec = pt.load()
     cands = candidates(build)
-    for c in cands:   # painted on an older template than the current one
-        c["stale"] = (c["meta"].get("template_edited"), c["meta"].get("template_made")) != (spec.get("edited"), spec.get("made"))
+    for c in cands:   # painted on an older template than the current one (not known while it's still being painted)
+        c["stale"] = not c["progress"] and (c["meta"].get("template_edited"), c["meta"].get("template_made")) != (spec.get("edited"), spec.get("made"))
     return {"build": build, "candidates": cands, "approved": p.get("approved")}
 
 
@@ -494,7 +515,7 @@ def ramp_preview(build):
     one set of cel levels."""
     import base64, io
     st = state(build)
-    cands = sorted(st["candidates"], key=lambda c: c["meta"].get("made", 0))
+    cands = sorted((c for c in st["candidates"] if not c["progress"]), key=lambda c: c["meta"].get("made", 0))
     cid = st["approved"] or (cands[-1]["id"] if cands else None)
     out = {"build": build, "id": cid, "approved": bool(st["approved"]), "facings": {}}
     if not cid:

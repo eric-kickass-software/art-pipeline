@@ -74,7 +74,7 @@ def composed(race, sex, doc=None):
 def base(build):
     """(candidate id, its template spec, {view: (composite RGBA, parts dict)}) of a build's approved paint (else newest)."""
     st = ppt.state(build)
-    cands = sorted(st["candidates"], key=lambda c: c["meta"].get("made", 0))
+    cands = sorted((c for c in st["candidates"] if not c["progress"]), key=lambda c: c["meta"].get("made", 0))
     cid = st["approved"] or (cands[-1]["id"] if cands else None)
     if not cid:
         raise ValueError(f"{build} has no paint yet: paint it first (Race → Paint).")
@@ -376,10 +376,24 @@ def generate(race, kind, sex="male", n=1, seed=1):
     for i in range(n):
         sd = seed + i; fid = f"s{sd}_{int(time.time())}"
         d = out_dir(race, kind) / fid; d.mkdir(parents=True, exist_ok=True)
+        try:
+            _make_one(race, kind, sex, build, cid, sp, parts, P, d, fid, sd)
+        except Exception as e:
+            ppt._progress(d, 0, 3, "failed", sd, str(e)); raise
+        (d / "progress.json").unlink(missing_ok=True)
+        made.append(fid)
+    return made
+
+
+def _make_one(race, kind, sex, build, cid, sp, parts, P, d, fid, sd):
+    """One hair / face candidate, reporting its progress."""
+    of = 3 if kind == "hair" else 2
+    if True:
         layers, levels = {}, {}
         if kind == "hair":
             ref = None
             for v in ("front", "back"):
+                ppt._progress(d, 1 if v == "front" else 2, of, f"hair ({v})", sd)
                 box, head = _head_box(parts[v])
                 region = np.zeros((N, N), bool); region[box[1]:box[3], box[0]:box[2]] = True
                 g = int(0.16 * (box[2] - box[0]))   # hair volume: a band around the head (no free-floating shapes above it)
@@ -419,6 +433,7 @@ def generate(race, kind, sex="male", n=1, seed=1):
                     ref = d / "paint_front.png"
                 layers[v], levels[v] = key_layer(before, after, region, head)
         else:
+            ppt._progress(d, 1, of, "face", sd)
             v = "front"; region = face_ellipse(sp) & inner_head(parts[v]["head"])   # off the jaw / chin outline
             box, _ = _head_box(parts[v], 0.05, 0.05, 0.05)
             key = skin_key(parts[v]["head"])
@@ -440,9 +455,8 @@ def generate(race, kind, sex="male", n=1, seed=1):
                                                  "paint": cid, "keyed": keyed,
                                                  "prompt": P[kind] if kind == "face" else P["hair"]}, indent=1),
                                      encoding="utf-8")
+        ppt._progress(d, of, of, "previews on male and female", sd)
         previews(race, kind, fid)
-        made.append(fid)
-    return made
 
 
 def previews(race, kind, fid, ramp=None, save=True):
@@ -500,7 +514,8 @@ def state(race):
         if dd.exists():
             for c in sorted((p for p in dd.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime):
                 meta = json.loads((c / "meta.json").read_text(encoding="utf-8")) if (c / "meta.json").exists() else {}
-                lst.append({"id": c.name, "dir": ws.rel(c), "meta": meta, "files": sorted(f.name for f in c.glob("*.*")),
+                prog = json.loads((c / "progress.json").read_text(encoding="utf-8")) if (c / "progress.json").exists() else None
+                lst.append({"id": c.name, "dir": ws.rel(c), "meta": meta, "files": sorted(f.name for f in c.glob("*.*")), "progress": prog,
                             "stamp": int(max((f.stat().st_mtime for f in c.glob("*.*")), default=0)), "in_set": c.name in sets[kind]})
         out["kinds"][kind] = lst
     return out
@@ -536,7 +551,8 @@ def _pick(race, kind):
     d = out_dir(race, kind)
     if in_set and (d / in_set[0]).exists():
         return d / in_set[0]
-    cands = sorted((p for p in d.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime) if d.exists() else []
+    cands = sorted((p for p in d.iterdir() if p.is_dir() and not (p / "progress.json").exists()),
+                   key=lambda p: p.stat().st_mtime) if d.exists() else []
     return cands[-1] if cands else None
 
 
