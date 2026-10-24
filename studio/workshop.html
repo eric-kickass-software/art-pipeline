@@ -1281,7 +1281,7 @@ function paGhost(t) {   // template shape -> a cyan edge (one-time per part)
 function paLayers() {
   const order = PA.doc.views[PA.view].order;
   $("paLayers").innerHTML = order.slice().reverse().map(n => `<div class="tpl ${n === PA.sel ? "on" : ""}" data-psel="${n}">
-    <input type="checkbox" data-ply="${n}" ${PA.hidden.has(n) ? "" : "checked"} style="width:auto;margin:0 6px 0 0">${n}${PA.dirty[paKey(PA.view, n)] ? " •" : ""}</div>`).join("");
+    <input type="checkbox" data-ply="${n}" ${PA.hidden.has(n) ? "" : "checked"} style="width:auto;margin:0 6px 0 0">${n === "layer" && PA.layer ? `<b>${PA.layer.kind} layer</b>` : n}${paEditable(n) ? "" : ' <span class="hint">(context)</span>'}${PA.dirty[paKey(PA.view, n)] ? " •" : ""}</div>`).join("");
   $("paLayers").querySelectorAll("[data-ply]").forEach(c => c.onchange = () => { c.checked ? PA.hidden.delete(c.dataset.ply) : PA.hidden.add(c.dataset.ply); paDraw(); });
   $("paLayers").querySelectorAll("[data-psel]").forEach(r => r.onclick = e => { if (e.target.tagName === "INPUT") return; PA.sel = r.dataset.psel; paLayers(); paDraw(); });
 }
@@ -1299,6 +1299,7 @@ function paStamp(ctx, a, b, r) {   // round stamps from a to b
   const d = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.ceil(d / Math.max(1, r * 0.35)));
   for (let i = 0; i <= n; i++) { const t = i / n; ctx.beginPath(); ctx.arc(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, r, 0, 7); ctx.fill(); }
 }
+const paEditable = (n) => !PA.doc || !PA.doc.editable || PA.doc.editable.includes(n);
 function paBegin(p) {
   const key = paKey(PA.view, PA.sel), part = PA.parts[key];
   PA.stroke = { key, last: p, before: part.getContext("2d").getImageData(0, 0, PA_N, PA_N), layer: paCanvas(), box: [p[0], p[1], p[0], p[1]] };
@@ -1374,6 +1375,7 @@ function paWire() {
     if (PA.tool === "pick" || e.altKey) { paPick(p.w); return; }
     if (PA.tool === "mask") { PA.maskLast = p.w; paMaskStroke(p.w, p.w); return; }
     if (!PA.sel) { paStatus(" select a layer first (click its name)"); return; }
+    if (!paEditable(PA.sel)) { paStatus(` only the ${PA.doc.kind} layer can be edited here (the puppet is context)`); return; }
     if (PA.hidden.has(PA.sel)) { paStatus(" the selected layer is hidden"); return; }
     paBegin(p.w); };
   cv.onmousemove = e => { const p = paPos(e); PA.cursor = p.w;
@@ -1396,15 +1398,29 @@ function paWire() {
 }
 function paPreview() {
   const d = PA.doc, t = `&t=${d.stamp}`, strip = `walkstrip_${PA.view}.png`;
+  if (d.previews) {   // a hair / face layer: its previews on the male and female
+    $("paWalk").style.backgroundImage = "none";
+    $("paPrev").innerHTML = d.previews.map(f => `<img src="${img(d.dir + "/" + f)}${t}" title="${f}" style="width:126px;background:#c4c6cc;border-radius:3px">`).join(" ");
+    return; }
   $("paWalk").style.backgroundImage = d.files.includes(strip) ? `url("${img(d.dir + "/" + strip)}${t}")` : "none";
   $("paWalk").style.backgroundPosition = `-${+$("paFrame").value * 256}px 0`;
   $("paPrev").innerHTML = ["rest_front.png", "rest_back.png"].filter(f => d.files.includes(f)).map(f =>
     `<a href="${img(d.dir + "/" + f.replace("rest_", "walk_").replace(".png", ".gif"))}${t}" target="_blank"><img src="${img(d.dir + "/" + f)}${t}" style="width:126px;background:#c4c6cc;border-radius:3px"></a>`).join(" ");
 }
+async function openLayer(race, kind, id) {   // edit a hair / face layer on its puppet
+  if (Object.values(PA.dirty).some(Boolean) && !confirm("Discard the unsaved edits?")) return;
+  PA.opening = true; await initParts(true);
+  PA.layer = { race, kind, id }; PA.build = null; PA.id = id; PA.parts = {}; PA.tmpl = {}; PA.undo = []; PA.redo = []; PA.dirty = {}; PA.mask = null; PA.ghost = null;
+  PA.doc = await api("/api/ws/face/layer_doc", { race, kind, id });
+  if (!PA.doc.views[PA.view]) { PA.view = "front"; $("paView").value = "front"; }
+  $("paBuild").innerHTML = `<option>${race} ${kind}</option>`; $("paCand").innerHTML = `<option>${id} (on ${PA.doc.on})</option>`;
+  await paLoadView(PA.view); PA.sel = "layer";
+  paLayers(); paPreview(); paStatus(` editing the ${kind} layer (the puppet underneath is context)`); paDraw();
+}
 async function openParts(build, id) {
   if (Object.values(PA.dirty).some(Boolean) && (build !== PA.build || id !== PA.id) && !confirm("Discard the unsaved part edits?")) return;
-  await initParts(true);
-  PA.build = build; PA.id = id; PA.parts = {}; PA.tmpl = {}; PA.undo = []; PA.redo = []; PA.dirty = {}; PA.mask = null; PA.ghost = null;
+  PA.opening = true; await initParts(true);
+  PA.layer = null; PA.build = build; PA.id = id; PA.parts = {}; PA.tmpl = {}; PA.undo = []; PA.redo = []; PA.dirty = {}; PA.mask = null; PA.ghost = null;
   PA.doc = await api("/api/ws/paint/parts", { build, id });
   await paFillPickers();
   await paLoadView(PA.view);
@@ -1420,6 +1436,12 @@ async function paFillPickers() {
     || `<option value="">(no paint candidates)</option>`;
 }
 async function paSave() {
+  if (PA.layer) {   // a hair / face layer: one PNG per edited view
+    const L = PA.layer; let n = 0;
+    for (const v of Object.keys(PA.doc.views)) if (PA.dirty[paKey(v, "layer")]) {
+      PA.doc = await api("/api/ws/face/layer_save", { ...L, view: v, png: PA.parts[paKey(v, "layer")].toDataURL("image/png") }); n++; }
+    PA.dirty = {}; paLayers(); paPreview(); paStatus(n ? " saved (levels and previews updated)" : " nothing to save"); FC.urls = {};
+    return; }
   const v = PA.view, parts = {};
   for (const n of PA.doc.views[v].order) if (PA.dirty[paKey(v, n)]) parts[n] = PA.parts[paKey(v, n)].toDataURL("image/png");
   const other = PA.doc.views[v === "front" ? "back" : "front"].order.filter(n => PA.dirty[paKey(v === "front" ? "back" : "front", n)]);
@@ -1431,6 +1453,7 @@ async function paSave() {
   PA.dirty = {}; paLayers(); paStatus(" saved; the walk re-renders (queue)"); pollJobs();
 }
 async function paFix() {
+  if (PA.layer) throw new Error("The AI fix works on paint parts; for a face or hair layer, paint it or queue new candidates.");
   if (!PA.sel) throw new Error("Select the layer to fix first.");
   if (!PA.mask) throw new Error("Mark the area first (AI fix area tool, M).");
   if (PA.dirty[paKey(PA.view, PA.sel)]) await paSave();   // the server paints on the saved part
@@ -1448,10 +1471,15 @@ async function initParts(quiet) {
   $("paReset").onclick = () => { PA.vw = { z: 1, ox: 0, oy: 0 }; paDraw(); };
   $("paUndo").onclick = () => paUndo(PA.undo, PA.redo); $("paRedo").onclick = () => paUndo(PA.redo, PA.undo);
   $("paAll").onclick = () => { PA.hidden.clear(); paLayers(); paDraw(); };
-  $("paView").onchange = guard(async () => { PA.view = $("paView").value; PA.ghost = null; await paLoadView(PA.view); paLayers(); paPreview(); paDraw(); });
+  $("paView").onchange = guard(async () => {
+    if (PA.doc && !PA.doc.views[$("paView").value]) { $("paView").value = PA.view; throw new Error("A face layer has no back view."); }
+    PA.view = $("paView").value; PA.ghost = null; await paLoadView(PA.view); paLayers(); paPreview(); paDraw(); });
   $("paFrame").oninput = paPreview;
   $("paSave").onclick = guard(paSave);
-  $("paRevert").onclick = guard(async () => { if (!confirm("Throw away every edit of this candidate and go back to the painted parts?")) return;
+  $("paRevert").onclick = guard(async () => {
+    if (PA.layer) { if (!confirm(`Throw away every edit of this ${PA.layer.kind} layer?`)) return;
+      await api("/api/ws/face/layer_revert", PA.layer); PA.dirty = {}; await openLayer(PA.layer.race, PA.layer.kind, PA.layer.id); return; }
+    if (!confirm("Throw away every edit of this candidate and go back to the painted parts?")) return;
     await api("/api/ws/paint/revert", { build: PA.build, id: PA.id }); PA.dirty = {}; await openParts(PA.build, PA.id); });
   $("paFix").onclick = guard(paFix);
   api("/api/ws/paint/spec", {}).then(r => { PA.pspec = r.spec; $("paFixBase").value = r.spec.fix; }).catch(e => err(e.message));
@@ -1464,6 +1492,7 @@ async function initParts(quiet) {
   $("paCand").onchange = guard(async () => { if ($("paCand").value) await openParts($("paBuild").value, $("paCand").value); });
   if (!quiet && !PA.doc) {   // first open: the newest approved paint of human.* (else nothing yet)
     for (const b of ["human.male", "human.female", "human.unisex"]) { const st = await api("/api/ws/paint/state", { build: b });
+      if (PA.opening || PA.doc) return;   // an Edit button is opening something: don't replace it
       const c = st.approved || (st.candidates.length ? st.candidates[st.candidates.length - 1].id : null);
       if (c) { await openParts(b, c); return; } }
     PA.build = "human.male"; await paFillPickers(); paStatus(" no paint candidates yet (Races → Paint)");
@@ -1500,6 +1529,7 @@ function fcCard(kind) {
       <div class="row" style="gap:3px;margin:0;flex-wrap:nowrap">${files.filter(f => c.files.includes(f)).map(f => `<img loading="lazy" src="${u(f)}" style="width:${kind === "hair" ? 120 : 170}px;height:${kind === "hair" ? 120 : 170}px;background:#c4c6cc;border-radius:3px" title="${f}">`).join("")}</div>
       <div class="hint">${c.meta.from_paint ? `from paint ${c.meta.paint} (${c.meta.on})` : `seed ${c.meta.seed ?? "?"} · on ${c.meta.on || "?"}`}${nokey ? ` · <span style="color:var(--warn)">${kind === "hair" ? "hair" : "irises"} not keyed: can't be recoloured</span>` : ""}</div>
       <div class="row" style="gap:4px;margin:0"><button data-fcset="${c.id}" data-kind="${kind}" data-on="${c.in_set ? 0 : 1}" style="flex:1">${c.in_set ? "✓ in the set" : "Add to the set"}</button>
+        <button data-fcedit="${c.id}" data-kind="${kind}" title="Edit the layer in the Parts editor">Edit</button>
         ${c.in_set ? "" : `<button data-fcarc="${c.id}" data-kind="${kind}" title="Archive (moves to archive/workshop/face/)" style="width:auto;padding:2px 8px">✕</button>`}</div></div>`; }).join("");
   const key = `${kind}:${FC.race}`, val = key in FC.drafts ? FC.drafts[key] : (r[kind] || "");
   return `<div class="card"><h2 style="margin-top:0">${kind === "hair" ? "Hair" : "Face (eyes, brows, nose, mouth)"} <span class="hint">${st.sets[kind].length} in ${FC.race}'s set</span></h2>
@@ -1538,6 +1568,8 @@ function fcRender() {
       seed: +document.querySelector(`[data-fcseed="${kind}"]`).value, label: `${FC.race} · ${kind} · face` }]); }));
   document.querySelectorAll("[data-fcset]").forEach(b_ => b_.onclick = guard(async () => {
     FC.st = await api("/api/ws/face/set", { race: FC.race, kind: b_.dataset.kind, id: b_.dataset.fcset, on: b_.dataset.on === "1" }); fcRender(); }));
+  document.querySelectorAll("[data-fcedit]").forEach(b_ => b_.onclick = guard(async () => {
+    document.querySelector('.tab[data-t="parts"]').click(); await openLayer(FC.race, b_.dataset.kind, b_.dataset.fcedit); }));
   document.querySelectorAll("[data-fcarc]").forEach(b_ => b_.onclick = guard(async () => {
     FC.st = await api("/api/ws/face/archive", { race: FC.race, kind: b_.dataset.kind, id: b_.dataset.fcarc }); fcRender(); }));
   document.querySelectorAll("[data-fcramp]").forEach(sel => sel.onchange = guard(async () => {   // previews in another hair / eye colour

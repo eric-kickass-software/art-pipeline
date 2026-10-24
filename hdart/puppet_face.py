@@ -663,6 +663,93 @@ def ramp_preview(build):
     return out
 
 
+# ----------------------------------------------------------------------------- editing a layer (Workshop Parts tab)
+
+def _views(kind):
+    return ("front",) if kind == "face" else ("front", "back")
+
+
+def layer_doc(race, kind, fid):
+    """What the Parts editor needs to edit a hair / face layer in place: the puppet it was made on as (read-only) context
+    layers (for a face, the head with its own face removed) and the layer itself, drawn right after the head."""
+    d = out_dir(race, kind) / fid
+    if not d.exists():
+        raise ValueError(f"No {kind} candidate {fid}.")
+    meta = json.loads((d / "meta.json").read_text(encoding="utf-8")) if (d / "meta.json").exists() else {}
+    build = meta.get("on") or f"{race}.male"
+    cid, sp, parts = base(build)
+    pd = ppt.out_dir(build) / cid
+    views = {}
+    for v in _views(kind):
+        order = list(sp["views"][v]["order"]); order.insert(order.index("head") + 1, "layer")
+        paths = {n: ws.rel(pd / "parts" / v / f"{n}.png") for n in sp["views"][v]["order"]}
+        if kind == "face":   # the faceless head under the face layer
+            h = blank_face(parts[v]["head"], face_ellipse(sp, 1.2) & inner_head(parts[v]["head"]))
+            Image.fromarray(h).save(d / f"ctx_head_{v}.png"); paths["head"] = ws.rel(d / f"ctx_head_{v}.png")
+        paths["layer"] = ws.rel(d / f"layer_{v}.png")
+        views[v] = {"order": order, "parts": paths, "template": {}}
+    files = sorted(f.name for f in d.glob("*.*"))
+    stamp = int(max((f.stat().st_mtime for f in d.glob("*.*")), default=0))
+    prev = [f for f in ("prev_male_front.png", "prev_male_back.png", "prev_female_front.png", "prev_female_back.png") if f in files]
+    return {"race": race, "kind": kind, "id": fid, "dir": ws.rel(d), "on": build, "views": views, "editable": ["layer"],
+            "files": files, "previews": prev, "stamp": stamp, "edited": any(f.startswith("layer_orig_") for f in files)}
+
+
+def levels_from_layer(kind, L, sp=None):
+    """Recompute a layer's colour levels after an edit. Hair: dark pixels = outline (254), the rest 5 brightness levels
+    (so any colour painted in works; the ramp colours it). Face: the magenta-key irises."""
+    if kind == "face":
+        return iris_levels(L, eyes=sp["views"]["front"]["shapes"]["head"]["face"]["eyes"] if sp else None)
+    a = L[..., 3] > 127; _, _, val = _hsv(L[..., :3]); lev = np.zeros(L.shape, np.uint8)
+    line = a & (val < 0.22); hair = a & ~line
+    if hair.any():
+        v_ = val[hair]; cent = np.percentile(v_, np.linspace(10, 90, 5))
+        for _ in range(20):
+            lab = np.abs(v_[:, None] - cent[None]).argmin(1)
+            cent = np.array([v_[lab == i].mean() if (lab == i).any() else cent[i] for i in range(5)])
+        cent.sort(); lev[..., 0][hair] = np.abs(v_[:, None] - cent[None]).argmin(1)
+    lev[..., 0][line] = 254; lev[..., 3][a] = 255
+    return lev
+
+
+def save_layer(race, kind, fid, view, png):
+    """An edited layer from the Parts editor (PNG data URL / bytes, 1024 px): the first edit keeps the original
+    (layer_orig_<view>.png); levels and previews are recomputed."""
+    import base64, io
+    d = out_dir(race, kind) / fid
+    if view not in _views(kind) or not d.exists():
+        raise ValueError("Unknown candidate or view.")
+    raw = base64.b64decode(png.split(",", 1)[-1]) if isinstance(png, str) else png
+    im = Image.open(io.BytesIO(raw)).convert("RGBA")
+    if im.size != (N, N):
+        raise ValueError(f"expected {N} px, got {im.size}")
+    if not (d / f"layer_orig_{view}.png").exists():
+        shutil.copy(d / f"layer_{view}.png", d / f"layer_orig_{view}.png")
+        if (d / f"levels_{view}.png").exists():
+            shutil.copy(d / f"levels_{view}.png", d / f"levels_orig_{view}.png")
+    L = np.asarray(im); im.save(d / f"layer_{view}.png")
+    meta = json.loads((d / "meta.json").read_text(encoding="utf-8")) if (d / "meta.json").exists() else {}
+    sp = base(meta.get("on") or f"{race}.male")[1]
+    lev = levels_from_layer(kind, L, sp); Image.fromarray(lev).save(d / f"levels_{view}.png")
+    meta.setdefault("keyed", {})[view] = int((lev[..., 3] > 0).sum()); meta["edited"] = True
+    (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    previews(race, kind, fid)
+    return layer_doc(race, kind, fid)
+
+
+def revert_layer(race, kind, fid):
+    d = out_dir(race, kind) / fid
+    for v in _views(kind):
+        for stem in ("layer", "levels"):
+            o = d / f"{stem}_orig_{v}.png"
+            if o.exists():
+                shutil.move(str(o), str(d / f"{stem}_{v}.png"))
+    meta = json.loads((d / "meta.json").read_text(encoding="utf-8")) if (d / "meta.json").exists() else {}
+    meta.pop("edited", None); (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    previews(race, kind, fid)
+    return layer_doc(race, kind, fid)
+
+
 def refresh_previews(race):
     """Re-render every candidate's previews (after a new paint is approved)."""
     for kind in KINDS:

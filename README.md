@@ -374,6 +374,12 @@ tab is gone: its descriptor groups are there, its mannequin clothing / builds / 
      the keyed pixel count). "Add to the set" builds the race's **hair set** / **face set** (state: `<race>.unisex.face_sets`);
      ✕ archives. A colour picker per card re-renders the previews with any hair / eye ramp (`face/preview`). Each card has
      the race's text next to its Queue button and the prompts it sends; shared wording + key colours in Shared prompts.
+   - **Edit** on a candidate opens its layer in the Parts editor (2026-10-25): the puppet it was made on is read-only
+     context (a face sits on the faceless head), the layer is drawn right after the head and is the only editable layer;
+     brush / eyedropper / eraser / heal / outline, zoom, undo. Save keeps the original (`layer_orig_<view>.png`, Revert
+     restores it) and recomputes the levels (`levels_from_layer`: hair = dark pixels as outline + 5 brightness levels, so
+     any colour painted in still takes the hair ramps; face = the magenta-key irises) and the previews. The AI fix is for
+     paint parts only. Actions `face/layer_doc|layer_save|layer_revert`.
    - Jobs `face_gen {race, what (hair|face), sex, n, seed}`; actions `face/state|spec|set|archive|preview|ramp_preview`.
      Tests: `tests/test_puppet_face.py` (ComfyUI stubbed with a fake that paints the keys).
 5. **Ramps** tab (2026-10-24: painted puppets + the race's colour set): pick a **race**; the preview recolours its painted

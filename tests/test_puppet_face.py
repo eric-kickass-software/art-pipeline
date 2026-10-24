@@ -76,6 +76,20 @@ except ValueError:
 h2 = pf.generate("human", "hair", "male", n=1, seed=8)[0]
 pf.archive("human", "hair", h2); assert not (pf.out_dir("human", "hair") / h2).exists()
 
+# editing a layer (Parts editor): the doc puts the layer after the head, a save keeps the original, recomputes levels
+import base64, io
+ld = pf.layer_doc("human", "face", f)
+assert list(ld["views"]) == ["front"] and ld["views"]["front"]["order"].index("layer") == ld["views"]["front"]["order"].index("head") + 1
+assert ld["editable"] == ["layer"] and ld["views"]["front"]["parts"]["head"].endswith("ctx_head_front.png")
+L0 = np.asarray(Image.open(fd / "layer_front.png")).copy(); L1 = L0.copy(); L1[L1[..., 3] > 0] = 0   # erase everything
+buf = io.BytesIO(); Image.fromarray(L1).save(buf, "PNG")
+pf.save_layer("human", "face", f, "front", "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode())
+assert (fd / "layer_orig_front.png").exists() and json.loads((fd / "meta.json").read_text())["keyed"]["front"] == 0
+pf.revert_layer("human", "face", f)
+assert np.array_equal(np.asarray(Image.open(fd / "layer_front.png")), L0) and not (fd / "layer_orig_front.png").exists()
+hl = pf.levels_from_layer("hair", np.asarray(Image.open(d / "layer_front.png")))
+assert (hl[..., 3] > 0).sum() > 500 and set(np.unique(hl[..., 0][hl[..., 3] > 0])) <= set(range(5)) | {254}
+
 # Ramps: the puppet wears the set's hair + the newest face; three level maps
 rp = pf.ramp_preview("human.male")
 assert rp["hair"] == h and rp["face"] == f and {"art", "levels", "hair", "eyes"} <= set(rp["facings"]["front"]) and "hair" in rp["facings"]["back"]

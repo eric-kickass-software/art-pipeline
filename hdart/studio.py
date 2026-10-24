@@ -265,6 +265,12 @@ def workshop_post(st, action, b):
             return pf.set_member(b["race"], b["kind"], b["id"], b.get("on", True))
         if action == "face/archive":
             return pf.archive(b["race"], b["kind"], b["id"])
+        if action == "face/layer_doc":   # Parts editor: edit a hair / face layer
+            return pf.layer_doc(b["race"], b["kind"], b["id"])
+        if action == "face/layer_save":
+            return pf.save_layer(b["race"], b["kind"], b["id"], b["view"], b["png"])
+        if action == "face/layer_revert":
+            return pf.revert_layer(b["race"], b["kind"], b["id"])
         if action == "face/ramp_preview":   # Ramps tab: the painted puppet wearing the race's hair + face, three level maps
             return pf.ramp_preview(b["build"])
         if action == "face/preview":   # previews with another hair / eye ramp (data URLs)
