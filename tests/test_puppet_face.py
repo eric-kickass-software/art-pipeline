@@ -80,6 +80,9 @@ pf.archive("human", "hair", h2); assert not (pf.out_dir("human", "hair") / h2).e
 rp = pf.ramp_preview("human.male")
 assert rp["hair"] == h and rp["face"] == f and {"art", "levels", "hair", "eyes"} <= set(rp["facings"]["front"]) and "hair" in rp["facings"]["back"]
 
+# saving keeps the key colours (a race's text save from the tab doesn't send them)
+sv = pf.spec(); sv.pop("hair_key", None); sv.pop("eye_key", None); sv["races"]["human"]["hair"] = "long braided hair"
+out_ = pf.save_spec(sv); assert out_["hair_key"] == "#22c822" and out_["eye_key"] == "#d020d0"
 # shared prompts are validated
 bad = pf.spec(); bad["hair"]["front"] = "no placeholder"
 try:

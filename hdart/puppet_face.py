@@ -45,7 +45,13 @@ def save_spec(doc):
     for r, e in races.items():
         if not isinstance(e, dict) or not all(isinstance(e.get(k, ""), str) for k in KINDS):
             raise ValueError(f"races.{r} needs text fields hair and face")
-    out = {"_doc": old.get("_doc", ""), "hair": doc["hair"], "face": doc["face"], "races": races}
+    key = lambda k, d_: str(doc.get(k) or old.get(k) or d_)   # a race text save from the tab doesn't send the keys
+    for k in ("hair_key", "eye_key"):
+        v = key(k, "")
+        if v and not (len(v) == 7 and v.startswith("#") and all(c in "0123456789abcdefABCDEF" for c in v[1:])):
+            raise ValueError(f"{k} must be a #rrggbb colour")
+    out = {"_doc": old.get("_doc", ""), "hair_key": key("hair_key", "#22c822"), "eye_key": key("eye_key", "#d020d0"),
+           "hair": doc["hair"], "face": doc["face"], "races": races}
     SPEC.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8", newline="\n")
     return out
 
