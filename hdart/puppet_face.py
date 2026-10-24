@@ -27,7 +27,7 @@ KINDS = ("hair", "face")
 SEXES = ("male", "female")
 S = ppt.S
 N = pp.PX * S
-D_HAIR, D_FACE = 0.85, 0.75
+D_HAIR, D_FACE = 0.85, 0.7
 
 
 def spec():
@@ -143,6 +143,42 @@ def key_marks(rgba, fc):
     d.line([(m[0] - 0.45 * r, m[1]), (m[0] + 0.45 * r, m[1])], fill=(110, 60, 55, 255), width=max(2, int(r * 0.18)))
     out = np.asarray(im).copy(); out[..., 3] = rgba[..., 3]
     return out
+
+
+def face_guide(rgba, fc):
+    """A strong, drawn face guide where the Template's face guides say (a simple face for FLUX to refine): almond eye
+    whites with a thick upper lid line, magenta-key irises with a dark pupil and a highlight, brows, a nose tick and a
+    mouth. The eye on the far side of the 3/4 face is drawn a little narrower."""
+    im = Image.fromarray(rgba).convert("RGBA"); hi = Image.new("RGBA", im.size); d = ImageDraw.Draw(hi)
+    h_ = spec().get("eye_key", "#d020d0").lstrip("#"); key = tuple(int(h_[i:i + 2], 16) for i in (0, 2, 4)) + (255,)
+    dark, line = (34, 26, 24, 255), (60, 40, 34, 255)
+    e0, e1 = np.array(fc["eyes"][0]) * S, np.array(fc["eyes"][1]) * S; w = np.linalg.norm(e1 - e0)
+    m = np.array(fc["mouth"]) * S; lw = max(3, int(0.035 * w))
+    for e, far in ((e0, e0[0] < e1[0]), (e1, e0[0] >= e1[0])):   # faces look left: the left eye is the far one
+        rx, ry = (0.23 if far else 0.27) * w, 0.24 * w
+        d.ellipse([e[0] - rx, e[1] - ry, e[0] + rx, e[1] + ry], fill=(246, 244, 240, 255))                    # white
+        ir = 0.18 * w
+        d.ellipse([e[0] - ir * (0.8 if far else 1.0), e[1] - ir, e[0] + ir * (0.8 if far else 1.0), e[1] + ir], fill=key)  # iris
+        d.ellipse([e[0] - 0.4 * ir, e[1] - 0.45 * ir, e[0] + 0.4 * ir, e[1] + 0.45 * ir], fill=dark)                 # pupil
+        d.ellipse([e[0] - 0.55 * ir, e[1] - 0.75 * ir, e[0] - 0.1 * ir, e[1] - 0.3 * ir], fill=(255, 255, 255, 255))  # highlight
+        d.arc([e[0] - rx, e[1] - ry, e[0] + rx, e[1] + ry], 190, 350, fill=dark, width=lw * 2)                       # upper lid
+        d.arc([e[0] - rx, e[1] - ry, e[0] + rx, e[1] + ry], 30, 150, fill=line, width=max(2, lw // 2))               # lower lid
+        by = e[1] - 0.48 * w                                                                                        # brow
+        d.line([(e[0] - rx * 1.05, by + 0.05 * w), (e[0], by - 0.02 * w), (e[0] + rx * 1.05, by + 0.03 * w)], fill=dark, width=lw)
+    mid = (e0 + e1) / 2; nose = np.array([mid[0] - 0.08 * w, (mid[1] + m[1]) / 2])
+    d.line([(nose[0], nose[1] - 0.05 * w), (nose[0] - 0.04 * w, nose[1] + 0.03 * w), (nose[0] + 0.02 * w, nose[1] + 0.04 * w)], fill=line, width=max(2, lw // 2))
+    d.arc([m[0] - 0.14 * w, m[1] - 0.08 * w, m[0] + 0.14 * w, m[1] + 0.05 * w], 20, 160, fill=line, width=max(2, lw // 2 + 1))
+    a = np.asarray(hi)[..., 3] > 0; out = np.asarray(im).copy(); out[a] = np.asarray(hi)[a]; out[..., 3] = rgba[..., 3]
+    return out
+
+
+def _figure_box(comp, pad=30):
+    """The Paint step's figure-pass framing: the whole figure in a square (the scale its faces came out well at)."""
+    a = np.asarray(comp)[..., 3] > 127; ys, xs = np.nonzero(a)
+    x0, y0, x1, y1 = xs.min() - pad, ys.min() - pad, xs.max() + pad, ys.max() + pad
+    side = max(x1 - x0, y1 - y0); cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+    bx = int(np.clip(cx - side // 2, 0, N - side)); by = int(np.clip(cy - side // 2, 0, N - side))
+    return (bx, by, bx + side, by + side)
 
 
 def _components(mask, min_px):
@@ -435,11 +471,11 @@ def _make_one(race, kind, sex, build, cid, sp, parts, P, d, fid, sd):
         else:
             ppt._progress(d, 1, of, "face", sd)
             v = "front"; region = face_ellipse(sp) & inner_head(parts[v]["head"])   # off the jaw / chin outline
-            box, _ = _head_box(parts[v], 0.05, 0.05, 0.05)
             key = skin_key(parts[v]["head"])
-            comp = compose(sp, v, parts[v], blank=True)
+            comp = compose(sp, v, parts[v], blank=True)   # the whole faceless puppet as context
+            box = _figure_box(comp)                       # framed like the Paint step's figure pass
             ca = np.asarray(comp).copy(); fc = sp["views"]["front"]["shapes"]["head"]["face"]
-            comp = Image.fromarray(key_marks(ca, fc))   # where the features go (like the Paint step's marks)
+            comp = Image.fromarray(face_guide(ca, fc))    # a strong drawn face guide for FLUX to refine
             before, after, init, out = _crop_pass(comp, region, box, P["face"], sd, D_FACE, f"{race}_{fid}_face")
             blank_ = np.asarray(compose(sp, v, parts[v], blank=True)); al = blank_[..., 3:4] / 255.0   # the layer = what differs
             before = (blank_[..., :3] * al + 255 * (1 - al)).astype(np.uint8)                          # from the blank head

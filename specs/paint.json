@@ -1,13 +1,13 @@
 {
   "_doc": "Prompts of the puppet Paint step (hdart/puppet_paint.py, Workshop Race tab: the Paint block of each gender row and the Shared prompts card). A paint prompt is the Race tab's style groups + `figure` (or `complete`) with {body} = race traits + description + the gender body text (specs/races.json) + `sexes.<sex>.extra`, and {clothes} = `sexes.<sex>.clothes`. The back adds `back_reference`. `fix` is the Parts editor's AI fix. `face_guide`: keyed (default: the head gets its own face, painted with the whole character, irises in the magenta key; each paint's face is harvested into the race's face candidates, Face tab), marks (the same, irises not keyed) or faint (a faceless head; faces only from the Face tab's own face pass).",
-  "face_guide": "keyed",
+  "face_guide": "faint",
   "style_groups": [
     "style",
     "proportions",
     "rendering"
   ],
   "figure": {
-    "front": "One {body}, {clothes}, full body, three-quarter view facing left, seen slightly from above, standing in an A-pose, arms held out and down away from the body; a face with eyes, eyebrows and a small neutral mouth; the irises are one flat vivid magenta (a colour key), on a pure white background.",
+    "front": "One {body}, {clothes}, full body, three-quarter view facing left, seen slightly from above, standing in an A-pose, arms held out and down away from the body; a blank face: no eyes, no eyebrows, no nose and no mouth drawn, only very faint light guide lines where they will go, on a pure white background.",
     "back": "One {body}, {clothes}, full body, seen from behind in a three-quarter back view, seen slightly from above, standing in the same A-pose; the back of the bald head and the ears, on a pure white background."
   },
   "back_reference": "The same character as in the reference image, now seen from behind.",
