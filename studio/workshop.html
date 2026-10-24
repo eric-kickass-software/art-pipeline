@@ -27,6 +27,8 @@
   .row > label { color:var(--muted); }
   .card { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:10px 12px; margin-bottom:10px; }
   .err { color:var(--bad); white-space:pre-wrap; }
+  .tpl { display:flex; align-items:center; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:12px; }
+  .tpl:hover { background:var(--card); } .tpl.on { background:#4a3c22; color:var(--accent); }
   .chips { display:flex; flex-wrap:wrap; gap:4px; margin:4px 0; }
   .chip { font-size:11px; padding:2px 7px; border-radius:10px; background:#2f2838; border:1px solid var(--line); cursor:pointer; }
   .chip:hover { border-color:var(--accent); }
@@ -157,17 +159,22 @@
       <div class="row"><label>Part</label><select id="tpPart" style="max-width:170px"></select>
         <label>Art</label><input id="tpArt" type="range" min="0" max="1" step="0.05" value="0.45" style="max-width:110px">
         <label>Parts</label><input id="tpParts" type="range" min="0" max="1" step="0.05" value="0.75" style="max-width:110px">
-        <label class="chip"><input id="tpGuides" type="checkbox" checked style="width:auto"> guides</label>
-        <label>Size</label><select id="tpZoom" style="max-width:80px"><option value="440">small</option><option value="560" selected>medium</option><option value="760">large</option></select>
+        <label>Size</label><select id="tpZoom" style="max-width:90px"><option value="440">small</option><option value="560" selected>medium</option><option value="760">large</option><option value="960">x-large</option></select>
+        <button id="tpReset" title="Back to the whole figure (both views)">Reset zoom</button>
         <button id="tpUndo">Undo</button><button class="primary" id="tpSave">Save</button><button class="primary" id="tpRender">Save &amp; render preview</button>
         <button id="tpMeasure" title="Throw away edits and measure again from the approved human.unisex rig">Re-measure</button>
         <span class="hint" id="tpStatus"></span></div>
-      <div class="row" style="align-items:flex-start"><canvas id="tpCv_front" width="512" height="512" style="width:560px;cursor:crosshair;border-radius:4px"></canvas>
-        <canvas id="tpCv_back" width="512" height="512" style="width:560px;cursor:crosshair;border-radius:4px"></canvas></div>
+      <div class="row" style="align-items:flex-start;flex-wrap:nowrap">
+        <div style="min-width:190px"><div class="row" style="margin:0 0 4px"><b>Layers</b><button id="tpAll" style="padding:1px 8px">all</button><button id="tpNone" style="padding:1px 8px" title="hide every part">no parts</button></div>
+          <div id="tpLayers"></div></div>
+        <div class="row" style="align-items:flex-start;margin:0"><canvas id="tpCv_front" width="512" height="512" style="width:560px;cursor:crosshair;border-radius:4px"></canvas>
+        <canvas id="tpCv_back" width="512" height="512" style="width:560px;cursor:crosshair;border-radius:4px"></canvas></div></div>
       <p class="hint">Drag: <b style="color:#2a50ff">shoulder/hip</b>, <b style="color:#ff2a2a">elbow/knee</b>, <b style="color:#ff9a00">wrist/ankle</b>,
         <b style="color:#22b14c">fingertip/toe</b>, <b style="color:#a24bd6">neck/pelvis/crotch</b>, <b style="color:#e1288f">waistband</b>.
-        Click a part to select it (in both views): <b style="color:#ffd23f">width handles</b> on limbs (the first width of an upper arm/thigh is the shoulder/hip circle),
-        <b style="color:#20c0c0">outline points</b> on the torso and head (double-click the outline to add one, Alt-click a point to remove it). Ctrl+Z undoes.</p>
+        Click a part (or its layer) to select it in both views. A limb segment is one path: <b style="color:#ffd23f">a circle at each joint</b> joined by straight
+        sides; drag a circle's square to resize it (an upper arm/thigh's first circle is the shoulder/hip circle). Torso and head:
+        <b style="color:#20c0c0">outline points</b> (double-click the outline to add one, Alt-click a point to remove it).
+        <b>Zoom</b>: mouse wheel (up to 8×); <b>pan</b>: right- or middle-drag, or hold Space and drag. Ctrl+Z undoes. Hidden layers can't be clicked.</p>
       <div class="hint" id="tpInfo"></div>
     </div>
     <div class="card"><h2 style="margin-top:0">Preview (rendered by the pipeline)</h2><div id="tpPreview" class="row" style="align-items:flex-start"></div></div>
@@ -843,10 +850,13 @@ setInterval(() => {   // refresh while race jobs run, and once more when the que
 }, 4000);
 
 // ------------------------------------------------------------------ template editor (clean puppet template = the rig)
-const TP = { st: null, spec: null, sel: null, undo: [], art: {}, dirty: false, inited: false, drag: null, tplDone: -1 };
-const TP_LIMBS = ["armA", "armB", "legA", "legB"], TP_SEGS = [["upper", "pivot", "mid"], ["lower", "mid", "end"], ["hand", "end", "tip"]];
+const TP = { st: null, spec: null, sel: null, undo: [], art: {}, dirty: false, inited: false, drag: null, pan: null, space: false,
+  tplDone: -1, vw: { front: { z: 1, ox: 0, oy: 0 }, back: { z: 1, ox: 0, oy: 0 } }, hidden: new Set() };
+try { TP.hidden = new Set(JSON.parse(localStorage.getItem("tpHidden") || "[]")); } catch (e) { }
+const TP_LIMBS = ["armA", "armB", "legA", "legB"];
 const TPC = { pivot: "#2a50ff", mid: "#ff2a2a", end: "#ff9a00", tip: "#22b14c", body: "#a24bd6", width: "#ffd23f", shape: "#20c0c0", seam: "#e1288f" };
 const tpJ = (V, name) => { const [k, j] = name.split("."); return j ? V.joints[k][j] : V.joints[name]; };
+const tpShown = (name) => !TP.hidden.has(name);
 function tpCatmull(P, n = 10) {   // closed Catmull-Rom through the landmarks (same as the Python renderer)
   const out = [], L = P.length;
   for (let i = 0; i < L; i++) {
@@ -856,89 +866,122 @@ function tpCatmull(P, n = 10) {   // closed Catmull-Rom through the landmarks (s
   }
   return out;
 }
-function tpDiscs(V, name) {   // a limb part as a sweep of discs: [[x, y, r], ...]
-  const L = V.limbs[name], a = tpJ(V, L.from), b = tpJ(V, L.to), w = L.widths, len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-  const n = Math.max(16, Math.round(len / 2)), out = [];
-  for (let i = 0; i <= n; i++) { const t = i / n, f = t * (w.length - 1), k = Math.min(w.length - 2, Math.floor(f)), r = (w[k] + (w[k + 1] - w[k]) * (f - k)) / 2;
-    out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, r]); }
+function tpCapsule(p0, r0, p1, r1, n = 40) {   // a limb segment: the circle at each joint + their tangent lines (= Python capsule())
+  const dx = p1[0] - p0[0], dy = p1[1] - p0[1], d = Math.hypot(dx, dy), out = [];
+  if (d <= Math.abs(r0 - r1) + 1e-6) { const [c, r] = r0 >= r1 ? [p0, r0] : [p1, r1];
+    for (let i = 0; i < 2 * n; i++) { const t = i / (2 * n) * 2 * Math.PI; out.push([c[0] + r * Math.cos(t), c[1] + r * Math.sin(t)]); } return out; }
+  const u = [dx / d, dy / d], v = [-u[1], u[0]], al = Math.acos(Math.max(-1, Math.min(1, (r0 - r1) / d)));
+  const at = (c, r, t) => [c[0] + r * (Math.cos(t) * u[0] + Math.sin(t) * v[0]), c[1] + r * (Math.cos(t) * u[1] + Math.sin(t) * v[1])];
+  for (let i = 0; i < n; i++) out.push(at(p0, r0, al + (2 * Math.PI - 2 * al) * i / (n - 1)));
+  for (let i = 0; i < n; i++) out.push(at(p1, r1, -al + 2 * al * i / (n - 1)));
   return out;
 }
-function tpWidthHandles(V, name) {
+function tpPoly(pts) { const p = new Path2D(); p.moveTo(...pts[0]); pts.slice(1).forEach(q => p.lineTo(...q)); p.closePath(); return p; }
+function tpPartPath(V, name) {
+  if (V.limbs[name]) { const L = V.limbs[name]; return tpPoly(tpCapsule(tpJ(V, L.from), L.widths[0] / 2, tpJ(V, L.to), L.widths[L.widths.length - 1] / 2)); }
+  return tpPoly(tpCatmull(V.shapes[name].points));
+}
+function tpWidthHandles(V, name) {   // one handle per joint circle, on the circle's rim (perpendicular to the bone)
   const L = V.limbs[name], a = tpJ(V, L.from), b = tpJ(V, L.to), len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
   const nrm = [-(b[1] - a[1]) / len, (b[0] - a[0]) / len];
-  return L.widths.map((w, i) => { const t = i / (L.widths.length - 1), base = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-    return { i, base, nrm, p: [base[0] + nrm[0] * w / 2, base[1] + nrm[1] * w / 2] }; });
+  return [[0, a], [L.widths.length - 1, b]].map(([i, base]) => { const r = L.widths[i] / 2;
+    return { i, base, r, p: [base[0] + nrm[0] * r, base[1] + nrm[1] * r] }; });
 }
-function tpPath(pts) { const p = new Path2D(), c = tpCatmull(pts); p.moveTo(...c[0]); c.slice(1).forEach(q => p.lineTo(...q)); p.closePath(); return p; }
 function tpWaist(V) {   // the waistband handle sits on the torso's centre line
   const n = V.joints.neck, c = V.joints.crotch, y = V.seams.waist.y, t = (y - n[1]) / ((c[1] - n[1]) || 1);
   return [n[0] + (c[0] - n[0]) * t, y];
 }
+function tpSize(v) {   // canvas pixels = CSS size x device pixels, so zoomed-in lines stay sharp
+  const cv = $(`tpCv_${v}`), css = +$("tpZoom").value, px = Math.round(css * (window.devicePixelRatio || 1));
+  cv.style.width = css + "px"; if (cv.width !== px) { cv.width = px; cv.height = px; }
+}
 function tpDraw(v) {
-  const cv = $(`tpCv_${v}`), x = cv.getContext("2d"), V = TP.spec.views[v];
-  x.fillStyle = "#c4c6cc"; x.fillRect(0, 0, 512, 512);
+  const cv = $(`tpCv_${v}`), x = cv.getContext("2d"), V = TP.spec.views[v], vw = TP.vw[v], k = cv.width / 512, z = vw.z;
+  const T = (c) => c.setTransform(k * z, 0, 0, k * z, k * vw.ox, k * vw.oy);
+  x.setTransform(1, 0, 0, 1, 0, 0); x.fillStyle = "#c4c6cc"; x.fillRect(0, 0, cv.width, cv.height);
+  T(x);
   const aop = +$("tpArt").value, pop = +$("tpParts").value;
-  if (TP.art[v] && aop > 0) { x.globalAlpha = aop; x.drawImage(TP.art[v], 0, 0, 512, 512); x.globalAlpha = 1; }
-  if (pop > 0) {   // parts drawn opaque off-screen in draw order (outline pass, then clay), then laid over the art
-    const off = document.createElement("canvas"); off.width = off.height = 512; const o = off.getContext("2d");
-    for (const name of V.order) {
-      const sel = name === TP.sel, fill = sel ? "#e7dcc0" : "#d2d0cb";
-      if (V.limbs[name]) { const D = tpDiscs(V, name);
-        o.fillStyle = "#3a3432"; D.forEach(([px, py, r]) => { o.beginPath(); o.arc(px, py, r + 1.6, 0, 7); o.fill(); });
-        o.fillStyle = fill; D.forEach(([px, py, r]) => { o.beginPath(); o.arc(px, py, r, 0, 7); o.fill(); });
-      } else { const p = tpPath(V.shapes[name].points); o.fillStyle = fill; o.fill(p); o.strokeStyle = "#3a3432"; o.lineWidth = 2.2; o.stroke(p); }
-    }
-    x.globalAlpha = pop; x.drawImage(off, 0, 0); x.globalAlpha = 1;
+  if (TP.art[v] && aop > 0 && tpShown("art")) { x.globalAlpha = aop; x.imageSmoothingEnabled = z < 3; x.drawImage(TP.art[v], 0, 0, 512, 512); x.globalAlpha = 1; }
+  if (pop > 0) {   // parts drawn opaque off-screen in draw order (each one fill + its own outline), then laid over the art
+    const off = document.createElement("canvas"); off.width = cv.width; off.height = cv.height; const o = off.getContext("2d"); T(o);
+    for (const name of V.order) { if (!tpShown(name)) continue;
+      const p = tpPartPath(V, name); o.fillStyle = name === TP.sel ? "#e7dcc0" : "#d2d0cb"; o.fill(p);
+      o.strokeStyle = "#3a3432"; o.lineWidth = 1.8; o.lineJoin = "round"; o.stroke(p); }
+    x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = pop; x.drawImage(off, 0, 0); x.globalAlpha = 1; T(x);
   }
-  const dot = (p, col, r = 5) => { x.fillStyle = col; x.beginPath(); x.arc(p[0], p[1], r, 0, 7); x.fill(); x.strokeStyle = "#000"; x.lineWidth = 1; x.stroke(); };
-  if ($("tpGuides").checked) {
-    x.lineWidth = 1.5; x.strokeStyle = "rgba(40,150,230,.9)";
-    for (const k of TP_LIMBS) { const j = V.joints[k]; x.beginPath(); x.moveTo(...j.pivot); x.lineTo(...j.mid); x.lineTo(...j.end); x.lineTo(...j.tip); x.stroke();
-      x.setLineDash([4, 3]); x.beginPath(); x.arc(j.pivot[0], j.pivot[1], j.R, 0, 7); x.stroke(); x.setLineDash([]); }
+  const px = 1 / z;   // one screen pixel (CSS-ish) in rig units: handles keep their size at any zoom
+  const dot = (p, col, r = 5) => { x.fillStyle = col; x.beginPath(); x.arc(p[0], p[1], r * px, 0, 7); x.fill(); x.strokeStyle = "#000"; x.lineWidth = px; x.stroke(); };
+  if (tpShown("guides")) {
+    x.lineWidth = 1.5 * px; x.strokeStyle = "rgba(40,150,230,.9)";
+    for (const kk of TP_LIMBS) { const j = V.joints[kk]; x.beginPath(); x.moveTo(...j.pivot); x.lineTo(...j.mid); x.lineTo(...j.end); x.lineTo(...j.tip); x.stroke(); }
     x.beginPath(); x.moveTo(...V.joints.neck); x.lineTo(...V.joints.pelvis); x.stroke();
     const w = tpWaist(V), tp = V.shapes.torso.points, xs = tp.map(p => p[0]), hw = (Math.max(...xs) - Math.min(...xs)) * 0.42;
-    x.strokeStyle = TPC.seam; x.lineWidth = 2; x.beginPath();
-    for (let u = -1; u <= 1.001; u += 0.1) { const px = w[0] + hw * u, py = w[1] + V.seams.waist.bow * hw * (1 - u * u); u === -1 ? x.moveTo(px, py) : x.lineTo(px, py); }
+    x.strokeStyle = TPC.seam; x.lineWidth = 2 * px; x.beginPath();
+    for (let u = -1; u <= 1.001; u += 0.1) { const qx = w[0] + hw * u, qy = w[1] + V.seams.waist.bow * hw * (1 - u * u); u === -1 ? x.moveTo(qx, qy) : x.lineTo(qx, qy); }
     x.stroke(); dot(w, TPC.seam, 5);
   }
-  for (const k of TP_LIMBS) for (const n of ["pivot", "mid", "end", "tip"]) dot(V.joints[k][n], TPC[n]);
-  for (const n of ["neck", "pelvis", "crotch"]) dot(V.joints[n], TPC.body);
-  if (TP.sel && V.limbs[TP.sel]) tpWidthHandles(V, TP.sel).forEach(h => {
-    x.strokeStyle = TPC.width; x.lineWidth = 1; x.beginPath(); x.moveTo(...h.base); x.lineTo(...h.p); x.stroke();
-    x.fillStyle = TPC.width; x.fillRect(h.p[0] - 4, h.p[1] - 4, 8, 8); x.strokeStyle = "#000"; x.strokeRect(h.p[0] - 4, h.p[1] - 4, 8, 8); });
-  if (TP.sel && V.shapes[TP.sel]) V.shapes[TP.sel].points.forEach(p => dot(p, TPC.shape, 4.5));
+  if (TP.sel && V.limbs[TP.sel] && tpShown(TP.sel)) tpWidthHandles(V, TP.sel).forEach(h => {   // the two joint circles
+    x.setLineDash([5 * px, 4 * px]); x.strokeStyle = TPC.width; x.lineWidth = 1.5 * px; x.beginPath(); x.arc(h.base[0], h.base[1], h.r, 0, 7); x.stroke(); x.setLineDash([]);
+    x.beginPath(); x.moveTo(...h.base); x.lineTo(...h.p); x.stroke();
+    const s = 4.5 * px; x.fillStyle = TPC.width; x.fillRect(h.p[0] - s, h.p[1] - s, 2 * s, 2 * s); x.strokeStyle = "#000"; x.lineWidth = px; x.strokeRect(h.p[0] - s, h.p[1] - s, 2 * s, 2 * s); });
+  if (tpShown("joints")) {
+    for (const kk of TP_LIMBS) for (const n of ["pivot", "mid", "end", "tip"]) dot(V.joints[kk][n], TPC[n]);
+    for (const n of ["neck", "pelvis", "crotch"]) dot(V.joints[n], TPC.body);
+  }
+  if (TP.sel && V.shapes[TP.sel] && tpShown(TP.sel)) V.shapes[TP.sel].points.forEach(p => dot(p, TPC.shape, 4.5));
+  x.setTransform(1, 0, 0, 1, 0, 0);
+  if (z > 1.01) { x.fillStyle = "rgba(0,0,0,.55)"; x.fillRect(6, 6, 54 * (window.devicePixelRatio || 1), 20 * (window.devicePixelRatio || 1));
+    x.fillStyle = "#fff"; x.font = `${12 * (window.devicePixelRatio || 1)}px system-ui`; x.fillText(`${z.toFixed(1)}×`, 12, 21 * (window.devicePixelRatio || 1)); }
 }
+function tpLayers() {   // top of the draw order first, like a paint program's layer list
+  const V = TP.spec.views.front, rows = ["joints", "guides", ...V.order.slice().reverse(), "art"];
+  const label = { joints: "joints (handles)", guides: "guides (bones, waistband)", art: "art (approved unisex)" };
+  $("tpLayers").innerHTML = rows.map(n => `<div class="tpl ${n === TP.sel ? "on" : ""}" data-lsel="${n}">
+    <input type="checkbox" data-ly="${n}" ${tpShown(n) ? "checked" : ""} style="width:auto;margin:0 6px 0 0">${label[n] || n}</div>`).join("");
+  $("tpLayers").querySelectorAll("[data-ly]").forEach(c => c.onchange = () => {
+    c.checked ? TP.hidden.delete(c.dataset.ly) : TP.hidden.add(c.dataset.ly); tpSaveHidden(); tpDrawAll(); });
+  $("tpLayers").querySelectorAll("[data-lsel]").forEach(r => r.onclick = (e) => {
+    if (e.target.tagName === "INPUT") return; const n = r.dataset.lsel;
+    if (V.limbs[n] || V.shapes[n]) { TP.sel = TP.sel === n ? null : n; $("tpPart").value = TP.sel || ""; tpDrawAll(); } });
+}
+function tpSaveHidden() { try { localStorage.setItem("tpHidden", JSON.stringify([...TP.hidden])); } catch (e) { } }
 function tpDrawAll() {
   if (!TP.spec) return;
-  ["front", "back"].forEach(tpDraw);
+  ["front", "back"].forEach(tpDraw); tpLayers();
   $("tpStatus").textContent = TP.dirty ? " unsaved changes" : "";
   const info = [];
   for (const v of ["front", "back"]) { const V = TP.spec.views[v];
-    if (TP.sel && V.limbs[TP.sel]) info.push(`${v}: widths ${V.limbs[TP.sel].widths.map(w => w.toFixed(0)).join(" · ")}`);
+    if (TP.sel && V.limbs[TP.sel]) info.push(`${v}: circles ${V.limbs[TP.sel].widths.map(w => w.toFixed(0)).join(" → ")} px`);
     if (TP.sel && V.shapes[TP.sel]) info.push(`${v}: ${V.shapes[TP.sel].points.length} outline points`); }
   $("tpInfo").textContent = TP.sel ? `${TP.sel}: ${info.join("   |   ")}` : "No part selected.";
 }
 function tpPushUndo() { TP.undo.push(JSON.stringify(TP.spec.views)); if (TP.undo.length > 80) TP.undo.shift(); }
 function tpUndo() { if (!TP.undo.length) return; TP.spec.views = JSON.parse(TP.undo.pop()); TP.dirty = true; tpDrawAll(); }
-function tpHit(V, p) {   // the handle under the cursor (selected part's handles first), else the part under it
-  const near = (q, r = 9) => Math.hypot(q[0] - p[0], q[1] - p[1]) < r;
-  if (TP.sel && V.limbs[TP.sel]) for (const h of tpWidthHandles(V, TP.sel)) if (near(h.p)) return { type: "w", part: TP.sel, i: h.i };
-  if (TP.sel && V.shapes[TP.sel]) { const pts = V.shapes[TP.sel].points; for (let i = 0; i < pts.length; i++) if (near(pts[i], 8)) return { type: "pt", part: TP.sel, i }; }
-  for (const k of TP_LIMBS) for (const n of ["tip", "end", "mid", "pivot"]) if (near(V.joints[k][n])) return { type: "joint", name: `${k}.${n}` };
-  for (const n of ["neck", "pelvis", "crotch"]) if (near(V.joints[n])) return { type: "joint", name: n };
-  if ($("tpGuides").checked && near(tpWaist(V))) return { type: "seam" };
-  const x = $("tpCv_front").getContext("2d");
-  for (const name of [...V.order].reverse()) {
-    if (V.limbs[name]) { if (tpDiscs(V, name).some(([px, py, r]) => Math.hypot(px - p[0], py - p[1]) <= r)) return { type: "part", name }; }
-    else if (x.isPointInPath(tpPath(V.shapes[name].points), p[0], p[1])) return { type: "part", name };
+function tpHit(v, V, p) {   // the handle under the cursor (selected part's handles first), else the visible part under it
+  const z = TP.vw[v].z, near = (q, r = 9) => Math.hypot(q[0] - p[0], q[1] - p[1]) < r / z;
+  if (TP.sel && tpShown(TP.sel) && V.limbs[TP.sel]) for (const h of tpWidthHandles(V, TP.sel)) if (near(h.p)) return { type: "w", part: TP.sel, i: h.i };
+  if (TP.sel && tpShown(TP.sel) && V.shapes[TP.sel]) { const pts = V.shapes[TP.sel].points; for (let i = 0; i < pts.length; i++) if (near(pts[i], 8)) return { type: "pt", part: TP.sel, i }; }
+  if (tpShown("joints")) {
+    for (const k of TP_LIMBS) for (const n of ["tip", "end", "mid", "pivot"]) if (near(V.joints[k][n])) return { type: "joint", name: `${k}.${n}` };
+    for (const n of ["neck", "pelvis", "crotch"]) if (near(V.joints[n])) return { type: "joint", name: n };
   }
+  if (tpShown("guides") && near(tpWaist(V))) return { type: "seam" };
+  const x = $("tpCv_front").getContext("2d"); x.setTransform(1, 0, 0, 1, 0, 0);
+  for (const name of [...V.order].reverse()) if (tpShown(name) && x.isPointInPath(tpPartPath(V, name), p[0], p[1])) return { type: "part", name };
   return null;
 }
 function tpWire(v) {
   const cv = $(`tpCv_${v}`);
-  const pos = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * 512 / r.width, (e.clientY - r.top) * 512 / r.height]; };
+  const scr = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * 512 / r.width, (e.clientY - r.top) * 512 / r.height]; };
+  const pos = e => { const s = scr(e), vw = TP.vw[v]; return [(s[0] - vw.ox) / vw.z, (s[1] - vw.oy) / vw.z]; };
+  cv.oncontextmenu = e => e.preventDefault();
+  cv.onwheel = e => { e.preventDefault(); const vw = TP.vw[v], s = scr(e);
+    const z = Math.min(8, Math.max(1, vw.z * Math.exp(-e.deltaY * 0.0015)));
+    if (z === 1) { vw.ox = vw.oy = 0; } else { vw.ox = s[0] - (s[0] - vw.ox) * z / vw.z; vw.oy = s[1] - (s[1] - vw.oy) * z / vw.z; }
+    vw.z = z; tpDraw(v); };
   cv.onmousedown = e => { if (!TP.spec) return; e.preventDefault();
-    const V = TP.spec.views[v], p = pos(e), h = tpHit(V, p);
+    if (e.button === 1 || e.button === 2 || TP.space) { const vw = TP.vw[v]; TP.pan = { v, s: scr(e), ox: vw.ox, oy: vw.oy }; cv.style.cursor = "grabbing"; return; }
+    const V = TP.spec.views[v], p = pos(e), h = tpHit(v, V, p);
     if (!h) { TP.sel = null; $("tpPart").value = ""; tpDrawAll(); return; }
     if (h.type === "part") { TP.sel = h.name; $("tpPart").value = h.name; tpDrawAll(); return; }
     if (h.type === "pt" && e.altKey) { const pts = V.shapes[h.part].points;
@@ -950,22 +993,28 @@ function tpWire(v) {
     for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length], m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
       const d = Math.hypot(m[0] - p[0], m[1] - p[1]); if (d < bd) { bd = d; best = i; } }
     tpPushUndo(); pts.splice(best + 1, 0, p.map(c => Math.round(c * 10) / 10)); TP.dirty = true; tpDrawAll(); };
-  cv.onmousemove = e => { const d = TP.drag; if (!d || d.v !== v) return;
+  cv.onmousemove = e => {
+    if (TP.pan && TP.pan.v === v) { const vw = TP.vw[v], s = scr(e); vw.ox = TP.pan.ox + s[0] - TP.pan.s[0]; vw.oy = TP.pan.oy + s[1] - TP.pan.s[1]; tpDraw(v); return; }
+    const d = TP.drag; if (!d || d.v !== v) return;
     const V = TP.spec.views[v], p = pos(e).map(c => Math.round(c * 10) / 10);
     if (d.type === "joint") { const [k, j] = d.name.split("."); if (j) V.joints[k][j] = p; else V.joints[k] = p; }
     else if (d.type === "pt") V.shapes[d.part].points[d.i] = p;
     else if (d.type === "seam") V.seams.waist.y = p[1];
-    else if (d.type === "w") { const h = tpWidthHandles(V, d.part)[d.i];
-      const w = Math.max(2, Math.round(2 * Math.abs((p[0] - h.base[0]) * h.nrm[0] + (p[1] - h.base[1]) * h.nrm[1]) * 10) / 10);
-      V.limbs[d.part].widths[d.i] = w;
+    else if (d.type === "w") { const L = V.limbs[d.part], base = tpJ(V, d.i === 0 ? L.from : L.to);
+      const w = Math.max(2, Math.round(2 * Math.hypot(p[0] - base[0], p[1] - base[1]) * 10) / 10);
+      L.widths[d.i] = w;
       if (d.part.endsWith(".upper") && d.i === 0) V.joints[d.part.split(".")[0]].R = w / 2; }
     TP.dirty = true; tpDrawAll(); };
 }
-window.addEventListener("mouseup", () => { TP.drag = null; });
+window.addEventListener("mouseup", () => { TP.drag = null; if (TP.pan) { ["front", "back"].forEach(v => $(`tpCv_${v}`).style.cursor = "crosshair"); TP.pan = null; } });
+const tpOn = () => document.querySelector('.tab[data-t="template"]').classList.contains("on");
+const tpTyping = () => ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName);
 window.addEventListener("keydown", e => {
-  if (!document.querySelector('.tab[data-t="template"]').classList.contains("on")) return;
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) { e.preventDefault(); tpUndo(); }
+  if (!tpOn() || tpTyping()) return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); tpUndo(); }
+  if (e.code === "Space") { e.preventDefault(); TP.space = true; }
 });
+window.addEventListener("keyup", e => { if (e.code === "Space") TP.space = false; });
 function tpPreview() {
   const st = TP.st, t = `&t=${st.preview_made}`;
   const im = (name, w) => st.files.includes(name) ? `<a href="${img(st.dir + "/" + name)}${t}" target="_blank"><img src="${img(st.dir + "/" + name)}${t}" style="width:${w}px;background:#c4c6cc;border-radius:4px"></a>` : "";
@@ -989,9 +1038,12 @@ async function tpSave(render) {
 }
 async function initTemplate() {
   if (TP.inited) return; TP.inited = true;
-  ["front", "back"].forEach(tpWire);
-  ["tpArt", "tpParts", "tpGuides"].forEach(id => $(id).oninput = tpDrawAll);
-  $("tpZoom").onchange = () => ["front", "back"].forEach(v => $(`tpCv_${v}`).style.width = $("tpZoom").value + "px");
+  ["front", "back"].forEach(v => { tpSize(v); tpWire(v); });
+  ["tpArt", "tpParts"].forEach(id => $(id).oninput = tpDrawAll);
+  $("tpZoom").onchange = () => { ["front", "back"].forEach(tpSize); tpDrawAll(); };
+  $("tpReset").onclick = () => { ["front", "back"].forEach(v => TP.vw[v] = { z: 1, ox: 0, oy: 0 }); tpDrawAll(); };
+  $("tpAll").onclick = () => { TP.hidden.clear(); tpSaveHidden(); tpDrawAll(); };
+  $("tpNone").onclick = () => { TP.spec.views.front.order.forEach(n => TP.hidden.add(n)); tpSaveHidden(); tpDrawAll(); };
   $("tpPart").onchange = () => { TP.sel = $("tpPart").value || null; tpDrawAll(); };
   $("tpUndo").onclick = tpUndo;
   $("tpSave").onclick = guard(() => tpSave(false));

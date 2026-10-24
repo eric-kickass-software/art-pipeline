@@ -1,14 +1,13 @@
 {
  "schemaVersion": 1,
- "_doc": "The template is numbers, not pixels (specs/puppet_template.json), per view (front-3/4, back-3/4), in 512 px rig space:\n  joints  shoulder/elbow/wrist/fingertip, hip/knee/ankle/toe (+ R = the shoulder/hip circle), neck, pelvis, crotch\n  limbs   per segment (upper, lower, hand/foot): a bone between two joints + a smoothed width profile; the outline is\n          a sweep of discs along the bone, so every joint end comes out round (the overlap under the parent)\n  shapes  torso and head: smooth closed outlines (radial polygons); the torso is complete under the arms\n  seams   guide lines shared by neighbouring parts (waistband; leg holes follow the torso's lower edge)",
+ "_doc": "The template is numbers, not pixels (specs/puppet_template.json), per view (front-3/4, back-3/4), in 512 px rig space:\n  joints  shoulder/elbow/wrist/fingertip, hip/knee/ankle/toe (+ R = the shoulder/hip circle), neck, pelvis, crotch\n  limbs   per segment (upper, lower, hand/foot): a bone between two joints + two widths, one circle at each joint;\n          the outline is the true path around them (the two circles joined by their tangent lines), so every joint\n          end comes out round (the overlap under the parent)\n  shapes  torso and head: smooth closed outlines (radial polygons); the torso is complete under the arms\n  seams   guide lines shared by neighbouring parts (waistband; leg holes follow the torso's lower edge)",
  "px": 512,
  "from": {
   "build": "human.unisex",
   "front": "candidates/human/unisex/front_s23_1792726686.png",
   "back": "candidates/human/unisex/back_s12_1792726886.png"
  },
- "made": 1792824149,
- "edited": 1792824338,
+ "made": 1792826146,
  "views": {
   "front": {
    "joints": {
@@ -17,6 +16,7 @@
       215.8,
       223.4
      ],
+     "R": 15.0,
      "mid": [
       178.0,
       245.0
@@ -28,14 +28,14 @@
      "tip": [
       92.0,
       286.0
-     ],
-     "R": 15.0
+     ]
     },
     "armB": {
      "pivot": [
       287.7,
       227.0
      ],
+     "R": 15.5,
      "mid": [
       351.0,
       261.0
@@ -47,14 +47,14 @@
      "tip": [
       435.0,
       312.0
-     ],
-     "R": 15.5
+     ]
     },
     "legA": {
      "pivot": [
       228.5,
       353.0
      ],
+     "R": 27.0,
      "mid": [
       224.0,
       400.0
@@ -66,14 +66,14 @@
      "tip": [
       176.0,
       462.0
-     ],
-     "R": 27.0
+     ]
     },
     "legB": {
      "pivot": [
       286.0,
       353.0
      ],
+     "R": 27.5,
      "mid": [
       302.0,
       395.0
@@ -85,8 +85,7 @@
      "tip": [
       308.0,
       486.0
-     ],
-     "R": 27.5
+     ]
     },
     "neck": [
      240.5,
@@ -107,38 +106,23 @@
      "to": "armA.mid",
      "widths": [
       30.0,
-      30.9,
-      30.9,
-      30.6,
-      30.6,
-      30.9,
-      31.3
+      30.0
      ]
     },
     "armA.lower": {
      "from": "armA.mid",
      "to": "armA.end",
      "widths": [
-      31.3,
-      32.6,
-      32.8,
-      31.6,
-      29.6,
-      27.9,
-      26.8
+      30.0,
+      27.5
      ]
     },
     "armA.hand": {
      "from": "armA.end",
      "to": "armA.tip",
      "widths": [
-      26.8,
-      27.4,
-      30.3,
-      34.2,
-      35.5,
-      31.8,
-      26.6
+      27.5,
+      24.8
      ]
     },
     "armB.upper": {
@@ -146,38 +130,23 @@
      "to": "armB.mid",
      "widths": [
       31.0,
-      32.7,
-      32.8,
-      31.4,
-      30.3,
-      30.8,
-      31.8
+      29.5
      ]
     },
     "armB.lower": {
      "from": "armB.mid",
      "to": "armB.end",
      "widths": [
-      31.8,
-      34.4,
-      33.9,
-      31.6,
-      31.9,
-      36.2,
-      40.8
+      29.5,
+      29.5
      ]
     },
     "armB.hand": {
      "from": "armB.end",
      "to": "armB.tip",
      "widths": [
-      40.8,
-      34.4,
-      31.7,
-      32.7,
-      33.6,
-      30.6,
-      25.7
+      29.5,
+      26.2
      ]
     },
     "legA.upper": {
@@ -185,38 +154,23 @@
      "to": "legA.mid",
      "widths": [
       54.0,
-      50.8,
-      47.2,
-      43.8,
-      41.8,
-      41.4,
-      41.6
+      41.0
      ]
     },
     "legA.lower": {
      "from": "legA.mid",
      "to": "legA.end",
      "widths": [
-      41.6,
-      40.2,
-      38.7,
-      38.2,
-      40.1,
-      43.4,
-      45.8
+      41.0,
+      34.9
      ]
     },
     "legA.hand": {
      "from": "legA.end",
      "to": "legA.tip",
      "widths": [
-      45.8,
-      35.6,
-      30.2,
-      28.4,
-      26.9,
-      24.6,
-      22.3
+      34.9,
+      19.1
      ]
     },
     "legB.upper": {
@@ -224,38 +178,23 @@
      "to": "legB.mid",
      "widths": [
       55.0,
-      52.9,
-      50.6,
-      47.6,
-      44.1,
-      41.2,
-      39.6
+      40.5
      ]
     },
     "legB.lower": {
      "from": "legB.mid",
      "to": "legB.end",
      "widths": [
-      39.6,
-      41.4,
-      40.4,
-      36.6,
-      33.4,
-      33.1,
-      34.4
+      40.5,
+      33.0
      ]
     },
     "legB.hand": {
      "from": "legB.end",
      "to": "legB.tip",
      "widths": [
-      34.4,
-      40.6,
-      41.6,
-      37.2,
-      29.9,
-      21.9,
-      16.4
+      33.0,
+      13.9
      ]
     }
    },
@@ -415,6 +354,7 @@
       210.1,
       216.4
      ],
+     "R": 16.5,
      "mid": [
       178.0,
       240.0
@@ -426,14 +366,14 @@
      "tip": [
       99.0,
       276.0
-     ],
-     "R": 16.5
+     ]
     },
     "armB": {
      "pivot": [
       304.6,
       234.0
      ],
+     "R": 16.5,
      "mid": [
       341.0,
       261.0
@@ -445,14 +385,14 @@
      "tip": [
       434.0,
       311.0
-     ],
-     "R": 16.5
+     ]
     },
     "legA": {
      "pivot": [
       228.0,
       360.0
      ],
+     "R": 25.5,
      "mid": [
       206.0,
       418.0
@@ -464,14 +404,14 @@
      "tip": [
       192.0,
       464.0
-     ],
-     "R": 25.5
+     ]
     },
     "legB": {
      "pivot": [
       285.0,
       360.0
      ],
+     "R": 28.5,
      "mid": [
       293.0,
       399.0
@@ -483,8 +423,7 @@
      "tip": [
       284.0,
       493.0
-     ],
-     "R": 28.5
+     ]
     },
     "neck": [
      252.5,
@@ -505,38 +444,23 @@
      "to": "armA.mid",
      "widths": [
       33.0,
-      33.9,
-      34.2,
-      34.3,
-      34.4,
-      34.6,
-      34.7
+      34.5
      ]
     },
     "armA.lower": {
      "from": "armA.mid",
      "to": "armA.end",
      "widths": [
-      34.7,
-      35.8,
-      36.3,
-      36.1,
-      35.0,
-      33.3,
-      31.9
+      34.5,
+      33.0
      ]
     },
     "armA.hand": {
      "from": "armA.end",
      "to": "armA.tip",
      "widths": [
-      31.9,
-      30.5,
-      32.4,
-      35.8,
-      36.2,
-      32.7,
-      28.7
+      33.0,
+      24.8
      ]
     },
     "armB.upper": {
@@ -544,38 +468,23 @@
      "to": "armB.mid",
      "widths": [
       33.0,
-      33.6,
-      34.0,
-      34.3,
-      34.9,
-      35.9,
-      36.9
+      33.5
      ]
     },
     "armB.lower": {
      "from": "armB.mid",
      "to": "armB.end",
      "widths": [
-      36.9,
-      39.0,
-      39.7,
-      38.4,
-      36.0,
       33.5,
-      31.9
+      33.5
      ]
     },
     "armB.hand": {
      "from": "armB.end",
      "to": "armB.tip",
      "widths": [
-      31.9,
-      32.0,
-      35.4,
-      38.3,
-      38.2,
-      36.9,
-      35.8
+      33.5,
+      30.8
      ]
     },
     "legA.upper": {
@@ -583,38 +492,23 @@
      "to": "legA.mid",
      "widths": [
       51.0,
-      45.4,
-      42.2,
-      41.9,
-      44.6,
-      51.1,
-      58.1
+      45.5
      ]
     },
     "legA.lower": {
      "from": "legA.mid",
      "to": "legA.end",
      "widths": [
-      58.1,
-      51.3,
-      47.4,
-      47.7,
-      51.8,
-      57.2,
-      60.8
+      45.5,
+      38.7
      ]
     },
     "legA.hand": {
      "from": "legA.end",
      "to": "legA.tip",
      "widths": [
-      60.8,
-      52.7,
-      44.9,
-      37.6,
-      30.4,
-      23.4,
-      18.4
+      38.7,
+      18.8
      ]
     },
     "legB.upper": {
@@ -622,38 +516,23 @@
      "to": "legB.mid",
      "widths": [
       57.0,
-      55.2,
-      53.1,
-      50.8,
-      48.5,
-      46.4,
-      44.9
+      45.5
      ]
     },
     "legB.lower": {
      "from": "legB.mid",
      "to": "legB.end",
      "widths": [
-      44.9,
-      47.4,
-      48.1,
-      47.1,
-      48.8,
-      56.6,
-      64.7
+      45.5,
+      38.7
      ]
     },
     "legB.hand": {
      "from": "legB.end",
      "to": "legB.tip",
      "widths": [
-      64.7,
-      64.1,
-      58.2,
-      48.8,
-      39.4,
-      30.4,
-      23.8
+      38.7,
+      23.2
      ]
     }
    },

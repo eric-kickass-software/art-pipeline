@@ -4,8 +4,9 @@ template itself" (2026-10-23).
 
 The template is numbers, not pixels (specs/puppet_template.json), per view (front-3/4, back-3/4), in 512 px rig space:
   joints  shoulder/elbow/wrist/fingertip, hip/knee/ankle/toe (+ R = the shoulder/hip circle), neck, pelvis, crotch
-  limbs   per segment (upper, lower, hand/foot): a bone between two joints + a smoothed width profile; the outline is
-          a sweep of discs along the bone, so every joint end comes out round (the overlap under the parent)
+  limbs   per segment (upper, lower, hand/foot): a bone between two joints + two widths, one circle at each joint;
+          the outline is the true path around them (the two circles joined by their tangent lines), so every joint
+          end comes out round (the overlap under the parent)
   shapes  torso and head: smooth closed outlines (radial polygons); the torso is complete under the arms
   seams   guide lines shared by neighbouring parts (waistband; leg holes follow the torso's lower edge)
 
@@ -25,7 +26,7 @@ SPEC = ai_kit.ROOT / "specs" / "puppet_template.json"
 PX = pp.PX
 LIMBS = ("armA", "armB", "legA", "legB")
 SEGS = (("upper", "pivot", "mid"), ("lower", "mid", "end"), ("hand", "end", "tip"))
-NW = 7                                    # widths per segment, evenly spaced from its start joint to its end joint
+NW = 7                                    # samples per segment when measuring (kept: the two ends = its circles)
 LIGHT = np.array([-0.45, -0.65, 0.62]); LIGHT = LIGHT / np.linalg.norm(LIGHT)   # from the top left, toward the viewer
 CLAY = (206, 204, 200)
 LINE = (58, 52, 50)
@@ -168,11 +169,16 @@ def measure_view(B):
                 w[0] = 2.0 * jt[k]["R"]                       # the shoulder / hip circle
             elif prev_end is not None:
                 w[0] = prev_end                               # continuous with the parent at the joint
+            # the end circle comes from the limb just inside the joint: right at the joint the next part (a foot,
+            # a hand, the other leg) can widen the run
+            inner = [float(pp.width_at(reg, p0 + (p1 - p0) * t, d)) for t in (0.75, 0.8, 0.85, 0.9)]
+            end = float(np.median(inner))
             if seg == "hand":
-                w[-1] = max(w[-1], 0.6 * w[-2])               # a round fingertip / toe, not a point
-            w = _smooth(w, keep0=True)
-            prev_end = float(w[-1])
-            limbs[f"{k}.{seg}"] = {"from": f"{k}.{a}", "to": f"{k}.{b}", "widths": [round(float(x), 1) for x in w]}
+                end = 0.75 * end                               # a round fingertip / toe, a little narrower
+            elif seg == "lower":                               # shins and forearms taper (the back view's heel
+                end = min(end, (0.85 if k.startswith("leg") else 1.0) * w[0])   # sits right behind the ankle)
+            prev_end = end
+            limbs[f"{k}.{seg}"] = {"from": f"{k}.{a}", "to": f"{k}.{b}", "widths": [round(float(w[0]), 1), round(end, 1)]}
     torso, y_w, y_hip = _torso_points(B)
     head = _smooth_ring(_radial(_smooth_mask(B["pieces"]["head"].rgba[..., 3] > 0, 3)), 7)[::6]   # 16 landmarks
     # waistband (briefs): between the waist and the hips; bowed for the view from above
@@ -240,8 +246,8 @@ def save(spec):
         for k in LIMBS:
             for seg, a, b in SEGS:
                 L = V["limbs"][f"{k}.{seg}"]; w = [round(float(x), 1) for x in L["widths"]]
-                if len(w) < 2 or min(w) < 1 or max(w) > 250:
-                    raise ValueError(f"{v} {k}.{seg}: widths must be 2+ values between 1 and 250 px")
+                if len(w) != 2 or min(w) < 1 or max(w) > 250:
+                    raise ValueError(f"{v} {k}.{seg}: widths must be 2 values (the circle at each joint) between 1 and 250 px")
                 limbs[f"{k}.{seg}"] = {"from": f"{k}.{a}", "to": f"{k}.{b}", "widths": w}
             j[k]["R"] = round(limbs[f"{k}.upper"]["widths"][0] / 2, 1)   # the shoulder/hip circle = the upper cap
         shapes = {}
@@ -290,21 +296,24 @@ def _joint(V, name):
     return np.array(V["joints"][name], float)
 
 
-def _sweep(N, s, p0, p1, widths):
-    """Coverage (0..1, anti-aliased) of discs swept from p0 to p1 with radii interpolated from the widths."""
-    p0, p1 = p0 * s, p1 * s; w = np.asarray(widths, float) * s / 2
-    n = max(24, int(np.linalg.norm(p1 - p0) / 1.5))
-    ts = np.linspace(0, 1, n); rs = np.interp(ts, np.linspace(0, 1, len(w)), w)
-    cs = p0[None] + (p1 - p0)[None] * ts[:, None]
-    pad = rs.max() + 3
-    x0, y0 = int(max(0, cs[:, 0].min() - pad)), int(max(0, cs[:, 1].min() - pad))
-    x1, y1 = int(min(N, cs[:, 0].max() + pad)), int(min(N, cs[:, 1].max() + pad))
-    yy, xx = np.mgrid[y0:y1, x0:x1].astype(float)
-    d = np.full(xx.shape, 1e9)
-    for c, r in zip(cs, rs):
-        d = np.minimum(d, np.hypot(xx - c[0], yy - c[1]) - r)
-    cov = np.zeros((N, N)); cov[y0:y1, x0:x1] = np.clip(0.5 - d, 0, 1)
-    return cov
+def capsule(p0, r0, p1, r1, n=40):
+    """The true outline of a limb segment: the circle at each joint joined by their outer tangent lines (closed
+    polygon, 512 space). Same construction as the Workshop editor's tpCapsule()."""
+    p0, p1 = np.asarray(p0, float), np.asarray(p1, float)
+    d = float(np.linalg.norm(p1 - p0))
+    if d <= abs(r0 - r1) + 1e-6:                          # one circle holds the other: just the bigger circle
+        c, r = (p0, r0) if r0 >= r1 else (p1, r1)
+        return [tuple(c + r * np.array([math.cos(t), math.sin(t)])) for t in np.linspace(0, 2 * math.pi, 2 * n, endpoint=False)]
+    u = (p1 - p0) / d; v = np.array([-u[1], u[0]])
+    al = math.acos(max(-1.0, min(1.0, (r0 - r1) / d)))   # tangent points sit at +-al from the bone direction
+    at = lambda c, r, t: tuple(c + r * (math.cos(t) * u + math.sin(t) * v))
+    back = [at(p0, r0, t) for t in np.linspace(al, 2 * math.pi - al, n)]       # around the start joint's far side
+    front = [at(p1, r1, t) for t in np.linspace(-al, al, n)]                   # around the end joint's far side
+    return back + front
+
+
+def _capsule_cov(N, s, p0, p1, widths):
+    return _poly_cov(N, s, capsule(p0, widths[0] / 2, p1, widths[-1] / 2), soft=0.4)
 
 
 def _poly_cov(N, s, poly, soft=1.5):
@@ -349,7 +358,7 @@ def render(spec, view, s=2):
     covs, thick, bones = {}, {}, {}
     for name, L in V["limbs"].items():
         p0, p1 = _joint(V, L["from"]), _joint(V, L["to"])
-        covs[name] = _sweep(N, s, p0, p1, L["widths"]); thick[name] = float(np.mean(L["widths"])) * s / 2
+        covs[name] = _capsule_cov(N, s, p0, p1, L["widths"]); thick[name] = float(np.mean(L["widths"])) * s / 2
         bones[name] = (p0, p1)
     for name in ("torso", "head"):
         sh = V["shapes"][name]

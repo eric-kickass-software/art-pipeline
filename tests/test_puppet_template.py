@@ -34,7 +34,7 @@ syn = {"views": {"front": {
                "legA": {"pivot": [230, 330], "mid": [225, 390], "end": [222, 440], "tip": [205, 455], "R": 22},
                "legB": {"pivot": [270, 330], "mid": [275, 390], "end": [278, 440], "tip": [295, 455], "R": 22},
                "neck": [250, 180], "pelvis": [250, 320], "crotch": [250, 340]},
-    "limbs": {f"{k}.{s}": {"from": f"{k}.{a}", "to": f"{k}.{b}", "widths": [24] * 7}
+    "limbs": {f"{k}.{s}": {"from": f"{k}.{a}", "to": f"{k}.{b}", "widths": [24, 24]}
               for k in pt.LIMBS for s, a, b in pt.SEGS},
     "shapes": {"torso": {"points": [[230, 176], [270, 176], [312, 204], [300, 260], [298, 320], [262, 350],
                                     [238, 350], [202, 320], [200, 260], [188, 204]]},
@@ -69,7 +69,7 @@ def refused(mut):
     except ValueError: return True
     return False
 assert refused(lambda b: b["views"].pop("back"))
-assert refused(lambda b: b["views"]["front"]["limbs"]["legA.lower"]["widths"].__setitem__(2, 0))
+assert refused(lambda b: b["views"]["front"]["limbs"]["legA.lower"]["widths"].__setitem__(1, 0))
 assert refused(lambda b: b["views"]["back"]["shapes"]["torso"].__setitem__("points", [[1, 1]] * 3))
 assert refused(lambda b: b["views"]["front"]["joints"]["neck"].__setitem__(0, "x"))
 assert json.loads(tmp.read_text())["views"]["front"]["joints"]["armB"]["R"] == 20   # refused saves wrote nothing
