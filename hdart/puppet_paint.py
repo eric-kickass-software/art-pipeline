@@ -55,9 +55,9 @@ def save_spec(doc):
     for sex, e in (doc.get("sexes") or {}).items():
         if not isinstance(e, dict) or not all(isinstance(e.get(x, ""), str) for x in ("extra", "clothes")):
             raise ValueError(f"sexes.{sex} needs text fields extra and clothes")
-    if doc.get("face_guide", "faint") not in ("faint", "marks"):
-        raise ValueError("face_guide is faint or marks")
-    out = {"_doc": old.get("_doc", ""), "face_guide": doc.get("face_guide", old.get("face_guide", "faint")),
+    if doc.get("face_guide", "keyed") not in ("faint", "marks", "keyed"):
+        raise ValueError("face_guide is keyed, faint or marks")
+    out = {"_doc": old.get("_doc", ""), "face_guide": doc.get("face_guide", old.get("face_guide", "keyed")),
            "style_groups": doc.get("style_groups") or old["style_groups"],
            "figure": doc["figure"], "back_reference": str(doc.get("back_reference", "")), "complete": doc["complete"],
            "fix": doc["fix"], "sexes": doc.get("sexes") or old["sexes"]}
@@ -135,6 +135,20 @@ def face_marks(rgba, fc, mode="marks"):
     """Where the template's face guides say: "faint" = thin lines a little darker than the skin (eye ovals, mouth), so
     the painted head stays faceless and every face comes from the Face tab; "marks" = solid eye ovals (with a highlight)
     and a mouth line (the painted head gets its own face)."""
+    if mode == "keyed":   # the head gets its own face, with the irises in the magenta colour key (recolourable,
+        im = Image.fromarray(rgba); d = ImageDraw.Draw(im)   # harvested into the Face tab's face set)
+        h_ = json.loads((ai_kit.ROOT / "specs" / "face.json").read_text(encoding="utf-8")).get("eye_key", "#d020d0").lstrip("#")
+        key = tuple(int(h_[i:i + 2], 16) for i in (0, 2, 4)) + (255,)
+        e0, e1 = np.array(fc["eyes"][0]) * S, np.array(fc["eyes"][1]) * S; r = 0.16 * np.linalg.norm(e1 - e0)
+        for e in (e0, e1):
+            d.ellipse([e[0] - r, e[1] - 1.3 * r, e[0] + r, e[1] + 1.3 * r], fill=(40, 30, 28, 255))
+            d.ellipse([e[0] - 0.82 * r, e[1] - 1.08 * r, e[0] + 0.82 * r, e[1] + 1.08 * r], fill=(246, 244, 240, 255))
+            d.ellipse([e[0] - 0.55 * r, e[1] - 0.75 * r, e[0] + 0.55 * r, e[1] + 0.85 * r], fill=key)
+            d.ellipse([e[0] - 0.25 * r, e[1] - 0.6 * r, e[0] + 0.02 * r, e[1] - 0.25 * r], fill=(250, 250, 250, 255))
+        m = np.array(fc["mouth"]) * S
+        d.line([(m[0] - 0.45 * r, m[1]), (m[0] + 0.45 * r, m[1])], fill=(110, 60, 55, 255), width=max(2, int(r * 0.18)))
+        out = np.asarray(im).copy(); out[..., 3] = rgba[..., 3]
+        return out
     if mode == "faint":
         im = Image.fromarray(rgba); d = ImageDraw.Draw(im)
         e0, e1 = np.array(fc["eyes"][0]) * S, np.array(fc["eyes"][1]) * S; r = 0.16 * np.linalg.norm(e1 - e0)
@@ -156,7 +170,7 @@ def face_marks(rgba, fc, mode="marks"):
     return out
 
 
-def inits_for(spec, view, parts, ramp, guide="faint"):
+def inits_for(spec, view, parts, ramp, guide="keyed"):
     V = spec["views"][view]
     out = {n: tinted(parts[n][0], ramp, briefs_zone(V, parts[n][0][..., 3] / 255) if n == "torso" else None)
            for n in V["order"]}
@@ -429,7 +443,7 @@ def paint(build, n=1, seed=1):
     spec = pt.load()
     if not spec["views"]["front"]["shapes"]["head"].get("face"):
         raise ValueError("The template has no face guides yet: add them (Template tab / puppet_template.add_face).")
-    ramp = skin_ramp(race); P = composed(build); guide = globals()["spec"]().get("face_guide", "faint")
+    ramp = skin_ramp(race); P = composed(build); guide = globals()["spec"]().get("face_guide", "keyed")
     rendered = {v: pt.render(spec, v, S) for v in VIEWS}
     lays = {v: layout(rendered[v], spec["views"][v]["order"], spec["views"][v]) for v in VIEWS}
     made = []
@@ -441,6 +455,12 @@ def paint(build, n=1, seed=1):
         except Exception as e:
             _progress(d, 0, 5, "failed", sd, str(e)); raise
         (d / "progress.json").unlink(missing_ok=True)
+        if guide in ("keyed", "marks"):   # the painted face becomes a face candidate of the race (Face tab)
+            try:
+                from . import puppet_face
+                puppet_face.face_from_paint(build.split(".", 1)[0], build, cid)
+            except Exception as e:
+                print(f"face harvest of {build} {cid} failed: {e}")
         made.append(cid)
     return made
 

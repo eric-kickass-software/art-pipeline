@@ -62,6 +62,13 @@ assert ((head[..., :3].astype(int).sum(-1) < 160) & (head[..., 3] > 0)).sum() > 
 
 assert not (d / "progress.json").exists()   # progress is only there while it's being painted
 
+# the painted face (keyed guide: magenta irises) is harvested into the race's face candidates
+import hdart.puppet_face as pf
+fdir = pf.out_dir("human", "face") / f"p_{c[0]}"
+assert ppt.spec()["face_guide"] == "keyed" and fdir.exists()
+fmeta = json.loads((fdir / "meta.json").read_text())
+assert fmeta["from_paint"] and fmeta["keyed"]["front"] > 50 and (fdir / "head_female.png").exists()
+
 # a paint that fails keeps its progress (stage "failed" + the error); never stale, never used as the build's paint
 real_run = FakeComfy.run
 FakeComfy.run = staticmethod(lambda nodes, out_dir: (_ for _ in ()).throw(RuntimeError("ComfyUI fell over")))

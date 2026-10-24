@@ -169,7 +169,8 @@
       <div class="hint">{body} = race traits + description + the gender's body text + its paint face &amp; body words; {clothes} = the gender's paint clothes. Spec: <code>specs/paint.json</code>.</div>
       <div class="row"><label style="min-width:120px">Style groups</label><span id="ppGroups" class="chips"></span></div>
       <div class="row"><label style="min-width:120px">Face guide</label><select id="ppFaceGuide" style="max-width:260px">
-        <option value="faint">faint (faceless head; faces from the Face tab)</option><option value="marks">marks (the head gets its own face)</option></select></div>
+        <option value="keyed">keyed (painted face, magenta irises; harvested into the Face tab)</option>
+        <option value="marks">marks (painted face, irises not keyed)</option><option value="faint">faint (faceless head; faces from the Face tab's pass)</option></select></div>
       <div class="row"><label style="min-width:120px">Figure, front</label><textarea id="ppFigFront" rows="3" style="flex:1"></textarea></div>
       <div class="row"><label style="min-width:120px">Figure, back</label><textarea id="ppFigBack" rows="3" style="flex:1"></textarea></div>
       <div class="row"><label style="min-width:120px">Back reference</label><textarea id="ppBackRef" rows="1" style="flex:1"></textarea></div>
@@ -877,7 +878,7 @@ function fillSharedPrompts() {
     const set = (id, v) => { if (!keep(id)) $(id).value = v || ""; };
     set("ppFigFront", ps.figure.front); set("ppFigBack", ps.figure.back); set("ppBackRef", ps.back_reference);
     set("ppCmpFront", ps.complete.front); set("ppCmpBack", ps.complete.back);
-    if (!keep("ppFaceGuide")) $("ppFaceGuide").value = ps.face_guide || "faint";
+    if (!keep("ppFaceGuide")) $("ppFaceGuide").value = ps.face_guide || "keyed";
     const pon = new Set(ps.style_groups || []);
     if (!$("ppGroups").contains(document.activeElement))
       $("ppGroups").innerHTML = ORDER.map(g => `<label class="chip"><input type="checkbox" data-g="${g}" style="width:auto" ${pon.has(g)?"checked":""}> ${g}</label>`).join("");
@@ -1497,7 +1498,7 @@ function fcCard(kind) {
     const keyed = c.meta.keyed || {}, nokey = Object.values(keyed).some(n => n === 0);
     return `<div class="pcand ${c.in_set ? "on" : ""}" style="width:auto">
       <div class="row" style="gap:3px;margin:0;flex-wrap:nowrap">${files.filter(f => c.files.includes(f)).map(f => `<img loading="lazy" src="${u(f)}" style="width:${kind === "hair" ? 120 : 170}px;height:${kind === "hair" ? 120 : 170}px;background:#c4c6cc;border-radius:3px" title="${f}">`).join("")}</div>
-      <div class="hint">seed ${c.meta.seed ?? "?"} · on ${c.meta.on || "?"}${nokey ? ` · <span style="color:var(--warn)">${kind === "hair" ? "hair" : "irises"} not keyed: can't be recoloured</span>` : ""}</div>
+      <div class="hint">${c.meta.from_paint ? `from paint ${c.meta.paint} (${c.meta.on})` : `seed ${c.meta.seed ?? "?"} · on ${c.meta.on || "?"}`}${nokey ? ` · <span style="color:var(--warn)">${kind === "hair" ? "hair" : "irises"} not keyed: can't be recoloured</span>` : ""}</div>
       <div class="row" style="gap:4px;margin:0"><button data-fcset="${c.id}" data-kind="${kind}" data-on="${c.in_set ? 0 : 1}" style="flex:1">${c.in_set ? "✓ in the set" : "Add to the set"}</button>
         ${c.in_set ? "" : `<button data-fcarc="${c.id}" data-kind="${kind}" title="Archive (moves to archive/workshop/face/)" style="width:auto;padding:2px 8px">✕</button>`}</div></div>`; }).join("");
   const key = `${kind}:${FC.race}`, val = key in FC.drafts ? FC.drafts[key] : (r[kind] || "");

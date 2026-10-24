@@ -239,7 +239,7 @@ def iris_levels(layer, levels=5, eyes=None):
     h_ = spec().get("eye_key", "#d020d0").lstrip("#"); kr = np.array([[[int(h_[i:i + 2], 16) for i in (0, 2, 4)]]], np.uint8)
     kh = float(_hsv(kr)[0][0, 0]); h, sat, val = _hsv(layer[..., :3])
     dh = np.minimum(np.abs(h - kh), 360 - np.abs(h - kh))
-    iris = (layer[..., 3] > 127) & (dh < 32) & (sat > 0.42) & (val > 0.1) & (val < 0.92)   # blush is paler and lighter
+    iris = (layer[..., 3] > 127) & (dh < 32) & (sat > 0.42) & (val > 0.1)   # blush is paler (lower saturation)
     if eyes:
         e0, e1 = np.array(eyes[0]) * S, np.array(eyes[1]) * S; r = 0.85 * np.linalg.norm(e1 - e0)
         yy, xx = np.mgrid[:layer.shape[0], :layer.shape[1]]
@@ -457,6 +457,30 @@ def _make_one(race, kind, sex, build, cid, sp, parts, P, d, fid, sd):
                                      encoding="utf-8")
         ppt._progress(d, of, of, "previews on male and female", sd)
         previews(race, kind, fid)
+
+
+def face_from_paint(race, build, cid):
+    """Harvest the face a paint candidate painted (face guide "keyed" or "marks") into a face candidate of the race:
+    the non-skin pixels of its head's face area (kept off the outline) = the face layer, its magenta-key irises = the
+    iris levels. The face was painted as part of the whole character, so it matches the race's style and lighting."""
+    d0 = ppt.out_dir(build) / cid; sp = ppt._spec_for(d0)
+    head = np.asarray(Image.open(d0 / "parts" / "front" / "head.png").convert("RGBA"))
+    region = face_ellipse(sp, 1.2) & inner_head(head)
+    key = skin_key(head)[2:]
+    feat = region & (skin_dist(head[..., :3], key) > 30)
+    L = np.zeros_like(head); L[feat, :3] = head[feat, :3]; L[feat, 3] = 255
+    lev = iris_levels(L, eyes=sp["views"]["front"]["shapes"]["head"]["face"]["eyes"])
+    fid = f"p_{cid}"; d = out_dir(race, "face") / fid; d.mkdir(parents=True, exist_ok=True)
+    Image.fromarray(L).save(d / "layer_front.png"); Image.fromarray(lev).save(d / "levels_front.png")
+    bg = Image.new("RGBA", head.shape[1::-1], (255, 255, 255, 255)); bg.alpha_composite(Image.fromarray(head))
+    box, _ = _head_box({"head": head}, 0.05, 0.05, 0.05)
+    bg.convert("RGB").crop(box).resize((ppt.SHEET, ppt.SHEET), Image.LANCZOS).save(d / "paint_front.png")
+    meta = json.loads((d0 / "meta.json").read_text(encoding="utf-8")) if (d0 / "meta.json").exists() else {}
+    (d / "meta.json").write_text(json.dumps({"race": race, "kind": "face", "seed": meta.get("seed"), "made": int(time.time()),
+                                             "on": build, "paint": cid, "from_paint": True,
+                                             "keyed": {"front": int((lev[..., 3] > 0).sum())}}, indent=1), encoding="utf-8")
+    previews(race, "face", fid)
+    return fid
 
 
 def previews(race, kind, fid, ramp=None, save=True):
