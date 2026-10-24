@@ -310,7 +310,8 @@ tab is gone: its descriptor groups are there, its mannequin clothing / builds / 
    - **Parts** tab (Parts editor): touch up a paint candidate part by part (Races → Paint → Edit parts). Every part
      is a layer in the rest pose (hide/show; the selected part drawn on top so its hidden ends can be painted, its
      template shape as a cyan ghost). Tools: brush (+ eyedropper, Alt-click), eraser, heal (fills the stroke from the
-     colours around it), outline (the even outline's colour/weight), AI fix area (mark, optional prompt, "Fix marked
+     colours around it), outline (the even outline's colour/weight), move (V: drag the selected layer, or only its marked
+     pixels when there's an AI-fix mark; arrow keys nudge 1 px, Shift 10), AI fix area (mark, optional prompt, "Fix marked
      area": job `paint_fix` repaints only the marked pixels of the part, inside its template shape, with the figure
      as context); "keep inside the template shape" clamp; wheel zoom to 8×, pan; undo/redo; keys B E H O I M [ ].
      Save writes the parts (the painted originals are kept in `parts_orig/`, "Revert to painted" restores them) and

@@ -228,6 +228,7 @@
         <button data-tool="heal" title="H: fills the stroke from the colours around it">Heal</button>
         <button data-tool="outline" title="O: the even outline colour and weight">Outline</button>
         <button data-tool="pick" title="I (or Alt-click with any tool)">Eyedropper</button>
+        <button data-tool="move" title="V: drag the selected layer (only the marked area when there's an AI-fix mark); arrow keys nudge 1 px, Shift+arrow 10 px">Move</button>
         <button data-tool="mask" title="M: mark an area for the AI fix">AI fix area</button>
         <label>Size</label><input id="paSize" type="range" min="1" max="80" value="12" style="max-width:120px"><span class="hint" id="paSizeV">12</span>
         <label>Colour</label><input id="paColor" type="color" value="#d8a07c" style="width:44px;padding:0">
@@ -248,7 +249,7 @@
           <div id="paPrev" style="margin-top:6px"></div></div>
       </div>
       <p class="hint">Paint on the <b>selected layer</b> (click a layer name). Left-drag paints; wheel zooms (up to 8×); right/middle-drag or Space+drag pans.
-        Keys: B brush, E eraser, H heal, O outline, I eyedropper, M AI-fix area, [ ] size, Ctrl+Z / Ctrl+Y. The AI fix repaints only the marked area of the
+        Keys: B brush, E eraser, H heal, O outline, I eyedropper, M AI-fix area, V move (drag; arrows nudge 1 px, Shift 10; with a mark only the marked pixels move), [ ] size, Ctrl+Z / Ctrl+Y. The AI fix repaints only the marked area of the
         selected part (inside its template shape), with the whole figure as context, then re-renders the walk.</p>
     </div>
   </section>
@@ -1300,6 +1301,25 @@ function paStamp(ctx, a, b, r) {   // round stamps from a to b
   for (let i = 0; i <= n; i++) { const t = i / n; ctx.beginPath(); ctx.arc(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, r, 0, 7); ctx.fill(); }
 }
 const paEditable = (n) => !PA.doc || !PA.doc.editable || PA.doc.editable.includes(n);
+function paMoveStart(p) {   // lift the selected layer (or only its marked pixels) to move it
+  const key = paKey(PA.view, PA.sel), part = PA.parts[key], ctx = part.getContext("2d");
+  const lifted = paCanvas(), base = paCanvas(), lx = lifted.getContext("2d"), bx = base.getContext("2d");
+  lx.drawImage(part, 0, 0);
+  if (PA.mask) { lx.globalCompositeOperation = "destination-in"; lx.drawImage(PA.mask, 0, 0);
+    bx.drawImage(part, 0, 0); bx.globalCompositeOperation = "destination-out"; bx.drawImage(PA.mask, 0, 0); }
+  let maskCopy = null; if (PA.mask) { maskCopy = paCanvas(); maskCopy.getContext("2d").drawImage(PA.mask, 0, 0); }
+  PA.stroke = { key, move: true, start: p, lifted, base, maskCopy, dx: 0, dy: 0, before: ctx.getImageData(0, 0, PA_N, PA_N) };
+}
+function paMoveTo(dx, dy) {
+  const st = PA.stroke; st.dx = Math.round(dx); st.dy = Math.round(dy);
+  const ctx = PA.parts[st.key].getContext("2d"); ctx.clearRect(0, 0, PA_N, PA_N); ctx.drawImage(st.base, 0, 0); ctx.drawImage(st.lifted, st.dx, st.dy);
+  if (st.maskCopy) { const m = PA.mask.getContext("2d"); m.clearRect(0, 0, PA_N, PA_N); m.drawImage(st.maskCopy, st.dx, st.dy); }
+  paStatus(` move ${st.dx}, ${st.dy} px`); paDraw();
+}
+function paNudge(dx, dy) {
+  if (!PA.sel || !paEditable(PA.sel) || PA.hidden.has(PA.sel)) return;
+  paMoveStart([0, 0]); paMoveTo(dx, dy); paEnd();
+}
 function paBegin(p) {
   const key = paKey(PA.view, PA.sel), part = PA.parts[key];
   PA.stroke = { key, last: p, before: part.getContext("2d").getImageData(0, 0, PA_N, PA_N), layer: paCanvas(), box: [p[0], p[1], p[0], p[1]] };
@@ -1355,7 +1375,8 @@ function paHeal(st) {   // fill the stroke from the colours around it (diffusion
 }
 function paEnd() {
   const st = PA.stroke; if (!st) return; PA.stroke = null;
-  if (PA.tool === "heal") { PA.parts[st.key].getContext("2d").putImageData(st.before, 0, 0); paHeal(st); }
+  if (st.move && !st.dx && !st.dy) { paStatus(); return; }   // a click without a drag: nothing moved
+  if (PA.tool === "heal" && !st.move) { PA.parts[st.key].getContext("2d").putImageData(st.before, 0, 0); paHeal(st); }
   PA.undo.push({ key: st.key, before: st.before }); if (PA.undo.length > 25) PA.undo.shift(); PA.redo = [];
   PA.dirty[st.key] = true; paLayers(); paStatus(); paDraw();
 }
@@ -1376,11 +1397,13 @@ function paWire() {
     if (PA.tool === "mask") { PA.maskLast = p.w; paMaskStroke(p.w, p.w); return; }
     if (!PA.sel) { paStatus(" select a layer first (click its name)"); return; }
     if (!paEditable(PA.sel)) { paStatus(` only the ${PA.doc.kind} layer can be edited here (the puppet is context)`); return; }
+    if (PA.tool === "move") { paMoveStart(p.w); return; }
     if (PA.hidden.has(PA.sel)) { paStatus(" the selected layer is hidden"); return; }
     paBegin(p.w); };
   cv.onmousemove = e => { const p = paPos(e); PA.cursor = p.w;
     if (PA.pan) { PA.vw.ox = PA.pan.ox + p.s[0] - PA.pan.s[0]; PA.vw.oy = PA.pan.oy + p.s[1] - PA.pan.s[1]; paDraw(); return; }
     if (PA.maskLast && e.buttons & 1) { paMaskStroke(PA.maskLast, p.w); PA.maskLast = p.w; return; }
+    if (PA.stroke && PA.stroke.move && e.buttons & 1) { paMoveTo(p.w[0] - PA.stroke.start[0], p.w[1] - PA.stroke.start[1]); return; }
     if (PA.stroke && e.buttons & 1) paExtend(p.w); else paDraw(); };
   cv.onmouseleave = () => { PA.cursor = null; paDraw(); };
   window.addEventListener("mouseup", () => { PA.pan = null; PA.maskLast = null; if (PA.stroke) paEnd(); });
@@ -1390,7 +1413,9 @@ function paWire() {
     if ((e.ctrlKey || e.metaKey) && k === "z") { e.preventDefault(); paUndo(PA.undo, PA.redo); return; }
     if ((e.ctrlKey || e.metaKey) && k === "y") { e.preventDefault(); paUndo(PA.redo, PA.undo); return; }
     if (e.code === "Space") { e.preventDefault(); PA.space = true; return; }
-    const tools = { b: "brush", e: "eraser", h: "heal", o: "outline", i: "pick", m: "mask" };
+    const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    if (arrows[e.key] && PA.tool === "move") { e.preventDefault(); const st = e.shiftKey ? 10 : 1; paNudge(arrows[e.key][0] * st, arrows[e.key][1] * st); return; }
+    const tools = { b: "brush", e: "eraser", h: "heal", o: "outline", i: "pick", m: "mask", v: "move" };
     if (tools[k]) paSetTool(tools[k]);
     if (k === "[" || k === "]") { $("paSize").value = Math.max(1, Math.min(80, +$("paSize").value + (k === "]" ? 2 : -2))); $("paSizeV").textContent = $("paSize").value; paDraw(); }
   });
