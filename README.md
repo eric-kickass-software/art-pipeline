@@ -235,7 +235,7 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
   - Wall-run join edges and white outline bleed are cleaned up automatically when pieces are cut.
 
 ## Workshop (curated AI character parts)
-Tabs in process order (2026-10-24): **Template** (open on load) > **Race** > **Parts** > **Ramps** > **Sets** > **Board**. Every
+Tabs in process order (2026-10-24): **Template** (open on load) > **Race** > **Parts** > **Face** > **Ramps** > **Sets** > **Board**. Every
 prompt is editable next to the button that generates with it; wording shared by all races is in Race → Shared prompts (the Style
 tab is gone: its descriptor groups are there, its mannequin clothing / builds / prompt preview are in Board → Board prompts).
 
@@ -336,13 +336,35 @@ tab is gone: its descriptor groups are there, its mannequin clothing / builds / 
    correction, and FLUX redoes only that area. Approve → the kit rebuilds.
 3. **Sets**: save the approved parts as a named set; the Studio can switch sets. (The Style tab's prompts moved to Race and Board.)
 4. Cards: backs whose file name has `_card_` are silhouette-matched. Older backs show as `redo-back` on the board.
-5. **Ramps** tab (2026-10-24: painted puppets + skin tone sets): pick a **race**; the preview recolours its painted
+4b. **Face** tab (2026-10-24, `hdart/puppet_face.py`, `specs/face.json`): the race's **hair** and **faces**, painted on its
+   painted puppets (approved Paint, else the newest; "Paint on" male or female). Male and female share the Template's head,
+   so every hairstyle and face fits both; layers are 1024 px RGBA in the rest pose and ride on the head bone.
+   - **Hair**, by **colour key**: a head-shaped guide cap (above the brows in front, the whole back of the head behind) is
+     filled with the key green (`hair_key`) and FLUX paints the hair "one flat vivid pure green (a green-screen colour key)"
+     in a band around the head (the face from the face guides and the rest of the body masked out); front first, then the
+     back with the painted front as reference. Cut out by hue (+ the dark outline pixels touching it, only pieces touching
+     the head); the green's brightness becomes 5 cel levels (`levels_<view>.png`: R = level, 254 = outline, A = hair),
+     coloured by a **hair ramp** (palettes group `hair`). So the race's hairstyle text is the style only, no colour.
+   - **Face** (front): the head's own painted face is removed first (`blank_face`: non-skin pixels in the face area filled
+     from the skin around them), then FLUX repaints the face area; the layer keeps the non-skin feature pixels. Irises are
+     painted in the **magenta key** (`eye_key`) and become cel levels near the eye guides (`levels_front.png`), coloured by
+     an **eye ramp** (group `eyes`). Candidates whose key wasn't painted are flagged "not keyed: can't be recoloured".
+   - Per candidate `sprites/ai/face/<race>/<hair|face>/<id>/` (layers, levels, paints, previews on male and female, meta with
+     the keyed pixel count). "Add to the set" builds the race's **hair set** / **face set** (state: `<race>.unisex.face_sets`);
+     ✕ archives. A colour picker per card re-renders the previews with any hair / eye ramp (`face/preview`). Each card has
+     the race's text next to its Queue button and the prompts it sends; shared wording + key colours in Shared prompts.
+   - Jobs `face_gen {race, kind, sex, n, seed}`; actions `face/state|spec|set|archive|preview|ramp_preview`.
+     Tests: `tests/test_puppet_face.py` (ComfyUI stubbed with a fake that paints the keys).
+5. **Ramps** tab (2026-10-24: painted puppets + the race's colour set): pick a **race**; the preview recolours its painted
    **male and female** puppets (approved Paint, else the newest), front and back, full size and 64 px. Skin levels are
    measured on the assembled rest pose of both views together (`puppet_paint.ramp_preview`, action
    `paint/ramp_preview`). A race's **skin tone set** = every `skin` ramp tagged with it: shown as a male/female grid
    (click one to edit), "Add this ramp to the set" / "Remove it from the set" (tags the race and saves), "Create
    starter set" (one ramp per chosen Monk tone, `<race>_monk<n>`, default sliders; existing names are kept). Human has
-   a starter set (Monk 1, 3, 5, 7, 9).
+   a starter set (Monk 1, 3, 5, 7, 9). The puppets wear the race's hair and face (Face tab: first in the set, else the
+   newest; `puppet_face.ramp_preview` returns skin, hair and iris level maps, hair/irises excluded from the skin levels);
+   the ramp being edited colours its own layer, the others take the race's first ramp of their group. The **<Race>'s
+   colour set** card shows the race-tagged skin, hair and eye ramps (rows), each on male and female.
    Editing: edit the colour ramps in `specs/palettes.json` (any group; skin tones are the `skin` group). A tone is a
    5-colour ramp, darkest first; the art keeps its cel levels and the game colours them, so one mannequin and one puppet rig
    serve every tone (decided 2026-10-22, see the vault's Art Pipeline note).

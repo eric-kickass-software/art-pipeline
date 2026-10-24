@@ -199,6 +199,12 @@ class Jobs:
                     else:
                         job["result"] = puppet_paint.fix_region(a["build"], a["id"], a["view"], a["part"], a["mask"],
                                                                 a.get("prompt", ""), int(a.get("seed", 3)))
+                elif job["kind"] == "face_gen":   # Face tab: racial hair / faces on the painted puppets
+                    from . import puppet, puppet_template, puppet_paint, puppet_face
+                    for mod in (puppet, puppet_template, puppet_paint, puppet_face):
+                        importlib.reload(mod)
+                    job["result"] = puppet_face.generate(a["race"], a["kind"], a.get("sex", "male"), int(a.get("n", 1)),
+                                                         int(a.get("seed", 1)))
                 elif job["kind"] in ("tpl", "tpl_measure"):   # clean puppet template: re-measure (from the art) and/or preview
                     from . import puppet, puppet_template
                     importlib.reload(puppet); importlib.reload(puppet_template)
@@ -245,6 +251,24 @@ def workshop_post(st, action, b):
         from . import puppet
         importlib.reload(puppet)
         return puppet.approve(b["build"], b.get("on", True))
+    if action.startswith("face/"):   # Face tab: racial hair and faces
+        from . import puppet, puppet_template, puppet_paint, puppet_face as pf
+        for mod in (puppet, puppet_template, puppet_paint, pf):
+            importlib.reload(mod)
+        if action == "face/state":
+            return pf.state(b["race"])
+        if action == "face/spec":
+            pf.save_spec(b["spec"])
+            return pf.state(b["race"])
+        if action == "face/set":
+            return pf.set_member(b["race"], b["kind"], b["id"], b.get("on", True))
+        if action == "face/archive":
+            return pf.archive(b["race"], b["kind"], b["id"])
+        if action == "face/ramp_preview":   # Ramps tab: the painted puppet wearing the race's hair + face, three level maps
+            return pf.ramp_preview(b["build"])
+        if action == "face/preview":   # previews with another hair / eye ramp (data URLs)
+            return pf.previews(b["race"], b["kind"], b["id"], b.get("ramp"), save=False)
+        raise ValueError(f"unknown action {action}")
     if action.startswith("paint/"):   # puppet Paint step (Races) and Parts editor
         from . import puppet, puppet_template, puppet_paint as ppt
         for mod in (puppet, puppet_template, ppt):

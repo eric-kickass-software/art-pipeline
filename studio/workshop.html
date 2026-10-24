@@ -94,6 +94,7 @@
   <button class="tab on" data-t="template">Template</button>
   <button class="tab" data-t="races">Race</button>
   <button class="tab" data-t="parts">Parts</button>
+  <button class="tab" data-t="face">Face</button>
   <button class="tab" data-t="ramps">Ramps</button>
   <button class="tab" data-t="sets">Sets</button>
   <button class="tab" data-t="board">Board</button>
@@ -263,10 +264,31 @@
 
   <!-- STYLE -->
   <!-- RAMPS -->
+  <section id="face">
+    <p class="hint">The race's <b>hair</b> and <b>faces</b>, painted on its painted puppets (Race → Paint). Male and female share the
+      Template's head, so every hairstyle and face fits both. Hair is painted in a <b>green colour key</b> and irises in a <b>magenta</b>
+      one: they're cut out by colour and become cel levels, so the hair and eye ramps (Ramps) colour them like skin.
+      Add the keepers to the race's sets. Specs: <code>specs/face.json</code>.</p>
+    <div class="card"><div class="row"><label>Race</label><select id="fcRace" style="max-width:160px"></select>
+      <label>Paint on</label><select id="fcSex" style="max-width:100px"><option>male</option><option>female</option></select>
+      <span class="hint" id="fcBases"></span></div></div>
+    <div id="fcKinds"></div>
+    <details class="card"><summary><b>Shared prompts</b> <span class="hint">(every race: the hair and face wording; {hair} / {face} = the race's text in its card)</span></summary>
+      <div class="row"><label style="min-width:110px">Hair, front</label><textarea id="fcHairFront" rows="3" style="flex:1"></textarea></div>
+      <div class="row"><label style="min-width:110px">Hair, back</label><textarea id="fcHairBack" rows="3" style="flex:1"></textarea></div>
+      <div class="row"><label style="min-width:110px">Face</label><textarea id="fcFace" rows="3" style="flex:1"></textarea></div>
+      <div class="row"><label style="min-width:110px">Hair key</label><input id="fcHairKey" type="color" style="width:48px;padding:0">
+        <label>Eye key</label><input id="fcEyeKey" type="color" style="width:48px;padding:0">
+        <span class="hint">colours nothing else on the character uses (a green-skinned race needs another hair key); the prompts name them, so change both together</span></div>
+      <div class="row"><button class="primary" id="fcSharedSave">Save shared prompts</button><span class="hint" id="fcSharedStatus"></span></div>
+    </details>
+  </section>
+
   <section id="ramps">
     <p class="hint">A skin tone (or any colour) is a ramp of colours, darkest first. The art keeps its cel levels and the game colours them
-      from the chosen ramp, so one painted puppet serves every tone. The preview recolours the race's painted male and female puppets
-      (their approved Paint, else the newest); a race's <b>skin tone set</b> is every skin ramp tagged with it. Saved to <code>specs/palettes.json</code>.</p>
+      from the chosen ramp, so one painted puppet serves every colour. The preview shows the race's painted male and female puppets
+      (approved Paint, else the newest) wearing its hair and face (Face tab: first in the set, else the newest); the ramp you edit colours
+      its own layer (skin, hair or eyes). A race's <b>colour set</b> is every skin, hair and eye ramp tagged with it. Saved to <code>specs/palettes.json</code>.</p>
     <div class="rampgrid">
       <div>
         <div class="card"><div class="row"><label>Group</label><select id="rGroup" style="max-width:140px"></select>
@@ -288,12 +310,13 @@
           <span class="hint" id="rSrc"></span></div>
           <div class="pv" id="rPrev"></div>
           <div class="hint" id="rKey"></div></div>
-        <div class="card"><h2 style="margin-top:0">Skin tone set <span class="hint" id="rSetName"></span></h2>
+        <div class="card"><h2 style="margin-top:0"><span id="rSetName">Race</span>'s colour set</h2>
           <div class="row"><button id="rSetAdd">Add this ramp to the set</button><button id="rSetDel">Remove it from the set</button>
             <label>Monk tones</label><input id="rMonkPick" value="1,3,5,7,9" style="max-width:110px" title="Monk Skin Tone Scale numbers (1 = lightest, 10 = darkest)">
             <button id="rSetMake">Create starter set</button></div>
-          <div class="hint">Every skin ramp tagged with the race, on its male and female (front, 64 px). Click one to edit it. "Create starter set"
-            adds one ramp per Monk tone (named &lt;race&gt;_monk&lt;n&gt;, default sliders; existing names are kept) to tune from.</div>
+          <div class="hint">Every skin, hair and eye ramp tagged with the race, each on its male and female (front, 64 px; the other layers in the
+            set's first ramp). Click one to edit it. The add/remove buttons tag the ramp you're editing (any group). "Create starter set" adds one
+            skin ramp per Monk tone (named &lt;race&gt;_monk&lt;n&gt;, default sliders; existing names are kept).</div>
           <div class="pv" id="rAllPrev"></div></div>
       </div>
     </div>
@@ -686,7 +709,6 @@ async function initRamps() {
     $("rPick").oninput = () => { RS.over[RS.pick] = $("rPick").value; drawRamp(); };
     const setTag = (on) => guard(async () => {   // add / remove the race on the ramp being edited, then save it
       const race = $("rRace").value, races = new Set($("rRaces").value.split(",").map(x => x.trim()).filter(Boolean));
-      if (RS.group !== "skin") throw new Error("Skin tone sets are made of ramps in the skin group.");
       on ? races.add(race) : races.delete(race); $("rRaces").value = [...races].join(", "); await saveRamp(); });
     $("rSetAdd").onclick = setTag(true); $("rSetDel").onclick = setTag(false);
     $("rSetMake").onclick = guard(async () => {
@@ -739,22 +761,39 @@ async function loadPreview() {   // the race's painted male and female puppets (
   RS.imgs = {}; const src = [];
   const load = s_ => new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = s_; });
   for (const sex of ["male", "female"]) {
-    const pv = await api("/api/ws/paint/ramp_preview", { build: `${race}.${sex}` });
+    const pv = await api("/api/ws/face/ramp_preview", { build: `${race}.${sex}` });
     src.push(pv.id ? `${sex}: ${pv.id}${pv.approved ? " (approved)" : " (newest, not approved)"}` : `${sex}: no paint yet (Race → Paint)`);
-    for (const [f, v] of Object.entries(pv.facings)) RS.imgs[`${sex}|${f}`] = { art: await load(v.art), lev: await load(v.levels), key: v.key };
+    if (sex === "male") RS.wear = `hair ${pv.hair || "none"} · face ${pv.face || "none"}`;
+    for (const [f, v] of Object.entries(pv.facings)) RS.imgs[`${sex}|${f}`] = { art: await load(v.art), lev: await load(v.levels), key: v.key,
+      hair: v.hair ? await load(v.hair) : null, eyes: v.eyes ? await load(v.eyes) : null };
   }
-  $("rSrc").textContent = src.join(" · ");
+  $("rSrc").textContent = src.join(" · ") + (RS.wear ? ` · wearing ${RS.wear} (Face tab)` : "");
   $("rKey").textContent = ["male", "female"].filter(s_ => RS.imgs[`${s_}|front`]).map(s_ => `${s_} skin levels found: ${RS.imgs[`${s_}|front`].key.map(rgb2hex).join(" ")}`).join(" · ");
-  $("rSetName").textContent = `(${race})`;
+  $("rSetName").textContent = race[0].toUpperCase() + race.slice(1);
   drawPreview(); drawAll();
 }
-function recolor(k, ramp) {   // a painted puppet with its skin levels coloured from `ramp`
+function setRamp(group, race) {   // the race's first ramp of a group (else the group's first): the default for the other layers
+  const grp = (RS.doc && RS.doc.groups[group]) || {}, ent = Object.entries(grp);
+  const mine = ent.find(([n, e]) => (e.races || []).includes(race)) || ent[0];
+  return mine ? rampOf(mine[1]) : null;
+}
+function rampsFor(over) {   // {skin, hair, eyes} ramps: the one being edited for its own group, the set's first for the others
+  const race = $("rRace").value, out = {};
+  for (const g of ["skin", "hair", "eyes"]) out[g] = setRamp(g, race);
+  if (RS.group in out) out[RS.group] = curRamp();
+  return Object.assign(out, over || {});
+}
+function levelData(im, W, H) { if (!im) return null; const l = document.createElement("canvas"); l.width = W; l.height = H;
+  const lx = l.getContext("2d"); lx.drawImage(im, 0, 0, W, H); return lx.getImageData(0, 0, W, H).data; }
+function recolor(k, ramps) {   // a painted puppet: skin, hair and iris levels each coloured from its ramp (an array = skin only)
+  if (Array.isArray(ramps)) ramps = rampsFor({ skin: ramps });
   const I = RS.imgs[k], W = I.art.naturalWidth, H = I.art.naturalHeight;
   const c = document.createElement("canvas"); c.width = W; c.height = H; const x = c.getContext("2d"); x.drawImage(I.art, 0, 0);
   const d = x.getImageData(0, 0, W, H);
-  const l = document.createElement("canvas"); l.width = W; l.height = H; const lx = l.getContext("2d"); lx.drawImage(I.lev, 0, 0, W, H);
-  const ld = lx.getImageData(0, 0, W, H).data;
-  for (let p = 0; p < ld.length; p += 4) if (ld[p+3] > 0) { const col = ramp[Math.min(ramp.length-1, ld[p])]; d.data[p]=col[0]; d.data[p+1]=col[1]; d.data[p+2]=col[2]; }
+  const paint = (data, ramp, skip254) => { if (!data || !ramp) return;
+    for (let p = 0; p < data.length; p += 4) if (data[p+3] > 0 && !(skip254 && data[p] === 254)) {
+      const col = ramp[Math.min(ramp.length-1, data[p])]; d.data[p]=col[0]; d.data[p+1]=col[1]; d.data[p+2]=col[2]; } };
+  paint(levelData(I.lev, W, H), ramps.skin); paint(levelData(I.hair, W, H), ramps.hair, true); paint(levelData(I.eyes, W, H), ramps.eyes);
   x.putImageData(d, 0, 0); return c;
 }
 function onBg(src, n) { const c = document.createElement("canvas"); c.width = n; c.height = n; const x = c.getContext("2d");
@@ -763,24 +802,29 @@ function small(src, n) { return onBg(src, n); }
 function shown(c, css, cap) { c.style.width = css + "px"; c.style.height = css + "px";
   const fig = document.createElement("figure"); fig.appendChild(c); const fc = document.createElement("figcaption"); fc.textContent = cap; fig.appendChild(fc); return fig; }
 function drawPreview() {
-  if (!RS.imgs) return; const el = $("rPrev"); el.innerHTML = ""; const ramp = curRamp();
+  if (!RS.imgs) return; const el = $("rPrev"); el.innerHTML = ""; const ramp = rampsFor();
   const keys = Object.keys(RS.imgs);
   if (!keys.length) { el.innerHTML = `<p class="hint">No painted puppets for this race yet: Race → Paint.</p>`; return; }
   for (const k of keys) el.appendChild(shown(onBg(recolor(k, ramp), 512), 220, k.replace("|", ", ")));
   for (const k of keys) el.appendChild(shown(small(recolor(k, ramp), 64), 128, `${k.replace("|", ", ")}, 64 px`));
 }
-function drawAll() {   // the race's skin tone set: every skin ramp tagged with it, on its male and female fronts
+function drawAll() {   // the race's colour set: every skin, hair and eye ramp tagged with it, on its male and female fronts
   if (!RS.doc || !RS.imgs) return;
   const el = $("rAllPrev"), race = $("rRace").value; el.innerHTML = "";
-  const tones = Object.entries(RS.doc.groups.skin || {}).filter(([n, e]) => (e.races || []).includes(race));
-  if (!tones.length) { el.innerHTML = `<p class="hint">No skin ramps tagged "${race}" yet: add the one you're editing, or create a starter set.</p>`; return; }
-  for (const [n, e] of tones) {
-    const ramp = RS.group === "skin" && n === RS.name ? curRamp() : rampOf(e);
-    const box = document.createElement("div"); box.className = "ritem" + (RS.group === "skin" && n === RS.name ? " on" : ""); box.style.display = "inline-block";
-    for (const sex of ["male", "female"]) if (RS.imgs[`${sex}|front`]) box.appendChild(shown(small(recolor(`${sex}|front`, ramp), 64), 110, sex));
-    const cap = document.createElement("div"); cap.className = "hint"; cap.textContent = n; box.appendChild(cap);
-    box.onclick = () => { if (RS.group !== "skin") { RS.group = "skin"; $("rGroup").value = "skin"; } selectRamp(n); };
-    el.appendChild(box);
+  const names = { skin: "Skin", hair: "Hair", eyes: "Eyes" };
+  for (const g of ["skin", "hair", "eyes"]) {
+    const row = document.createElement("div"); row.innerHTML = `<h2>${names[g]}</h2>`; el.appendChild(row);
+    const tones = Object.entries(RS.doc.groups[g] || {}).filter(([n, e]) => (e.races || []).includes(race));
+    if (!tones.length) { const p_ = document.createElement("p"); p_.className = "hint";
+      p_.textContent = `No ${g} ramps tagged "${race}" yet: pick one in the ${g} group and "Add this ramp to the set"${g === "skin" ? ", or create a starter set" : ""}.`; row.appendChild(p_); continue; }
+    for (const [n, e] of tones) {
+      const on = RS.group === g && n === RS.name, ramp = on ? curRamp() : rampOf(e);
+      const box = document.createElement("div"); box.className = "ritem" + (on ? " on" : ""); box.style.display = "inline-block";
+      for (const sex of ["male", "female"]) if (RS.imgs[`${sex}|front`]) box.appendChild(shown(small(recolor(`${sex}|front`, rampsFor({ [g]: ramp })), 64), 110, sex));
+      const cap = document.createElement("div"); cap.className = "hint"; cap.textContent = n; box.appendChild(cap);
+      box.onclick = () => { if (RS.group !== g) { RS.group = g; $("rGroup").value = g; RS.name = null; } selectRamp(n); };
+      row.appendChild(box);
+    }
   }
 }
 async function saveRamp() {
@@ -1425,6 +1469,94 @@ setInterval(() => {   // after a save or an AI fix: reload the previews (and the
           await paLoadView(PA.view); paStatus(" AI fix applied"); } }
       paPreview(); paDraw(); }).catch(e => err(e.message)); }
 }, 2000);
+
+// ------------------------------------------------------------------ Face tab (racial hair + faces)
+const FC = { race: null, st: null, inited: false, drafts: {}, ramp: { hair: "", face: "" }, urls: {} };
+function fcCard(kind) {
+  const st = FC.st, r = st.spec.races[FC.race] || {}, sex = $("fcSex").value, comp = st.composed[sex];
+  const group = kind === "hair" ? "hair" : "eyes", pal = (RS.doc || {}).groups ? (RS.doc.groups[group] || {}) : (FC.pal || {})[group] || {};
+  const cands = st.kinds[kind].slice().reverse().map(c => {
+    const u = (f) => FC.urls[`${kind}|${c.id}|${f}`] || `${img(c.dir + "/" + f)}&t=${c.stamp}`;
+    const files = kind === "hair" ? ["prev_male_front.png", "prev_male_back.png", "prev_female_front.png", "prev_female_back.png"] : ["head_male.png", "head_female.png"];
+    const keyed = c.meta.keyed || {}, nokey = Object.values(keyed).some(n => n === 0);
+    return `<div class="pcand ${c.in_set ? "on" : ""}" style="width:auto">
+      <div class="row" style="gap:3px;margin:0;flex-wrap:nowrap">${files.filter(f => c.files.includes(f)).map(f => `<img loading="lazy" src="${u(f)}" style="width:${kind === "hair" ? 120 : 170}px;height:${kind === "hair" ? 120 : 170}px;background:#c4c6cc;border-radius:3px" title="${f}">`).join("")}</div>
+      <div class="hint">seed ${c.meta.seed ?? "?"} · on ${c.meta.on || "?"}${nokey ? ` · <span style="color:var(--warn)">${kind === "hair" ? "hair" : "irises"} not keyed: can't be recoloured</span>` : ""}</div>
+      <div class="row" style="gap:4px;margin:0"><button data-fcset="${c.id}" data-kind="${kind}" data-on="${c.in_set ? 0 : 1}" style="flex:1">${c.in_set ? "✓ in the set" : "Add to the set"}</button>
+        ${c.in_set ? "" : `<button data-fcarc="${c.id}" data-kind="${kind}" title="Archive (moves to archive/workshop/face/)" style="width:auto;padding:2px 8px">✕</button>`}</div></div>`; }).join("");
+  const key = `${kind}:${FC.race}`, val = key in FC.drafts ? FC.drafts[key] : (r[kind] || "");
+  return `<div class="card"><h2 style="margin-top:0">${kind === "hair" ? "Hair" : "Face (eyes, brows, nose, mouth)"} <span class="hint">${st.sets[kind].length} in ${FC.race}'s set</span></h2>
+    <div class="row"><label style="min-width:110px">${kind === "hair" ? "Hairstyle" : "Face"} (${FC.race})</label>
+      <textarea data-fcdraft="${key}" rows="2" style="flex:1" placeholder="${kind === "hair" ? "the style only, e.g. long braided hair (the colour comes from the hair ramps)" : "e.g. narrow eyes, thin brows, a small smile"}">${esc(val)}</textarea></div>
+    <div class="row"><button data-fcsave="${kind}">Save</button>
+      <label>Candidates</label><input data-fcn="${kind}" type="number" value="2" min="1" max="6" style="max-width:60px">
+      <label>Seed</label><input data-fcseed="${kind}" type="number" value="${st.kinds[kind].length * 7 + 1}" style="max-width:80px">
+      <button class="primary" data-fcgen="${kind}">Queue ${kind} candidates</button>
+      <label>${kind === "hair" ? "Hair" : "Eye"} colour</label><select data-fcramp="${kind}" style="max-width:150px">${Object.keys(pal).map(n => `<option ${n === FC.ramp[kind] ? "selected" : ""}>${n}</option>`).join("")}</select>
+      <span class="hint">recolours the previews (Ramps edits the ramps)</span></div>
+    <details><summary class="hint">the prompt${kind === "hair" ? "s" : ""} this sends (painted on the ${sex})</summary>${kind === "hair"
+      ? `<div class="hint">front</div><div class="prompt">${esc(comp.hair.front)}</div><div class="hint">back</div><div class="prompt">${esc(comp.hair.back)}</div>`
+      : `<div class="prompt">${esc(comp.face)}</div>`}</details>
+    <div class="cands pcands">${cands || `<p class="hint">No ${kind} candidates yet.</p>`}</div></div>`;
+}
+function fcRender() {
+  const a = document.activeElement;
+  if ($("fcKinds").contains(a) && ["TEXTAREA", "INPUT"].includes(a.tagName)) return;
+  const st = FC.st;
+  $("fcBases").textContent = Object.entries(st.bases).map(([s_, c]) => `${s_}: ${c || "no paint yet (Race → Paint)"}`).join(" · ");
+  $("fcKinds").innerHTML = fcCard("hair") + fcCard("face");
+  const keep = id => document.activeElement === $(id);
+  if (!keep("fcHairFront")) $("fcHairFront").value = st.spec.hair.front; if (!keep("fcHairBack")) $("fcHairBack").value = st.spec.hair.back;
+  if (!keep("fcFace")) $("fcFace").value = st.spec.face;
+  $("fcHairKey").value = st.spec.hair_key || "#22c822"; $("fcEyeKey").value = st.spec.eye_key || "#d020d0";
+  document.querySelectorAll("[data-fcdraft]").forEach(t => t.oninput = () => { FC.drafts[t.dataset.fcdraft] = t.value; });
+  document.querySelectorAll("[data-fcsave]").forEach(b_ => b_.onclick = guard(async () => {
+    const kind = b_.dataset.fcsave, key = `${kind}:${FC.race}`, sp = JSON.parse(JSON.stringify(FC.st.spec));
+    sp.races[FC.race] = sp.races[FC.race] || {}; sp.races[FC.race][kind] = (key in FC.drafts ? FC.drafts[key] : sp.races[FC.race][kind] || "").trim();
+    FC.st = await api("/api/ws/face/spec", { race: FC.race, spec: sp }); delete FC.drafts[key]; fcRender(); }));
+  document.querySelectorAll("[data-fcgen]").forEach(b_ => b_.onclick = guard(async () => {
+    const kind = b_.dataset.fcgen;
+    if (`${kind}:${FC.race}` in FC.drafts) throw new Error("Save the text first (it'd be ignored).");
+    await queue([{ kind: "face_gen", race: FC.race, sex: $("fcSex").value, n: +document.querySelector(`[data-fcn="${kind}"]`).value,
+      seed: +document.querySelector(`[data-fcseed="${kind}"]`).value, label: `${FC.race} · ${kind} · face` }]); }));
+  document.querySelectorAll("[data-fcset]").forEach(b_ => b_.onclick = guard(async () => {
+    FC.st = await api("/api/ws/face/set", { race: FC.race, kind: b_.dataset.kind, id: b_.dataset.fcset, on: b_.dataset.on === "1" }); fcRender(); }));
+  document.querySelectorAll("[data-fcarc]").forEach(b_ => b_.onclick = guard(async () => {
+    FC.st = await api("/api/ws/face/archive", { race: FC.race, kind: b_.dataset.kind, id: b_.dataset.fcarc }); fcRender(); }));
+  document.querySelectorAll("[data-fcramp]").forEach(sel => sel.onchange = guard(async () => {   // previews in another hair / eye colour
+    const kind = sel.dataset.fcramp; FC.ramp[kind] = sel.value; sel.disabled = true;
+    try { for (const c of FC.st.kinds[kind]) {
+      const urls = await api("/api/ws/face/preview", { race: FC.race, kind, id: c.id, ramp: sel.value });
+      for (const [f, u] of Object.entries(urls)) FC.urls[`${kind}|${c.id}|${f}`] = u; } }
+    finally { fcRender(); } }));
+}
+async function fcLoad() {
+  FC.st = await api("/api/ws/face/state", { race: FC.race });
+  if (!RS.doc) FC.pal = (await api("/api/ws/ramp/palettes", {})).groups;
+  fcRender();
+}
+async function initFace() {
+  if (!FC.inited) {
+    FC.inited = true;
+    const races = Object.keys((await api("/api/ws/race/state", { race: "human" })).spec.races);
+    $("fcRace").innerHTML = races.map(r => `<option>${r}</option>`).join(""); FC.race = races[0];
+    $("fcRace").onchange = guard(async () => { FC.race = $("fcRace").value; FC.urls = {}; await fcLoad(); });
+    $("fcSex").onchange = fcRender;
+    $("fcSharedSave").onclick = guard(async () => {
+      const sp = JSON.parse(JSON.stringify(FC.st.spec));
+      sp.hair = { front: $("fcHairFront").value.trim(), back: $("fcHairBack").value.trim() }; sp.face = $("fcFace").value.trim();
+      sp.hair_key = $("fcHairKey").value; sp.eye_key = $("fcEyeKey").value;
+      FC.st = await api("/api/ws/face/spec", { race: FC.race, spec: sp }); $("fcSharedStatus").textContent = " saved"; fcRender(); });
+  }
+  await fcLoad();
+}
+document.querySelector('.tab[data-t="face"]').addEventListener("click", guard(initFace));
+setInterval(() => {   // when a face job finishes: reload the candidates
+  if (!FC.inited) return;
+  const done = jobs.filter(j => j.kind === "face_gen" && (j.status === "done" || j.status === "failed")).length;
+  if (FC.done === undefined) { FC.done = done; return; }
+  if (done !== FC.done) { FC.done = done; fcLoad().catch(e => err(e.message)); }
+}, 2500);
 
 function renderAll() { renderBoard(); renderBase(); renderStyle(); renderSets(); renderDrawer(false); }
 refresh().then(pollJobs).catch(e => err(e.message));

@@ -1,0 +1,16 @@
+{
+  "_doc": "Prompts of the Face tab (hdart/puppet_face.py): racial hair and faces painted on the race's painted puppets. {style} = the paint style groups (specs/paint.json), {body} = the paint body text of the build painted on (race traits + description + gender body + its paint face & body words), {hair} / {face} = the race's description below (hair: the style only, no colour). Hair is painted in one key colour (`hair_key`, a colour nothing else on the character uses) and cut out by hue; its brightness becomes cel levels coloured by a hair ramp (Ramps, group hair). Hair: `hair.front` then `hair.back` (with the front as reference). Face: `face` (front only); its irises are painted in `eye_key` (magenta) and coloured by an eye ramp (Ramps, group eyes).",
+  "hair_key": "#22c822",
+  "eye_key": "#d020d0",
+  "hair": {
+    "front": "{style}. The head and shoulders of one {body}, now with {hair}. The hair is one flat vivid pure green colour (a green-screen colour key), shaded only with darker and lighter green, with clean dark outlines; the same face, head shape, ears, skin and body. Three-quarter view facing left, seen slightly from above, on a pure white background.",
+    "back": "{style}. The head and shoulders of the same {body} seen from behind, three-quarter back view, with {hair}: the same hairstyle as in the reference image, now from behind, in the same flat vivid pure green (a green-screen colour key), shaded only with darker and lighter green, with clean dark outlines, on a pure white background."
+  },
+  "face": "{style}. Close-up of the face of one {body}: {face}. The irises are one flat vivid magenta colour (a colour key), shaded only with darker and lighter magenta. The same head shape, skin colour, ears and lighting; only the eyes, eyebrows, nose and mouth are drawn, with clean dark outlines.",
+  "races": {
+    "human": {
+      "hair": "short messy hair",
+      "face": "large expressive eyes, thick eyebrows, a small nose, a small neutral mouth"
+    }
+  }
+}
