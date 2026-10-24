@@ -1,0 +1,37 @@
+{
+  "id": "polyhaven_stone_tiles_02",
+  "name": "Stone Tiles 02",
+  "source": "polyhaven",
+  "asset": "stone_tiles_02",
+  "license": "CC0",
+  "url": "https://polyhaven.com/a/stone_tiles_02",
+  "tags": [
+    "floor",
+    "outdoor",
+    "rock",
+    "rocks",
+    "slates",
+    "stone",
+    "stones",
+    "tiles",
+    "uneven",
+    "wall"
+  ],
+  "descriptors": "floor, outdoor, rock, rocks, slates, stone, stones, tiles",
+  "size_m": [
+    2,
+    2
+  ],
+  "palette": {
+    "stones": [
+      "#76766f",
+      "#7c7c75",
+      "#70716a",
+      "#85857c"
+    ],
+    "mortar": "#848078",
+    "variation": 0.06
+  },
+  "repeats": 1,
+  "imported": "2026-10-24"
+}

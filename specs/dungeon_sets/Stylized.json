@@ -659,6 +659,20 @@
       "thickness": 0.25,
       "board": "tile.crypt_wall",
       "built_from": "tile.Stylized_stone_wall_master"
+    },
+    {
+      "id": "tile.Stylized_Rocky_master",
+      "kind": "tile",
+      "shape": "floor",
+      "method": "master",
+      "board": "tile.crypt_floor",
+      "variants": 1,
+      "prompt": "Large polished flagstone floor, with thick dark mortar.",
+      "family": {
+        "prompts": [
+          "Large polished flagstone floor, with thick dark mortar."
+        ]
+      }
     }
   ],
   "sheet": {
