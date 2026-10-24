@@ -353,141 +353,35 @@
       "method": "master",
       "board": "tile.crypt_floor",
       "variants": 1,
-      "prompt": "flat pale gray tiles, pristine squares, grid with crisp edges, medium tiles; with dark mortar lines",
+      "prompt": "flat, smooth, gray stone tile, matte, uneven, medium, fantasy, whimsical, large grey tiles, Square, straight lines, dark mortar, gray tile, uneven, sharp corners, buttery smooth",
       "family": {
         "prompts": [
-          "flat pale gray tiles, pristine squares, grid with crisp edges, medium tiles; with dark mortar lines"
+          "flat, smooth, gray stone tile, matte, uneven, medium, fantasy, whimsical, large grey tiles, Square, straight lines, dark mortar, gray tile, uneven, sharp corners, buttery smooth"
         ],
         "variations": [
           {
             "id": "v1",
-            "text": "one large crack running across"
-          },
-          {
-            "id": "v2",
-            "text": "moist moss growing in the mortar and creeping along the tiles, wet moss everywhere\n"
+            "text": "small impact dent with cracks radiating outwards"
           },
           {
             "id": "v3",
-            "text": "a few sunken and chipped stones"
-          },
-          {
-            "id": "v4",
-            "text": "a shallow puddle, wet, slippery\n"
+            "text": "a few sunken uneven tiles, some tiles are chipped or broken"
           },
           {
             "id": "v5",
-            "text": "scattered dust and small rubble"
-          },
-          {
-            "id": "vmv4zx5fa",
-            "text": "A large tile in the center"
-          },
-          {
-            "id": "vmv4zzovz",
-            "text": "thick sprawling roots emerging from under the tiles"
-          },
-          {
-            "id": "vmv501qav",
-            "text": "a cluster of small tiles\n\n"
-          },
-          {
-            "id": "vmv51zvj7",
-            "text": "overgrown vines\n"
-          }
-        ],
-        "sizes": [
-          1,
-          2,
-          3,
-          4
-        ],
-        "weights": {
-          "2": 70,
-          "3": 70,
-          "4": 70
-        }
-      }
-    },
-    {
-      "id": "tile.Stylized_stone_master_v1",
-      "kind": "tile",
-      "shape": "floor",
-      "method": "repaint",
-      "from": "tile.Stylized_stone_master",
-      "atlas": 1,
-      "board": "tile.crypt_floor",
-      "variants": 2,
-      "prompt": "flat pale blue-gray stone tiles, pristine squares with crisp edges and sharp corners, but a mix of small/medium/large tiles; with dark mortar lines"
-    },
-    {
-      "id": "tile.Stylized_stone_master_v2",
-      "kind": "tile",
-      "shape": "floor",
-      "method": "repaint",
-      "from": "tile.Stylized_stone_master",
-      "atlas": 2,
-      "board": "tile.crypt_floor",
-      "variants": 2,
-      "prompt": "flat pale blue-gray stone tiles, pristine squares with crisp edges and sharp corners, but a mix of small/medium/large tiles; with dark mortar lines"
-    },
-    {
-      "id": "tile.Stylized_stone_master_v3",
-      "kind": "tile",
-      "shape": "floor",
-      "method": "repaint",
-      "from": "tile.Stylized_stone_master",
-      "atlas": 3,
-      "board": "tile.crypt_floor",
-      "variants": 1,
-      "prompt": "flat pale blue-gray stone tiles, pristine squares with crisp edges and sharp corners, but a mix of small/medium/large tiles; with dark mortar lines"
-    },
-    {
-      "id": "tile.Stylized_stone_master_v4",
-      "kind": "tile",
-      "shape": "floor",
-      "method": "repaint",
-      "from": "tile.Stylized_stone_master",
-      "atlas": 4,
-      "board": "tile.crypt_floor",
-      "variants": 1,
-      "prompt": "flat pale blue-gray stone tiles, pristine squares with crisp edges and sharp corners, but a mix of small/medium/large tiles; with dark mortar lines"
-    },
-    {
-      "id": "tile.Stylized_stone_wall_master",
-      "kind": "elevation",
-      "shape": "elevation",
-      "method": "wall_master",
-      "variants": 1,
-      "prompt": "pale grey large stone wall with dark mortar, sharp crisp lines, flat stone cap along the top, dungeon wall, bricks 043, beige, brick, bricks, mortar, sloppy, stone, wall",
-      "family": {
-        "prompts": [
-          "pale grey large stone wall with dark mortar, sharp crisp lines, flat stone cap along the top, dungeon wall, bricks 043, beige, brick, bricks, mortar, sloppy, stone, wall"
-        ],
-        "variations": [
-          {
-            "id": "v1",
-            "text": "one large crack running across"
-          },
-          {
-            "id": "v2",
-            "text": "moss growing in the joints"
-          },
-          {
-            "id": "v3",
-            "text": "a few sunken and chipped stones"
-          },
-          {
-            "id": "v4",
-            "text": "a shallow puddle"
-          },
-          {
-            "id": "v5",
-            "text": "scattered dust and small rubble"
+            "text": "destroyed stone tiles covered in rubble"
           },
           {
             "id": "v6",
-            "text": "a worn, smoother patch"
+            "text": "roots have broken through the tiles, small plants begin to grow in the mortar joints"
+          },
+          {
+            "id": "vmv65vcsg",
+            "text": "a cluster of tiles that are irregularly sized, small tiles"
+          },
+          {
+            "id": "vmv65wq5d",
+            "text": "Wet moss covers the tiles and runs up the mortar joints"
           }
         ],
         "sizes": [
@@ -504,11 +398,123 @@
         "palette_lock": true,
         "template": {
           "pattern": "image",
-          "material": "ambientcg_bricks043",
+          "material": "polyhaven_large_grey_tiles",
           "repeats": 1,
           "strength": 0.65,
-          "seed": 1
+          "seed": 1,
+          "link": true
         },
+        "span": "once",
+        "even_tone": 0.8
+      }
+    },
+    {
+      "id": "tile.Stylized_stone_master_v1",
+      "kind": "tile",
+      "shape": "floor",
+      "method": "repaint",
+      "from": "tile.Stylized_stone_master",
+      "atlas": 1,
+      "board": "tile.crypt_floor",
+      "variants": 3,
+      "prompt": "flat, smooth, gray stone tile, matte, uneven, medium, fantasy, whimsical, large grey tiles, Square, straight lines, dark mortar, gray tile, uneven, sharp corners, buttery smooth"
+    },
+    {
+      "id": "tile.Stylized_stone_master_v2",
+      "kind": "tile",
+      "shape": "floor",
+      "method": "repaint",
+      "from": "tile.Stylized_stone_master",
+      "atlas": 2,
+      "board": "tile.crypt_floor",
+      "variants": 2,
+      "prompt": "flat, smooth, gray stone tile, matte, uneven, medium, fantasy, whimsical, large grey tiles, Square, straight lines, dark mortar, gray tile, uneven, sharp corners, buttery smooth"
+    },
+    {
+      "id": "tile.Stylized_stone_master_v3",
+      "kind": "tile",
+      "shape": "floor",
+      "method": "repaint",
+      "from": "tile.Stylized_stone_master",
+      "atlas": 3,
+      "board": "tile.crypt_floor",
+      "variants": 1,
+      "prompt": "flat, smooth, gray stone tile, matte, uneven, medium, fantasy, whimsical, large grey tiles, Square, straight lines, dark mortar, gray tile, uneven, sharp corners, buttery smooth"
+    },
+    {
+      "id": "tile.Stylized_stone_master_v4",
+      "kind": "tile",
+      "shape": "floor",
+      "method": "repaint",
+      "from": "tile.Stylized_stone_master",
+      "atlas": 4,
+      "board": "tile.crypt_floor",
+      "variants": 1,
+      "prompt": "flat, smooth, gray stone tile, matte, uneven, medium, fantasy, whimsical, large grey tiles, Square, straight lines, dark mortar, gray tile, uneven, sharp corners, buttery smooth"
+    },
+    {
+      "id": "tile.Stylized_stone_wall_master",
+      "kind": "elevation",
+      "shape": "elevation",
+      "method": "wall_master",
+      "variants": 1,
+      "prompt": "large pale gray stone blocks, medium mortar, flat, buttery smooth, blocks in medium grey mortar, a flat stone cap along the top",
+      "family": {
+        "prompts": [
+          "large pale gray stone blocks, medium mortar, flat, buttery smooth, blocks in medium grey mortar, a flat stone cap along the top"
+        ],
+        "variations": [
+          {
+            "id": "v1",
+            "text": "one large crack running across"
+          },
+          {
+            "id": "v2",
+            "text": "moss growing in the joints"
+          },
+          {
+            "id": "v3",
+            "text": "a few sunken and chipped stones"
+          },
+          {
+            "id": "vmv66u1bu",
+            "text": "The wall is partially collapsed but is blocked with rubble and fallen debris "
+          }
+        ],
+        "sizes": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "weights": {
+          "2": 70,
+          "3": 70,
+          "4": 70
+        },
+        "palette_lock": true,
+        "template": {
+          "pattern": "cobble",
+          "params": {
+            "across": 3,
+            "mortar": 0.012,
+            "bevel": 0.012
+          },
+          "palette": {
+            "stones": [
+              "#848485",
+              "#8f8f8f",
+              "#787979",
+              "#5e5d55"
+            ],
+            "mortar": "#383833",
+            "variation": 0.06
+          },
+          "strength": 0.8,
+          "seed": 1,
+          "link": true
+        },
+        "span": "once",
         "doors": [
           {
             "id": "d1",
@@ -529,7 +535,7 @@
         ],
         "height": 3,
         "door_height": 2,
-        "door_width": 0.5
+        "door_width": 1
       }
     },
     {
@@ -540,7 +546,7 @@
       "shape": "elevation",
       "method": "wall_repaint",
       "atlas": 1,
-      "prompt": "pale grey large stone wall with dark mortar, sharp crisp lines, flat stone cap along the top, dungeon wall"
+      "prompt": "a wall of flat, blocks in courses with mortar, a flat stone cap along the top"
     },
     {
       "from": "tile.Stylized_stone_wall_master",
@@ -550,7 +556,7 @@
       "shape": "elevation",
       "method": "wall_repaint",
       "atlas": 2,
-      "prompt": "pale grey large stone wall with dark mortar, sharp crisp lines, flat stone cap along the top, dungeon wall"
+      "prompt": "a wall of flat, blocks in courses with mortar, a flat stone cap along the top"
     },
     {
       "from": "tile.Stylized_stone_wall_master",
@@ -560,7 +566,7 @@
       "shape": "elevation",
       "method": "wall_repaint",
       "atlas": 3,
-      "prompt": "pale grey large stone wall with dark mortar, sharp crisp lines, flat stone cap along the top, dungeon wall"
+      "prompt": "a wall of flat, blocks in courses with mortar, a flat stone cap along the top"
     },
     {
       "from": "tile.Stylized_stone_wall_master",
@@ -570,7 +576,7 @@
       "shape": "elevation",
       "method": "wall_repaint",
       "atlas": 4,
-      "prompt": "pale grey large stone wall with dark mortar, sharp crisp lines, flat stone cap along the top, dungeon wall"
+      "prompt": "a wall of flat, blocks in courses with mortar, a flat stone cap along the top"
     },
     {
       "from": "tile.Stylized_stone_wall_master",
@@ -601,7 +607,7 @@
       "length": 1,
       "height": 3.0,
       "door_height": 2.0,
-      "door_width": 0.5,
+      "door_width": 1.0,
       "thickness": 0.25,
       "board": "tile.crypt_door",
       "built_from": "tile.Stylized_stone_wall_master"
@@ -653,111 +659,19 @@
       "thickness": 0.25,
       "board": "tile.crypt_wall",
       "built_from": "tile.Stylized_stone_wall_master"
-    },
-    {
-      "id": "tile.Stylized_bricks_089_master",
-      "kind": "tile",
-      "shape": "floor",
-      "method": "master",
-      "board": "tile.crypt_floor",
-      "variants": 1,
-      "prompt": "pale grey stone tile with dark mortar, stylized, pixar, bold straight lines, square, clay render, nonrepeating, seamless",
-      "family": {
-        "prompts": [
-          "pale grey stone tile with dark mortar, stylized, pixar, bold straight lines, square, clay render, nonrepeating, seamless"
-        ],
-        "variations": [
-          {
-            "id": "v1",
-            "text": "one large crack running across"
-          },
-          {
-            "id": "v2",
-            "text": "moss growing in the joints"
-          },
-          {
-            "id": "v3",
-            "text": "a few sunken and chipped stones"
-          },
-          {
-            "id": "v4",
-            "text": "a shallow puddle"
-          },
-          {
-            "id": "v5",
-            "text": "scattered dust and small rubble"
-          },
-          {
-            "id": "v6",
-            "text": "a worn, smoother patch"
-          }
-        ],
-        "sizes": [
-          1,
-          2,
-          3,
-          4
-        ],
-        "weights": {
-          "2": 70,
-          "3": 70,
-          "4": 70
-        },
-        "palette_lock": true,
-        "template": {
-          "pattern": "image",
-          "material": "ambientcg_bricks089",
-          "repeats": 1,
-          "strength": 0.3,
-          "seed": 1
-        }
-      }
-    },
-    {
-      "id": "tile.Stylized_bricks_089_master_v1",
-      "kind": "tile",
-      "shape": "floor",
-      "method": "repaint",
-      "from": "tile.Stylized_bricks_089_master",
-      "atlas": 1,
-      "board": "tile.crypt_floor",
-      "variants": 3,
-      "prompt": "pale grey stone tile with dark mortar, stylized, pixar, bold straight lines, square, clay render, nonrepeating, seamless"
-    },
-    {
-      "id": "tile.Stylized_bricks_089_master_v2",
-      "kind": "tile",
-      "shape": "floor",
-      "method": "repaint",
-      "from": "tile.Stylized_bricks_089_master",
-      "atlas": 2,
-      "board": "tile.crypt_floor",
-      "variants": 2,
-      "prompt": "pale grey stone tile with dark mortar, stylized, pixar, bold straight lines, square, clay render, nonrepeating, seamless"
-    },
-    {
-      "id": "tile.Stylized_bricks_089_master_v3",
-      "kind": "tile",
-      "shape": "floor",
-      "method": "repaint",
-      "from": "tile.Stylized_bricks_089_master",
-      "atlas": 3,
-      "board": "tile.crypt_floor",
-      "variants": 1,
-      "prompt": "pale grey stone tile with dark mortar, stylized, pixar, bold straight lines, square, clay render, nonrepeating, seamless"
-    },
-    {
-      "id": "tile.Stylized_bricks_089_master_v4",
-      "kind": "tile",
-      "shape": "floor",
-      "method": "repaint",
-      "from": "tile.Stylized_bricks_089_master",
-      "atlas": 4,
-      "board": "tile.crypt_floor",
-      "variants": 1,
-      "prompt": "pale grey stone tile with dark mortar, stylized, pixar, bold straight lines, square, clay render, nonrepeating, seamless"
     }
   ],
-  "harmonize": 0.1,
-  "pixel": 512
+  "sheet": {
+    "floor": "tile.Stylized_stone_master",
+    "palette": {
+      "stones": [
+        "#848485",
+        "#8f8f8f",
+        "#787979",
+        "#5e5d55"
+      ],
+      "mortar": "#383833",
+      "variation": 0.06
+    }
+  }
 }

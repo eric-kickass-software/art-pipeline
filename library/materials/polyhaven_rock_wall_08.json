@@ -1,0 +1,40 @@
+{
+  "id": "polyhaven_rock_wall_08",
+  "name": "Rock Wall 08",
+  "source": "polyhaven",
+  "asset": "rock_wall_08",
+  "license": "CC0",
+  "url": "https://polyhaven.com/a/rock_wall_08",
+  "tags": [
+    "gray",
+    "grey",
+    "man made",
+    "outdoor",
+    "rock",
+    "rocks",
+    "stone",
+    "stonework",
+    "timeworn",
+    "uneven",
+    "wall",
+    "weathered",
+    "worn"
+  ],
+  "descriptors": "gray, grey, man made, outdoor, rock, rocks, stone, stonework",
+  "size_m": [
+    1.7999999523162842,
+    1.7999999523162842
+  ],
+  "palette": {
+    "stones": [
+      "#4e473f",
+      "#585147",
+      "#433e37",
+      "#655e54"
+    ],
+    "mortar": "#4d4840",
+    "variation": 0.06
+  },
+  "repeats": 1,
+  "imported": "2026-10-12"
+}

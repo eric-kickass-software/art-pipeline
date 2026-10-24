@@ -1,12 +1,17 @@
 {
   "_doc": "Races for the Workshop's Races tab. Each race has three mannequin builds (<race>.unisex, <race>.male, <race>.female) in the puppet-ready A-pose. The unisex front is txt2img from the chosen `style_groups` of specs/ai_style.json + `pose` + race traits/description + the unisex body + `base_body` (or, with `from`, an edit of that race's approved unisex front using `from_edit`); male and female fronts are edits of the race's approved unisex front that keep the head, face, pose, scale and feet and the smooth base body; every back is an edit of its approved front. The base is a smooth, featureless, unclothed doll body so clothing is generated per gender later. Skin tones: ramps in specs/palettes.json (group skin) whose `races` include the race id.",
   "pose": "full body, three-quarter view facing left, seen slightly from above, standing in an A-pose: both arms held straight out and down at about 30 degrees away from the body with white space between each arm and the torso, legs apart at shoulder width, feet flat, floating in empty space",
-  "base_body": "an unclothed mannequin body that is completely smooth and featureless like a plastic toy doll, no anatomical details, bald head, barefoot, neutral expression",
-  "style_groups": ["style", "proportions", "rendering", "framing"],
+  "base_body": "",
+  "style_groups": [
+    "style",
+    "proportions",
+    "rendering",
+    "framing"
+  ],
   "sexes": {
-    "unisex": "an androgynous adult with a neutral, average build",
-    "male": "an adult male build: broader shoulders, a flat chest, narrower hips and slightly more muscular arms",
-    "female": "an adult female build: narrower shoulders, a modest smooth bust, wider hips and a defined waist"
+    "unisex": "an androgynous adult with a neutral, average build, an unclothed mannequin body that is completely smooth and featureless like a plastic toy doll, no anatomical details, bald head, barefoot, neutral expression",
+    "male": "an adult male build: broader shoulders, a flat chest, narrower hips and slightly more muscular arms, athletic build, cell shaded, gray boxer briefs",
+    "female": "an adult female build: narrower shoulders, a modest smooth bust, wider hips and a defined waist, athletic build, cell shaded, gray underwear"
   },
   "races": {
     "human": {

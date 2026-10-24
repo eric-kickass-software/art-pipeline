@@ -1,0 +1,38 @@
+{
+  "id": "polyhaven_brick_pavement_02",
+  "name": "Brick Pavement 02",
+  "source": "polyhaven",
+  "asset": "brick_pavement_02",
+  "license": "CC0",
+  "url": "https://polyhaven.com/a/brick_pavement_02",
+  "tags": [
+    "brick",
+    "bricks",
+    "floor",
+    "gray",
+    "man made",
+    "old",
+    "outdoor flooring",
+    "pavement",
+    "rough",
+    "sidewalk",
+    "urban"
+  ],
+  "descriptors": "brick, bricks, floor, gray, man made, old, outdoor flooring, pavement",
+  "size_m": [
+    2,
+    2
+  ],
+  "palette": {
+    "stones": [
+      "#4e4840",
+      "#544d47",
+      "#49423a",
+      "#5b544e"
+    ],
+    "mortar": "#494139",
+    "variation": 0.06
+  },
+  "repeats": 1,
+  "imported": "2026-10-12"
+}

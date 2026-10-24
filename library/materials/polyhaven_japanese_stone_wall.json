@@ -1,0 +1,35 @@
+{
+  "id": "polyhaven_japanese_stone_wall",
+  "name": "Japanese Stone Wall",
+  "source": "polyhaven",
+  "asset": "japanese_stone_wall",
+  "license": "CC0",
+  "url": "https://polyhaven.com/a/japanese_stone_wall",
+  "tags": [
+    "man made",
+    "outdoor",
+    "rock",
+    "rocks",
+    "stone",
+    "stones",
+    "uneven",
+    "wall"
+  ],
+  "descriptors": "man made, outdoor, rock, rocks, stone, stones, uneven, wall",
+  "size_m": [
+    1.8999998569488525,
+    1.8999998569488525
+  ],
+  "palette": {
+    "stones": [
+      "#807c75",
+      "#77736b",
+      "#8f8a82",
+      "#6c685f"
+    ],
+    "mortar": "#756e61",
+    "variation": 0.06
+  },
+  "repeats": 1,
+  "imported": "2026-10-12"
+}

@@ -1,0 +1,37 @@
+{
+  "id": "polyhaven_large_grey_tiles",
+  "name": "Large Grey Tiles",
+  "source": "polyhaven",
+  "asset": "large_grey_tiles",
+  "license": "CC0",
+  "url": "https://polyhaven.com/a/large_grey_tiles",
+  "tags": [
+    "damaged",
+    "dirty",
+    "floor",
+    "grey",
+    "large",
+    "man made",
+    "outdoor",
+    "tiles",
+    "uneven",
+    "weathered"
+  ],
+  "descriptors": "Square, straight lines, dark mortar, gray tile, uneven",
+  "size_m": [
+    3,
+    3
+  ],
+  "palette": {
+    "stones": [
+      "#888378",
+      "#767266",
+      "#9c958b",
+      "#524f3d"
+    ],
+    "mortar": "#7d786a",
+    "variation": 0.06
+  },
+  "repeats": 1,
+  "imported": "2026-10-12"
+}
