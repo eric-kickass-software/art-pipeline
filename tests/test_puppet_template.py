@@ -70,6 +70,14 @@ assert abs(up["points"][6][1]) < 0.5 and up["points"][6][0] > 1.0      # the rou
 e = out
 
 
+f = copy.deepcopy(out); fc = {"eyes": [[200, 130], [240, 130]], "mouth": [210, 170], "center": [[230, 60], [220, 130], [205, 190]]}
+f["views"]["front"]["shapes"]["head"]["face"] = fc
+kept = pt.save(f)["views"]["front"]["shapes"]["head"]["face"]
+assert kept["eyes"] == fc["eyes"] and kept["mouth"] == fc["mouth"]       # face guides survive a save
+g = pt.render(pt.load(), "front", s=1)["head"][1]
+assert ((g[..., 0] > 200) & (g[..., 1] > 100) & (g[..., 1] < 180) & (g[..., 2] < 60) & (g[..., 3] > 0)).any()   # drawn (orange)
+
+
 def refused(mut):
     b = copy.deepcopy(spec); mut(b)
     try: pt.save(b)

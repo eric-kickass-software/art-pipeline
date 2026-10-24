@@ -268,7 +268,9 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
      a round cap of 3 points around each joint (the overlap under the parent) and both sides of the limb at five
      stations (calf, bicep, knee), ~16 points per segment; the torso as ~13 landmarks (neck,
      shoulders, armpits, waist, hips, leg holes, crotch) joined by a Catmull-Rom curve, complete under the arms; the
-     head as a smooth outline; seams (waistband; leg holes = the torso's lower edge). `measure(build)` takes the
+     head as a smooth outline; seams (waistband; leg holes = the torso's lower edge); front **face guides**
+     (`shapes.head.face`: eye centres, mouth, centre line; `measure_face()` takes them from the approved art's
+     eyes and mouth, `add_face(spec)` adds them to an edited spec; draggable in the editor, orange). `measure(build)` takes the
      numbers from an approved build's puppet rig (hand-fixed joints included); `render(spec, view, s)` draws every
      part from the spec alone (clay shading lit from the top left, full outline, guide lines on a separate layer);
      `preview()` writes `sprites/ai/puppet_template/` (`front/`, `back/` parts + `.guides.png`, `parts_*.png`,

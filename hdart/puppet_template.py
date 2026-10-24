@@ -10,6 +10,7 @@ The template is numbers, not pixels (specs/puppet_template.json), per view (fron
           under the parent) and both sides of the limb at five stations (calf, bicep, knee)
   shapes  torso and head: smooth closed outlines (radial polygons); the torso is complete under the arms
   seams   guide lines shared by neighbouring parts (waistband; leg holes follow the torso's lower edge)
+  face    front head guides (Live2D-style): the two eye centres, the mouth and the face's centre line
 
     measure(build)          -> spec measured from an approved build's puppet rig (hand-fixed joints included)
     render(spec, view, s)   -> {part: (rgba, guides rgba, pivot)} at 512*s px, clay shaded, outlined
@@ -32,7 +33,7 @@ STATIONS = (0.2, 0.35, 0.5, 0.65, 0.8)    # where both sides of a limb are measu
 LIGHT = np.array([-0.45, -0.65, 0.62]); LIGHT = LIGHT / np.linalg.norm(LIGHT)   # from the top left, toward the viewer
 CLAY = (206, 204, 200)
 LINE = (58, 52, 50)
-GUIDE_BONE, GUIDE_SEAM = (40, 150, 230, 255), (225, 40, 150, 255)
+GUIDE_BONE, GUIDE_SEAM, GUIDE_FACE = (40, 150, 230, 255), (225, 40, 150, 255), (255, 140, 0, 255)
 
 
 def out_dir():
@@ -212,6 +213,43 @@ def limb_world(V, L):
     return [tuple(a + d * t + n * q) for t, q in L["points"]]
 
 
+def measure_face(B):
+    """Eye centres, mouth and centre line from the approved front art: the dark eye blobs inside the head (2-means on
+    x), the dark mouth below them. Falls back to chibi proportions."""
+    hm = B["pieces"]["head"].rgba[..., 3] > 0; ys, xs = np.nonzero(hm)
+    y0, y1, x0, x1 = ys.min(), ys.max(), xs.min(), xs.max(); H, W = y1 - y0, x1 - x0
+    inner = hm.copy()
+    for _ in range(8):
+        inner &= np.roll(inner, 1, 0) & np.roll(inner, -1, 0) & np.roll(inner, 1, 1) & np.roll(inner, -1, 1)
+    lum = np.asarray(B["img"].convert("RGB")).astype(float).mean(-1)
+    yy = np.arange(PX)[:, None]
+    dy, dx = np.nonzero(inner & (lum < 70) & (yy > y0 + 0.52 * H) & (yy < y0 + 0.8 * H))
+    eyes = [[x0 + 0.3 * W, y0 + 0.64 * H], [x0 + 0.62 * W, y0 + 0.64 * H]]
+    if len(dx) >= 30:
+        c = np.percentile(dx, [20, 80]).astype(float)
+        for _ in range(12):
+            lab = np.abs(dx[:, None] - c[None]).argmin(1)
+            c = np.array([dx[lab == i].mean() if (lab == i).any() else c[i] for i in (0, 1)])
+        if (lab == 0).sum() > 8 and (lab == 1).sum() > 8 and abs(c[1] - c[0]) > 0.12 * W:
+            eyes = sorted([[float(np.median(dx[lab == i])), float(np.median(dy[lab == i]))] for i in (0, 1)])
+    ey = (eyes[0][1] + eyes[1][1]) / 2; mx = (eyes[0][0] + eyes[1][0]) / 2
+    my, mxs = np.nonzero(inner & (lum < 90) & (yy > ey + 0.1 * H) & (yy < ey + 0.3 * H)
+                         & (np.abs(np.arange(PX)[None, :] - mx) < 0.25 * W))
+    mouth = [float(np.median(mxs)), float(np.median(my))] if len(my) >= 4 else [mx, ey + 0.18 * H]
+    mid = [mx, ey]
+    up = np.array(mid) - np.array(mouth); up = up / (np.linalg.norm(up) or 1.0)
+    top = np.array(mid) + up * 0.42 * H
+    chin = np.array(mouth) - up * 0.12 * H
+    return {"eyes": [_r(e) for e in eyes], "mouth": _r(mouth), "center": [_r(top), _r(mid), _r(chin)]}
+
+
+def add_face(spec, build="human.unisex"):
+    """Give a spec (e.g. one already edited in the Workshop) front face guides measured from the build's art."""
+    views, _ = _rig(build)
+    spec["views"]["front"]["shapes"]["head"]["face"] = measure_face(views["front"])
+    return spec
+
+
 def measure_view(B):
     m, J, C, jt = B["mask"], B["J"], B["C"], B["joints"]
     joints = {k: {"pivot": _r(jt[k]["pivot"]), "R": round(float(jt[k]["R"]), 1), "mid": _r(C[k]["mid"]),
@@ -244,8 +282,11 @@ def measure_view(B):
     torso, y_w, y_hip = _torso_points(B)
     head = _smooth_ring(_radial(_smooth_mask(B["pieces"]["head"].rgba[..., 3] > 0, 3)), 7)[::6]   # 16 landmarks
     # waistband (briefs): between the waist and the hips; bowed for the view from above
+    hd = {"points": head}
+    if B.get("view") == "front":
+        hd["face"] = measure_face(B)
     return {"joints": joints, "limbs": limbs,
-            "shapes": {"torso": {"points": torso}, "head": {"points": head}},
+            "shapes": {"torso": {"points": torso}, "head": hd},
             "seams": {"waist": {"y": round(float(y_w + 0.6 * (y_hip - y_w)), 1), "bow": 0.18}},
             "order": _order(B)}
 
@@ -263,7 +304,7 @@ def _rig(build):
     hip, views = {}, {}
     for v in ("back", "front"):
         ovr = (b.get("puppet") or {}).get("joints", {}).get(v)
-        views[v] = pp._build(Image.open(ai_kit.AI_DIR / src[v]), v, hip, ovr)
+        views[v] = pp._build(Image.open(ai_kit.AI_DIR / src[v]), v, hip, ovr); views[v]["view"] = v
     return views, src
 
 
@@ -321,6 +362,12 @@ def save(spec):
             if not pts or len(pts) < 6:
                 raise ValueError(f"{v} {n}: needs at least 6 outline points")
             shapes[n] = {"points": [_pt(p, f"{v} {n} point") for p in pts]}
+            fc = V["shapes"][n].get("face")
+            if n == "head" and fc:
+                shapes[n]["face"] = {"eyes": [_pt(p, f"{v} eye") for p in fc["eyes"]][:2], "mouth": _pt(fc["mouth"], f"{v} mouth"),
+                                     "center": [_pt(p, f"{v} face centre") for p in fc["center"]]}
+                if len(shapes[n]["face"]["eyes"]) != 2 or len(shapes[n]["face"]["center"]) < 2:
+                    raise ValueError(f"{v} face: needs 2 eyes and a centre line")
         w = V["seams"]["waist"]
         seams = {"waist": {"y": round(float(w["y"]), 1), "bow": round(float(w.get("bow", 0.18)), 3)}}
         order = V.get("order") or (old.get("views", {}).get(v, {}).get("order"))
@@ -430,6 +477,16 @@ def render(spec, view, s=2):
             w = _waist(V, s, cov)
             if w:
                 d.line([(x * s, y * s) for x, y in w], fill=GUIDE_SEAM, width=2 * s)
+        fc = V["shapes"]["head"].get("face") if name == "head" else None
+        if fc:
+            e0, e1 = np.array(fc["eyes"][0]) * s, np.array(fc["eyes"][1]) * s; ext = (e1 - e0) * 0.35
+            d.line([tuple(e0 - ext), tuple(e1 + ext)], fill=GUIDE_FACE, width=max(1, s))          # eye line
+            r = 0.09 * np.linalg.norm(e1 - e0)
+            for e in (e0, e1):
+                d.ellipse([e[0] - r, e[1] - 1.3 * r, e[0] + r, e[1] + 1.3 * r], outline=GUIDE_FACE, width=max(1, s))
+            m = np.array(fc["mouth"]) * s
+            d.line([(m[0] - r, m[1]), (m[0] + r, m[1])], fill=GUIDE_FACE, width=2 * s)              # mouth
+            d.line([(x * s, y * s) for x, y in fc["center"]], fill=GUIDE_FACE, width=max(1, s))     # centre line
         if name.startswith("leg") and name.endswith(".upper"):
             # leg hole: the torso's lower edge where it crosses this thigh (shared with the torso's own edge)
             tc = covs["torso"] > 0.5; edge = tc & ~np.roll(tc, -1, 0)

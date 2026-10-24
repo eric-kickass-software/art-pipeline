@@ -170,7 +170,7 @@
         <div class="row" style="align-items:flex-start;margin:0"><canvas id="tpCv_front" width="512" height="512" style="width:560px;cursor:crosshair;border-radius:4px"></canvas>
         <canvas id="tpCv_back" width="512" height="512" style="width:560px;cursor:crosshair;border-radius:4px"></canvas></div></div>
       <p class="hint">Drag: <b style="color:#2a50ff">shoulder/hip</b>, <b style="color:#ff2a2a">elbow/knee</b>, <b style="color:#ff9a00">wrist/ankle</b>,
-        <b style="color:#22b14c">fingertip/toe</b>, <b style="color:#a24bd6">neck/pelvis/crotch</b>, <b style="color:#e1288f">waistband</b>.
+        <b style="color:#22b14c">fingertip/toe</b>, <b style="color:#a24bd6">neck/pelvis/crotch</b>, <b style="color:#e1288f">waistband</b>, <b style="color:#ff8c00">face guides</b> (front head: eyes, mouth, centre line).
         Click a part (or its layer) to select it in both views, then drag its <b style="color:#20c0c0">outline points</b>
         (double-click the outline to add one, Alt-click a point to remove it). Limb points belong to their bone: moving a joint carries the
         outline along (the round ends around the joints are the overlap under the parent).
@@ -854,7 +854,11 @@ const TP = { st: null, spec: null, sel: null, undo: [], art: {}, dirty: false, i
   tplDone: -1, vw: { front: { z: 1, ox: 0, oy: 0 }, back: { z: 1, ox: 0, oy: 0 } }, hidden: new Set() };
 try { TP.hidden = new Set(JSON.parse(localStorage.getItem("tpHidden") || "[]")); } catch (e) { }
 const TP_LIMBS = ["armA", "armB", "legA", "legB"];
-const TPC = { pivot: "#2a50ff", mid: "#ff2a2a", end: "#ff9a00", tip: "#22b14c", body: "#a24bd6", width: "#ffd23f", shape: "#20c0c0", seam: "#e1288f" };
+const TPC = { pivot: "#2a50ff", mid: "#ff2a2a", end: "#ff9a00", tip: "#22b14c", body: "#a24bd6", width: "#ffd23f", shape: "#20c0c0", seam: "#e1288f", face: "#ff8c00" };
+function tpFacePts(V) {   // the front head's face guide handles: [key, index, point]
+  const f = V.shapes.head.face; if (!f) return [];
+  return [["eyes", 0, f.eyes[0]], ["eyes", 1, f.eyes[1]], ["mouth", -1, f.mouth], ...f.center.map((q, i) => ["center", i, q])];
+}
 const tpJ = (V, name) => { const [k, j] = name.split("."); return j ? V.joints[k][j] : V.joints[name]; };
 const tpShown = (name) => !TP.hidden.has(name);
 function tpCatmull(P, n = 10) {   // closed Catmull-Rom through the landmarks (same as the Python renderer)
@@ -921,6 +925,16 @@ function tpDraw(v) {
     x.strokeStyle = TPC.seam; x.lineWidth = 2 * px; x.beginPath();
     for (let u = -1; u <= 1.001; u += 0.1) { const qx = w[0] + hw * u, qy = w[1] + V.seams.waist.bow * hw * (1 - u * u); u === -1 ? x.moveTo(qx, qy) : x.lineTo(qx, qy); }
     x.stroke(); dot(w, TPC.seam, 5);
+    const f = V.shapes.head.face;
+    if (f && tpShown("head")) {   // face guides: eye line, eyes, mouth, centre line
+      const [e0, e1] = f.eyes, ex = [(e1[0] - e0[0]) * 0.35, (e1[1] - e0[1]) * 0.35], r = 0.09 * Math.hypot(e1[0] - e0[0], e1[1] - e0[1]);
+      x.strokeStyle = TPC.face; x.lineWidth = 1.5 * px;
+      x.beginPath(); x.moveTo(e0[0] - ex[0], e0[1] - ex[1]); x.lineTo(e1[0] + ex[0], e1[1] + ex[1]); x.stroke();
+      for (const e of f.eyes) { x.beginPath(); x.ellipse(e[0], e[1], r, 1.3 * r, 0, 0, 7); x.stroke(); }
+      x.lineWidth = 2.5 * px; x.beginPath(); x.moveTo(f.mouth[0] - r, f.mouth[1]); x.lineTo(f.mouth[0] + r, f.mouth[1]); x.stroke();
+      x.lineWidth = 1.5 * px; x.beginPath(); f.center.forEach((q, i) => i ? x.lineTo(...q) : x.moveTo(...q)); x.stroke();
+      tpFacePts(V).forEach(([, , q]) => { const s = 3.5 * px; x.fillStyle = TPC.face; x.fillRect(q[0] - s, q[1] - s, 2 * s, 2 * s); });
+    }
   }
   if (tpShown("joints")) {
     for (const kk of TP_LIMBS) for (const n of ["pivot", "mid", "end", "tip"]) dot(V.joints[kk][n], TPC[n]);
@@ -962,6 +976,7 @@ function tpHit(v, V, p) {   // the handle under the cursor (selected part's hand
     for (const n of ["neck", "pelvis", "crotch"]) if (near(V.joints[n])) return { type: "joint", name: n };
   }
   if (tpShown("guides") && near(tpWaist(V))) return { type: "seam" };
+  if (tpShown("guides") && tpShown("head")) for (const [key, i, q] of tpFacePts(V)) if (near(q, 7)) return { type: "face", key, i };
   const x = $("tpCv_front").getContext("2d"); x.setTransform(1, 0, 0, 1, 0, 0);
   for (const name of [...V.order].reverse()) if (tpShown(name) && x.isPointInPath(tpPartPath(V, name), p[0], p[1])) return { type: "part", name };
   return null;
@@ -996,6 +1011,7 @@ function tpWire(v) {
     if (d.type === "joint") { const [k, j] = d.name.split("."); if (j) V.joints[k][j] = p; else V.joints[k] = p; }
     else if (d.type === "pt") tpSetPt(V, d.part, d.i, p);
     else if (d.type === "seam") V.seams.waist.y = p[1];
+    else if (d.type === "face") { const f = V.shapes.head.face; if (d.key === "mouth") f.mouth = p; else f[d.key][d.i] = p; }
     TP.dirty = true; tpDrawAll(); };
 }
 window.addEventListener("mouseup", () => { TP.drag = null; if (TP.pan) { ["front", "back"].forEach(v => $(`tpCv_${v}`).style.cursor = "crosshair"); TP.pan = null; } });
