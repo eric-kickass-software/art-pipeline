@@ -85,8 +85,8 @@ def compose(sp, view, parts, layers=(), blank=False):
     cv = Image.new("RGBA", (N, N))
     for n in sp["views"][view]["order"]:
         im = parts[n]
-        if n == "head" and blank and view == "front":
-            im = blank_face(im, face_ellipse(sp, 1.2))   # a little wider than the new face: old lashes go too
+        if n == "head" and blank and view == "front":   # a little wider than the new face (old lashes go too), never the outline
+            im = blank_face(im, face_ellipse(sp, 1.2) & inner_head(im))
         cv.alpha_composite(Image.fromarray(im))
         if n == "head":
             for L in layers:
@@ -114,6 +114,29 @@ def face_ellipse(sp, scale=1.0):
     rx, ry = 0.95 * w * scale, 0.85 * (np.linalg.norm(m - (e0 + e1) / 2) + 0.35 * w) * scale
     yy, xx = np.mgrid[:N, :N]
     return ((xx - c[0]) / rx) ** 2 + ((yy - c[1]) / ry) ** 2 <= 1
+
+
+def inner_head(head, px=12):
+    """The head shrunk by px: the face pass and the blank-face fill stay off its outline (no chin / jaw redraw)."""
+    a = Image.fromarray(np.where(head[..., 3] > 127, 255, 0).astype(np.uint8))
+    return np.asarray(a.filter(ImageFilter.MinFilter(2 * px + 1))) > 0
+
+
+def key_marks(rgba, fc):
+    """Face guide marks for the face pass, where the Template's face guides say: eye ovals (white, a magenta-key iris,
+    a dark rim) and a mouth line, so FLUX places and sizes the features like the Paint step's marks did."""
+    im = Image.fromarray(rgba); d = ImageDraw.Draw(im)
+    h_ = spec().get("eye_key", "#d020d0").lstrip("#"); key = tuple(int(h_[i:i + 2], 16) for i in (0, 2, 4)) + (255,)
+    e0, e1 = np.array(fc["eyes"][0]) * S, np.array(fc["eyes"][1]) * S; w = np.linalg.norm(e1 - e0); r = 0.16 * w
+    for e in (e0, e1):
+        d.ellipse([e[0] - r, e[1] - 1.3 * r, e[0] + r, e[1] + 1.3 * r], fill=(40, 30, 28, 255))
+        d.ellipse([e[0] - 0.82 * r, e[1] - 1.08 * r, e[0] + 0.82 * r, e[1] + 1.08 * r], fill=(246, 244, 240, 255))
+        d.ellipse([e[0] - 0.55 * r, e[1] - 0.75 * r, e[0] + 0.55 * r, e[1] + 0.85 * r], fill=key)
+        d.ellipse([e[0] - 0.25 * r, e[1] - 0.6 * r, e[0] + 0.02 * r, e[1] - 0.25 * r], fill=(250, 250, 250, 255))
+    m = np.array(fc["mouth"]) * S
+    d.line([(m[0] - 0.45 * r, m[1]), (m[0] + 0.45 * r, m[1])], fill=(110, 60, 55, 255), width=max(2, int(r * 0.18)))
+    out = np.asarray(im).copy(); out[..., 3] = rgba[..., 3]
+    return out
 
 
 def _components(mask, min_px):
@@ -215,6 +238,9 @@ def iris_levels(layer, levels=5, eyes=None):
         e0, e1 = np.array(eyes[0]) * S, np.array(eyes[1]) * S; r = 0.85 * np.linalg.norm(e1 - e0)
         yy, xx = np.mgrid[:layer.shape[0], :layer.shape[1]]
         iris &= (np.hypot(xx - e0[0], yy - e0[1]) < r) | (np.hypot(xx - e1[0], yy - e1[1]) < r)
+    # the iris edge (anti-aliased magenta next to the core) belongs to it too
+    near = np.asarray(Image.fromarray(np.where(iris, 255, 0).astype(np.uint8)).filter(ImageFilter.MaxFilter(5))) > 0
+    iris |= near & (layer[..., 3] > 127) & (dh < 55) & (sat > 0.18)
     lev = np.zeros(layer.shape, np.uint8)
     if iris.any():
         v_ = val[iris]; cent = np.percentile(v_, np.linspace(10, 90, levels))
@@ -294,7 +320,7 @@ def blank_face(head, ellipse, key=None):
     return out
 
 
-def _layer(before, after, region, thresh, min_px, key=None, skin_far=40, touch=None):
+def _layer(before, after, region, thresh, min_px, key=None, skin_far=40, touch=None, open_=True):
     """The pixels FLUX changed inside `region` as an RGBA layer (1024 px); with a skin key, only pixels that aren't
     skin (so re-shaded skin stays out of the layer); with `touch`, only pieces that touch that mask (hair grows from
     the head)."""
@@ -302,7 +328,8 @@ def _layer(before, after, region, thresh, min_px, key=None, skin_far=40, touch=N
     ch = (d > thresh) & region
     if key is not None:
         ch &= skin_dist(after, key) > skin_far
-    ch = np.asarray(Image.fromarray(np.where(ch, 255, 0).astype(np.uint8)).filter(ImageFilter.MinFilter(3)).filter(ImageFilter.MaxFilter(3))) > 0
+    if open_:   # drop specks (faces skip this: their lashes and outlines are 1-2 px lines)
+        ch = np.asarray(Image.fromarray(np.where(ch, 255, 0).astype(np.uint8)).filter(ImageFilter.MinFilter(3)).filter(ImageFilter.MaxFilter(3))) > 0
     ch = _components(ch & region, min_px)
     if touch is not None:   # drop pieces that don't touch the head (stray shapes FLUX drew beside it)
         near = np.asarray(Image.fromarray(np.where(touch, 255, 0).astype(np.uint8)).filter(ImageFilter.MaxFilter(7))) > 0
@@ -386,14 +413,17 @@ def generate(race, kind, sex="male", n=1, seed=1):
                     ref = d / "paint_front.png"
                 layers[v], levels[v] = key_layer(before, after, region, head)
         else:
-            v = "front"; region = face_ellipse(sp)
-            region &= parts[v]["head"][..., 3] > 127
+            v = "front"; region = face_ellipse(sp) & inner_head(parts[v]["head"])   # off the jaw / chin outline
             box, _ = _head_box(parts[v], 0.05, 0.05, 0.05)
             key = skin_key(parts[v]["head"])
             comp = compose(sp, v, parts[v], blank=True)
+            ca = np.asarray(comp).copy(); fc = sp["views"]["front"]["shapes"]["head"]["face"]
+            comp = Image.fromarray(key_marks(ca, fc))   # where the features go (like the Paint step's marks)
             before, after, init, out = _crop_pass(comp, region, box, P["face"], sd, D_FACE, f"{race}_{fid}_face")
+            blank_ = np.asarray(compose(sp, v, parts[v], blank=True)); al = blank_[..., 3:4] / 255.0   # the layer = what differs
+            before = (blank_[..., :3] * al + 255 * (1 - al)).astype(np.uint8)                          # from the blank head
             out.save(d / "paint_front.png")
-            layers[v] = _layer(before, after, region, 30, 12, key[2:], 35)   # lit skin levels only (dark lines stay in)
+            layers[v] = _layer(before, after, region, 22, 6, key[2:], 30, open_=False)   # lit skin levels only (dark lines stay in)
             levels[v] = iris_levels(layers[v], eyes=sp["views"]["front"]["shapes"]["head"]["face"]["eyes"])   # the irises (colour key) as cel levels for the eye ramps
         for v, L in layers.items():
             Image.fromarray(L).save(d / f"layer_{v}.png")

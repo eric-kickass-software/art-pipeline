@@ -345,8 +345,14 @@ tab is gone: its descriptor groups are there, its mannequin clothing / builds / 
      back with the painted front as reference. Cut out by hue (+ the dark outline pixels touching it, only pieces touching
      the head); the green's brightness becomes 5 cel levels (`levels_<view>.png`: R = level, 254 = outline, A = hair),
      coloured by a **hair ramp** (palettes group `hair`). So the race's hairstyle text is the style only, no colour.
+   - **Faceless heads (2026-10-24):** the Paint step's `face_guide` (`specs/paint.json`, Race → Shared prompts) is `faint` by
+     default: thin guide lines a little darker than the skin + a "blank face" prompt, so the painted head stays faceless and
+     every face comes from here (`marks` = the old solid eye/mouth marks, the head gets its own face).
    - **Face** (front): the head's own painted face is removed first (`blank_face`: non-skin pixels in the face area filled
-     from the skin around them), then FLUX repaints the face area; the layer keeps the non-skin feature pixels. Irises are
+     from the skin around them, kept off the outline), then FLUX repaints the face area starting from **guide marks**
+     (`key_marks`: eye ovals with a magenta-key iris, a mouth line, where the face guides say) inside the head shrunk by
+     12 px (`inner_head`: the chin / jaw outline is never redrawn); the layer keeps the non-skin feature pixels, thin
+     lashes and outlines included (no speck filter for faces). Irises are
      painted in the **magenta key** (`eye_key`) and become cel levels near the eye guides (`levels_front.png`), coloured by
      an **eye ramp** (group `eyes`). Candidates whose key wasn't painted are flagged "not keyed: can't be recoloured".
    - Per candidate `sprites/ai/face/<race>/<hair|face>/<id>/` (layers, levels, paints, previews on male and female, meta with

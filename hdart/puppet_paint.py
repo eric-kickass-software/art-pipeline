@@ -55,7 +55,10 @@ def save_spec(doc):
     for sex, e in (doc.get("sexes") or {}).items():
         if not isinstance(e, dict) or not all(isinstance(e.get(x, ""), str) for x in ("extra", "clothes")):
             raise ValueError(f"sexes.{sex} needs text fields extra and clothes")
-    out = {"_doc": old.get("_doc", ""), "style_groups": doc.get("style_groups") or old["style_groups"],
+    if doc.get("face_guide", "faint") not in ("faint", "marks"):
+        raise ValueError("face_guide is faint or marks")
+    out = {"_doc": old.get("_doc", ""), "face_guide": doc.get("face_guide", old.get("face_guide", "faint")),
+           "style_groups": doc.get("style_groups") or old["style_groups"],
            "figure": doc["figure"], "back_reference": str(doc.get("back_reference", "")), "complete": doc["complete"],
            "fix": doc["fix"], "sexes": doc.get("sexes") or old["sexes"]}
     SPEC.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8", newline="\n")
@@ -128,8 +131,20 @@ def briefs_zone(V, cov):
     return (cov > 0.5) & (yy > np.interp(xx, xs, ys, left=ys[0], right=ys[-1]))
 
 
-def face_marks(rgba, fc):
-    """Eye ovals (with a highlight) and a mouth line where the template's face guides say."""
+def face_marks(rgba, fc, mode="marks"):
+    """Where the template's face guides say: "faint" = thin lines a little darker than the skin (eye ovals, mouth), so
+    the painted head stays faceless and every face comes from the Face tab; "marks" = solid eye ovals (with a highlight)
+    and a mouth line (the painted head gets its own face)."""
+    if mode == "faint":
+        im = Image.fromarray(rgba); d = ImageDraw.Draw(im)
+        e0, e1 = np.array(fc["eyes"][0]) * S, np.array(fc["eyes"][1]) * S; r = 0.16 * np.linalg.norm(e1 - e0)
+        a = rgba[..., 3] > 127; col = tuple(int(c * 0.86) for c in np.median(rgba[a][:, :3], 0)) + (255,)
+        for e in (e0, e1):
+            d.ellipse([e[0] - r, e[1] - 1.3 * r, e[0] + r, e[1] + 1.3 * r], outline=col, width=2)
+        m = np.array(fc["mouth"]) * S
+        d.line([(m[0] - 0.45 * r, m[1]), (m[0] + 0.45 * r, m[1])], fill=col, width=2)
+        out = np.asarray(im).copy(); out[..., 3] = rgba[..., 3]
+        return out
     im = Image.fromarray(rgba); d = ImageDraw.Draw(im)
     e0, e1 = np.array(fc["eyes"][0]) * S, np.array(fc["eyes"][1]) * S; r = 0.1 * np.linalg.norm(e1 - e0)
     for e in (e0, e1):
@@ -141,13 +156,13 @@ def face_marks(rgba, fc):
     return out
 
 
-def inits_for(spec, view, parts, ramp):
+def inits_for(spec, view, parts, ramp, guide="faint"):
     V = spec["views"][view]
     out = {n: tinted(parts[n][0], ramp, briefs_zone(V, parts[n][0][..., 3] / 255) if n == "torso" else None)
            for n in V["order"]}
     fc = V["shapes"]["head"].get("face")
     if fc:
-        out["head"] = face_marks(out["head"], fc)
+        out["head"] = face_marks(out["head"], fc, guide)
     return out
 
 
@@ -408,7 +423,7 @@ def paint(build, n=1, seed=1):
     spec = pt.load()
     if not spec["views"]["front"]["shapes"]["head"].get("face"):
         raise ValueError("The template has no face guides yet: add them (Template tab / puppet_template.add_face).")
-    ramp = skin_ramp(race); P = composed(build)
+    ramp = skin_ramp(race); P = composed(build); guide = globals()["spec"]().get("face_guide", "faint")
     rendered = {v: pt.render(spec, v, S) for v in VIEWS}
     lays = {v: layout(rendered[v], spec["views"][v]["order"], spec["views"][v]) for v in VIEWS}
     made = []
@@ -419,7 +434,7 @@ def paint(build, n=1, seed=1):
                             "template_made": spec.get("made"), "prompts": {}}
         for v in VIEWS:
             V = spec["views"][v]; order = V["order"]; parts = rendered[v]
-            inits = inits_for(spec, v, parts, ramp)
+            inits = inits_for(spec, v, parts, ramp, guide)
             fprompt = P[v]["figure"]
             fpaint, fig_px = figure_pass(order, inits, fprompt, sd, f"{build}_{cid}_{v}_fig", [ref] if ref else [])
             fpaint.save(d / f"figure_{v}.png")

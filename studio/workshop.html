@@ -166,6 +166,8 @@
       <h2>Paint</h2>
       <div class="hint">{body} = race traits + description + the gender's body text + its paint face &amp; body words; {clothes} = the gender's paint clothes. Spec: <code>specs/paint.json</code>.</div>
       <div class="row"><label style="min-width:120px">Style groups</label><span id="ppGroups" class="chips"></span></div>
+      <div class="row"><label style="min-width:120px">Face guide</label><select id="ppFaceGuide" style="max-width:260px">
+        <option value="faint">faint (faceless head; faces from the Face tab)</option><option value="marks">marks (the head gets its own face)</option></select></div>
       <div class="row"><label style="min-width:120px">Figure, front</label><textarea id="ppFigFront" rows="3" style="flex:1"></textarea></div>
       <div class="row"><label style="min-width:120px">Figure, back</label><textarea id="ppFigBack" rows="3" style="flex:1"></textarea></div>
       <div class="row"><label style="min-width:120px">Back reference</label><textarea id="ppBackRef" rows="1" style="flex:1"></textarea></div>
@@ -853,7 +855,7 @@ async function initRaces() {
       const sp = JSON.parse(JSON.stringify(RC.pspec.spec));
       sp.figure = { front: $("ppFigFront").value.trim(), back: $("ppFigBack").value.trim() };
       sp.complete = { front: $("ppCmpFront").value.trim(), back: $("ppCmpBack").value.trim() };
-      sp.back_reference = $("ppBackRef").value.trim();
+      sp.back_reference = $("ppBackRef").value.trim(); sp.face_guide = $("ppFaceGuide").value;
       sp.style_groups = [...document.querySelectorAll("#ppGroups input:checked")].map(i => i.dataset.g);
       await api("/api/ws/paint/spec", { spec: sp }); $("ppStatus").textContent = " saved"; await loadRace(); });
     $("rpSave").onclick = guard(async () => {
@@ -873,6 +875,7 @@ function fillSharedPrompts() {
     const set = (id, v) => { if (!keep(id)) $(id).value = v || ""; };
     set("ppFigFront", ps.figure.front); set("ppFigBack", ps.figure.back); set("ppBackRef", ps.back_reference);
     set("ppCmpFront", ps.complete.front); set("ppCmpBack", ps.complete.back);
+    if (!keep("ppFaceGuide")) $("ppFaceGuide").value = ps.face_guide || "faint";
     const pon = new Set(ps.style_groups || []);
     if (!$("ppGroups").contains(document.activeElement))
       $("ppGroups").innerHTML = ORDER.map(g => `<label class="chip"><input type="checkbox" data-g="${g}" style="width:auto" ${pon.has(g)?"checked":""}> ${g}</label>`).join("");
