@@ -369,6 +369,10 @@ def render_previews(d, spec, frames=8):
         B2, pieces = pt.rig_from(pt.rig_from_spec(spec, v), parts); B2["rigid"] = (pieces, order)
         walk = [pp.on_bg(pp.render(B2, v, i / frames)) for i in range(frames)]
         pt._save(walk[0], d / f"walk_{v}.gif", save_all=True, append_images=walk[1:], duration=120, loop=0)
+        strip = Image.new("RGB", (pp.PX * frames, pp.PX))   # the Parts editor's pose scrubber
+        for i, w in enumerate(walk):
+            strip.paste(w, (i * pp.PX, 0))
+        pt._save(strip, d / f"walkstrip_{v}.png")
         rest = pp.on_bg(np.asarray(pt._compose(parts, order).resize((pp.PX, pp.PX), Image.LANCZOS)))
         pt._save(rest, d / f"rest_{v}.png")
 
@@ -536,7 +540,9 @@ def fix_region(build, cid, view, part, mask, prompt="", seed=3, denoise=0.75):
         raise ValueError(f"Unknown part {part}.")
     imgs = {n: np.asarray(Image.open(d / "parts" / view / f"{n}.png").convert("RGBA")) for n in V["order"]}
     raw = base64.b64decode(mask.split(",", 1)[-1]) if isinstance(mask, str) else mask
-    m = np.asarray(Image.open(io.BytesIO(raw)).convert("L").resize(imgs[part].shape[1::-1])) > 127
+    mi = np.asarray(Image.open(io.BytesIO(raw)).convert("RGBA").resize(imgs[part].shape[1::-1]))
+    # the editor sends a coloured mark on transparency (alpha = marked); an opaque mask is white = marked
+    m = mi[..., 3] > 127 if mi[..., 3].min() < 255 else mi[..., :3].mean(-1) > 127
     shape = imgs[part][..., 3] > 127
     tpl = d / "template" / view / f"{part}.png"
     if tpl.exists():   # the part may grow back into its template shape (gaps), never past it

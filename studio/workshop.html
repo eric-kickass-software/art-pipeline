@@ -69,6 +69,9 @@
   .job .s { color:var(--muted); } .job .s.running { color:var(--info); } .job .s.done { color:var(--ok); } .job .s.failed { color:var(--bad); }
   .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
   .bcands .cand { width:200px; } .bcands .cand img { width:190px; height:190px; }
+  .pcands .pcand { background:var(--card); border:2px solid transparent; border-radius:6px; padding:4px; width:316px; }
+  .pcands .pcand.on { border-color:var(--ok); } .pcands .pcand img { width:150px; height:150px; display:block; }
+  .pcands .pcand button { margin-top:4px; padding:2px 6px; font-size:12px; }
   .rampgrid { display:grid; grid-template-columns: 420px 1fr; gap:14px; }
   .rlist { display:flex; flex-direction:column; gap:4px; max-height:260px; overflow:auto; }
   .ritem { display:flex; align-items:center; gap:8px; padding:3px 6px; border-radius:4px; border:1px solid transparent; cursor:pointer; }
@@ -91,6 +94,7 @@
   <button class="tab on" data-t="board">Board</button>
   <button class="tab" data-t="races">Races</button>
   <button class="tab" data-t="template">Template</button>
+  <button class="tab" data-t="parts">Parts</button>
   <button class="tab" data-t="style">Style</button>
   <button class="tab" data-t="ramps">Ramps</button>
   <button class="tab" data-t="sets">Sets</button>
@@ -178,6 +182,47 @@
       <div class="hint" id="tpInfo"></div>
     </div>
     <div class="card"><h2 style="margin-top:0">Preview (rendered by the pipeline)</h2><div id="tpPreview" class="row" style="align-items:flex-start"></div></div>
+  </section>
+
+  <section id="parts">
+    <p class="hint">The <b>Parts editor</b>: touch up a painted candidate (Races → Paint → Edit parts) part by part. Every part is its own layer
+      in the rest pose; the selected part is drawn on top so its hidden ends can be painted too. Saving keeps the painted originals
+      (<b>Revert</b> brings them back) and re-renders the walk.</p>
+    <div class="card">
+      <div class="row"><label>Build</label><select id="paBuild" style="max-width:170px"></select>
+        <label>Candidate</label><select id="paCand" style="max-width:220px"></select>
+        <label>View</label><select id="paView" style="max-width:90px"><option>front</option><option>back</option></select>
+        <label>Size</label><select id="paZoom" style="max-width:90px"><option value="560">medium</option><option value="760" selected>large</option><option value="960">x-large</option></select>
+        <button id="paReset">Reset zoom</button>
+        <button id="paUndo" title="Ctrl+Z">Undo</button><button id="paRedo" title="Ctrl+Y">Redo</button>
+        <button class="primary" id="paSave">Save</button><button id="paRevert" title="Back to the painted originals (all edits of this candidate)">Revert to painted</button>
+        <span class="hint" id="paStatus"></span></div>
+      <div class="row" id="paTools">
+        <button data-tool="brush" title="B">Brush</button><button data-tool="eraser" title="E">Eraser</button>
+        <button data-tool="heal" title="H: fills the stroke from the colours around it">Heal</button>
+        <button data-tool="outline" title="O: the even outline colour and weight">Outline</button>
+        <button data-tool="pick" title="I (or Alt-click with any tool)">Eyedropper</button>
+        <button data-tool="mask" title="M: mark an area for the AI fix">AI fix area</button>
+        <label>Size</label><input id="paSize" type="range" min="1" max="80" value="12" style="max-width:120px"><span class="hint" id="paSizeV">12</span>
+        <label>Colour</label><input id="paColor" type="color" value="#d8a07c" style="width:44px;padding:0">
+        <label class="chip"><input id="paClamp" type="checkbox" checked style="width:auto"> keep inside the template shape</label>
+        <label class="chip"><input id="paTop" type="checkbox" checked style="width:auto"> selected part on top</label>
+        <label class="chip"><input id="paGhost" type="checkbox" checked style="width:auto"> template outline</label></div>
+      <div class="row" id="paFixRow"><label>AI fix</label><input id="paPrompt" placeholder="optional: what to paint there (e.g. smooth skin, the shoulder of the grey top)" style="flex:1">
+        <button class="primary" id="paFix">Fix marked area</button><button id="paClearMask">Clear mark</button></div>
+      <div class="row" style="align-items:flex-start;flex-wrap:nowrap">
+        <div style="min-width:190px"><div class="row" style="margin:0 0 4px"><b>Layers</b><button id="paAll" style="padding:1px 8px">all</button></div>
+          <div id="paLayers"></div></div>
+        <canvas id="paCv" width="760" height="760" style="width:760px;cursor:crosshair;border-radius:4px"></canvas>
+        <div style="min-width:280px"><b>Walk</b> <span class="hint">(saved parts; drag to scrub)</span>
+          <div id="paWalk" style="width:256px;height:256px;background-size:2048px 256px;background-color:#c4c6cc;border-radius:4px;margin-top:4px"></div>
+          <input id="paFrame" type="range" min="0" max="7" value="0" style="width:256px">
+          <div id="paPrev" style="margin-top:6px"></div></div>
+      </div>
+      <p class="hint">Paint on the <b>selected layer</b> (click a layer name). Left-drag paints; wheel zooms (up to 8×); right/middle-drag or Space+drag pans.
+        Keys: B brush, E eraser, H heal, O outline, I eyedropper, M AI-fix area, [ ] size, Ctrl+Z / Ctrl+Y. The AI fix repaints only the marked area of the
+        selected part (inside its template shape), with the whole figure as context, then re-renders the walk.</p>
+    </div>
   </section>
 
   <section id="base">
@@ -738,6 +783,9 @@ function fillSharedPrompts() {
 async function loadRace() {
   const first = await api("/api/ws/race/state", { race: RC.race || "human" });
   RC.race = first.race; RC.st = first;
+  RC.paint = {};   // the Paint step's candidates per sex
+  await Promise.all(["unisex", "male", "female"].map(async sex => {
+    try { RC.paint[sex] = await api("/api/ws/paint/state", { build: `${RC.race}.${sex}` }); } catch (e) { RC.paint[sex] = null; } }));
   const doc = RC.st.spec;
   $("raceSel").innerHTML = Object.entries(doc.races).map(([id, r]) => `<option value="${id}" ${id===RC.race?"selected":""}>${r.name} (${id})</option>`).join("");
   const r = doc.races[RC.race];
@@ -753,6 +801,25 @@ async function loadRace() {
   $("raceRampList").innerHTML = ramps.length ? ramps.map(([n, e]) => `<span class="ritem" title="${n}"><span class="nm">${n}</span><span class="strip">${(e.colors || []).map(c => `<i style="background:${c}"></i>`).join("")}</span></span>`).join("")
     : `<span class="hint">No skin ramps tagged "${RC.race}" yet: tag them in the Ramps tab (Races field).</span>`;
   renderRaceGrid();
+}
+function paintBlock(sex) {   // the Paint step: the clean template painted as this build (figure first, then hidden areas)
+  const p = (RC.paint || {})[sex], build = `${RC.race}.${sex}`;
+  if (!p) return "";
+  const cands = p.candidates.slice().reverse().map(c => {
+    const u = (f) => `${img(c.dir + "/" + f)}&t=${c.stamp}`, on = c.id === p.approved;
+    const has = (f) => c.files.includes(f);
+    return `<div class="pcand ${on ? "on" : ""}">
+      <div class="row" style="gap:4px;margin:0;flex-wrap:nowrap">${["rest_front.png", "rest_back.png"].filter(has).map(f => `<a href="${u(f.replace("rest_", "walk_").replace(".png", ".gif"))}" target="_blank" title="click: the walk"><img loading="lazy" src="${u(f)}" style="background:#c4c6cc;border-radius:3px"></a>`).join("")}</div>
+      <div class="hint">seed ${c.meta.seed ?? "?"}${c.edited ? " · hand-edited" : ""}${c.stale ? ` · <span style="color:var(--warn)">painted on an older template</span>` : ""}</div>
+      <div class="row" style="gap:4px;margin:0"><button data-ppapp="${c.id}" data-sex="${sex}" data-on="${on ? 0 : 1}" style="flex:1">${on ? "✓ approved" : "Approve"}</button>
+        <button data-ppedit="${c.id}" data-sex="${sex}" title="Open in the Parts editor">Edit parts</button>
+        ${on ? "" : `<button data-pparc="${c.id}" data-sex="${sex}" title="Archive (moves to archive/workshop/paint/)" style="width:auto;padding:2px 8px">✕</button>`}</div></div>`; }).join("");
+  return `<div style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px"><div class="row"><b>Paint</b>
+    <label>Candidates</label><input data-ppn="${sex}" type="number" value="2" min="1" max="6" style="max-width:60px">
+    <label>Seed</label><input data-ppseed="${sex}" type="number" value="${(p.candidates.length * 7 + 1)}" style="max-width:80px">
+    <button class="primary" data-ppgen="${sex}">Queue paint candidates</button>
+    <span class="hint">the clean template (Template tab) painted as ${build}: figure first, then the hidden ends; ~1 min each</span></div>
+    <div class="cands pcands">${cands || `<p class="hint">No paint candidates yet.</p>`}</div></div>`;
 }
 function puppetBlock(sex) {   // the puppet template step: skeleton + rigid pieces + test walk from the approved pair
   const p = RC.st.builds[sex].puppet, t = p.made ? `&t=${p.made}` : "";
@@ -809,7 +876,7 @@ function renderRaceGrid() {
       return `<div><div class="row"><b>${f}</b>
         ${d.ready === true ? `<button class="primary" data-rgen="${sex}" data-f="${f}">Queue candidates</button>` : `<span class="hint">${d.ready}</span>`}</div>
         <details><summary class="hint">prompt (${d.mode === "edit" ? "FLUX edit of the source image" : "text to image"})</summary><div class="prompt">${d.prompt}</div></details>
-        <div class="cands bcands">${cands || `<p class="hint">No candidates yet.</p>`}</div></div>`; }).join("")}</div>${puppetBlock(sex)}</div>`).join("");
+        <div class="cands bcands">${cands || `<p class="hint">No candidates yet.</p>`}</div></div>`; }).join("")}</div>${puppetBlock(sex)}${paintBlock(sex)}</div>`).join("");
   document.querySelectorAll("[data-pbuild]").forEach(btn => btn.onclick = guard(async () => {
     await queue([{ kind: "puppet", build: `${RC.race}.${btn.dataset.pbuild}`, label: `${RC.race} · ${btn.dataset.pbuild} · puppet` }]); }));
   document.querySelectorAll("[data-jed]").forEach(d => d.addEventListener("toggle", guard(async () => { if (d.open) await openJointEditor(d.dataset.jed); })));
@@ -821,6 +888,15 @@ function renderRaceGrid() {
     const sex = btn.dataset.jreset, build = `${RC.race}.${sex}`;
     for (const v of ["front", "back"]) await api("/api/ws/puppet/joints", { build, view: v, joints: null });
     await queue([{ kind: "puppet", build, label: `${RC.race} · ${sex} · puppet` }]); }));
+  document.querySelectorAll("[data-ppgen]").forEach(btn => btn.onclick = guard(async () => {
+    const sex = btn.dataset.ppgen, n = +document.querySelector(`[data-ppn="${sex}"]`).value, seed = +document.querySelector(`[data-ppseed="${sex}"]`).value;
+    await queue([{ kind: "paint", build: `${RC.race}.${sex}`, n, seed, label: `${RC.race} · ${sex} · paint` }]); }));
+  document.querySelectorAll("[data-ppapp]").forEach(btn => btn.onclick = guard(async () => {
+    await api("/api/ws/paint/approve", { build: `${RC.race}.${btn.dataset.sex}`, id: btn.dataset.ppapp, on: btn.dataset.on === "1" }); await loadRace(); }));
+  document.querySelectorAll("[data-pparc]").forEach(btn => btn.onclick = guard(async () => {
+    await api("/api/ws/paint/archive", { build: `${RC.race}.${btn.dataset.sex}`, id: btn.dataset.pparc }); await loadRace(); }));
+  document.querySelectorAll("[data-ppedit]").forEach(btn => btn.onclick = guard(async () => {
+    document.querySelector('.tab[data-t="parts"]').click(); await openParts(`${RC.race}.${btn.dataset.sex}`, btn.dataset.ppedit); }));
   document.querySelectorAll("[data-papp]").forEach(btn => btn.onclick = guard(async () => {
     await api("/api/ws/puppet/approve", { build: `${RC.race}.${btn.dataset.papp}`, on: btn.dataset.on === "1" }); await loadRace(); }));
   document.querySelectorAll("[data-rgen]").forEach(btn => btn.onclick = guard(async () => {
@@ -1067,6 +1143,252 @@ setInterval(() => {   // when a template job finishes: new preview (and, after a
   const done = jobs.filter(j => (j.kind === "tpl" || j.kind === "tpl_measure") && (j.status === "done" || j.status === "failed")).length;
   if (TP.tplDone === -1) { TP.tplDone = done; return; }
   if (done !== TP.tplDone) { TP.tplDone = done; const m = TP.measuring; TP.measuring = false; tpLoad(!m).catch(e => err(e.message)); }
+}, 2000);
+
+// ------------------------------------------------------------------ Parts editor (touch up a painted candidate)
+const PA = { build: null, id: null, doc: null, view: "front", parts: {}, tmpl: {}, sel: null, hidden: new Set(), tool: "brush",
+  vw: { z: 1, ox: 0, oy: 0 }, undo: [], redo: [], dirty: {}, mask: null, stroke: null, pan: null, space: false, inited: false, fixJob: null };
+const PA_N = 1024, PA_LINE = "#28201e";
+const paCanvas = (w = PA_N, h = PA_N) => { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; };
+const paLoadImg = (src) => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = src; });
+const paKey = (v, n) => `${v}|${n}`;
+async function paLoadView(v) {   // the part images (editable canvases) and the template shapes (clamp, ghost) of one view
+  const vd = PA.doc.views[v], t = `&t=${PA.doc.stamp}`;
+  await Promise.all(vd.order.map(async n => {
+    if (!PA.parts[paKey(v, n)]) { const c = paCanvas(); c.getContext("2d").drawImage(await paLoadImg(img(vd.parts[n]) + t), 0, 0); PA.parts[paKey(v, n)] = c; }
+    if (vd.template[n] && !PA.tmpl[paKey(v, n)]) { const c = paCanvas(); c.getContext("2d").drawImage(await paLoadImg(img(vd.template[n])), 0, 0); PA.tmpl[paKey(v, n)] = c; }
+  }));
+}
+function paSize() { const cv = $("paCv"), css = +$("paZoom").value, px = Math.round(css * (window.devicePixelRatio || 1));
+  cv.style.width = css + "px"; if (cv.width !== px) { cv.width = px; cv.height = px; } }
+let paRaf = 0;
+function paDraw() { if (!paRaf) paRaf = requestAnimationFrame(() => { paRaf = 0; paDrawNow(); }); }
+function paDrawNow() {
+  if (!PA.doc) return;
+  const cv = $("paCv"), x = cv.getContext("2d"), k = cv.width / PA_N, vw = PA.vw, order = PA.doc.views[PA.view].order;
+  x.setTransform(1, 0, 0, 1, 0, 0); x.fillStyle = "#c4c6cc"; x.fillRect(0, 0, cv.width, cv.height);
+  x.setTransform(k * vw.z, 0, 0, k * vw.z, k * vw.ox, k * vw.oy); x.imageSmoothingEnabled = vw.z < 2.5;
+  const top = $("paTop").checked && PA.sel;
+  for (const n of order) if (!PA.hidden.has(n) && !(top && n === PA.sel)) x.drawImage(PA.parts[paKey(PA.view, n)], 0, 0);
+  if (top && !PA.hidden.has(PA.sel)) x.drawImage(PA.parts[paKey(PA.view, PA.sel)], 0, 0);
+  if (PA.sel && $("paGhost").checked && PA.tmpl[paKey(PA.view, PA.sel)]) {   // the selected part's template shape, as a dashed ghost
+    if (!PA.ghost || PA.ghost.key !== paKey(PA.view, PA.sel)) PA.ghost = { key: paKey(PA.view, PA.sel), c: paGhost(PA.tmpl[paKey(PA.view, PA.sel)]) };
+    x.drawImage(PA.ghost.c, 0, 0);
+  }
+  if (PA.mask) { x.globalAlpha = 0.45; x.drawImage(PA.mask, 0, 0); x.globalAlpha = 1; }
+  if (PA.cursor) { const r = PA.tool === "outline" ? 2 : +$("paSize").value / 2;
+    x.strokeStyle = "#000"; x.lineWidth = 1 / vw.z; x.beginPath(); x.arc(PA.cursor[0], PA.cursor[1], Math.max(r, 1), 0, 7); x.stroke();
+    x.strokeStyle = "#fff"; x.beginPath(); x.arc(PA.cursor[0], PA.cursor[1], Math.max(r, 1) + 1 / vw.z, 0, 7); x.stroke(); }
+}
+function paGhost(t) {   // template shape -> a cyan edge (one-time per part)
+  const src = t.getContext("2d").getImageData(0, 0, PA_N, PA_N).data, out = paCanvas(), ctx = out.getContext("2d"), im = ctx.createImageData(PA_N, PA_N), d = im.data;
+  for (let y = 1; y < PA_N - 1; y++) for (let x = 1; x < PA_N - 1; x++) { const i = (y * PA_N + x) * 4, a = src[i + 3] > 127;
+    if (a && (src[i - 4 + 3] <= 127 || src[i + 4 + 3] <= 127 || src[i - PA_N * 4 + 3] <= 127 || src[i + PA_N * 4 + 3] <= 127)) { d[i] = 0; d[i + 1] = 210; d[i + 2] = 235; d[i + 3] = 230; } }
+  ctx.putImageData(im, 0, 0); return out;
+}
+function paLayers() {
+  const order = PA.doc.views[PA.view].order;
+  $("paLayers").innerHTML = order.slice().reverse().map(n => `<div class="tpl ${n === PA.sel ? "on" : ""}" data-psel="${n}">
+    <input type="checkbox" data-ply="${n}" ${PA.hidden.has(n) ? "" : "checked"} style="width:auto;margin:0 6px 0 0">${n}${PA.dirty[paKey(PA.view, n)] ? " •" : ""}</div>`).join("");
+  $("paLayers").querySelectorAll("[data-ply]").forEach(c => c.onchange = () => { c.checked ? PA.hidden.delete(c.dataset.ply) : PA.hidden.add(c.dataset.ply); paDraw(); });
+  $("paLayers").querySelectorAll("[data-psel]").forEach(r => r.onclick = e => { if (e.target.tagName === "INPUT") return; PA.sel = r.dataset.psel; paLayers(); paDraw(); });
+}
+function paStatus(t) { const n = Object.values(PA.dirty).filter(Boolean).length; $("paStatus").textContent = t || (n ? ` ${n} unsaved part${n > 1 ? "s" : ""}` : ""); }
+function paSetTool(t) { PA.tool = t; document.querySelectorAll("#paTools [data-tool]").forEach(b => b.classList.toggle("on", b.dataset.tool === t)); paDraw(); }
+function paPos(e) { const r = $("paCv").getBoundingClientRect(), s = [(e.clientX - r.left) * PA_N / r.width, (e.clientY - r.top) * PA_N / r.height];
+  return { s, w: [(s[0] - PA.vw.ox) / PA.vw.z, (s[1] - PA.vw.oy) / PA.vw.z] }; }
+function paPick(p) {   // the colour under the cursor, from the visible layers (selected on top)
+  const order = PA.doc.views[PA.view].order.filter(n => !PA.hidden.has(n)), x = Math.round(p[0]), y = Math.round(p[1]);
+  const seq = $("paTop").checked && PA.sel ? [...order.filter(n => n !== PA.sel), PA.sel] : order;
+  for (const n of seq.reverse()) { const d = PA.parts[paKey(PA.view, n)].getContext("2d").getImageData(x, y, 1, 1).data;
+    if (d[3] > 127) { $("paColor").value = "#" + [d[0], d[1], d[2]].map(c => c.toString(16).padStart(2, "0")).join(""); return; } }
+}
+function paStamp(ctx, a, b, r) {   // round stamps from a to b
+  const d = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.ceil(d / Math.max(1, r * 0.35)));
+  for (let i = 0; i <= n; i++) { const t = i / n; ctx.beginPath(); ctx.arc(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, r, 0, 7); ctx.fill(); }
+}
+function paBegin(p) {
+  const key = paKey(PA.view, PA.sel), part = PA.parts[key];
+  PA.stroke = { key, last: p, before: part.getContext("2d").getImageData(0, 0, PA_N, PA_N), layer: paCanvas(), box: [p[0], p[1], p[0], p[1]] };
+  paExtend(p);
+}
+function paExtend(p) {
+  const st = PA.stroke, r = PA.tool === "outline" ? 2 : +$("paSize").value / 2, L = st.layer.getContext("2d");
+  L.fillStyle = PA.tool === "outline" ? PA_LINE : (PA.tool === "brush" ? $("paColor").value : "#fff");
+  paStamp(L, st.last, p, r); st.last = p;
+  st.box = [Math.min(st.box[0], p[0] - r), Math.min(st.box[1], p[1] - r), Math.max(st.box[2], p[0] + r), Math.max(st.box[3], p[1] + r)];
+  paApplyPreview();
+}
+function paClampTo(layer, key) {   // keep a stroke inside the part's template shape (or what the part already covers)
+  if (!$("paClamp").checked || !PA.tmpl[key]) return layer;
+  const c = paCanvas(), x = c.getContext("2d"); x.drawImage(PA.tmpl[key], 0, 0); x.drawImage(PA.parts[key], 0, 0);
+  x.globalCompositeOperation = "source-in"; x.drawImage(layer, 0, 0);
+  return c;
+}
+function paApplyPreview() {   // live result of the stroke so far (from the snapshot taken at mousedown)
+  const st = PA.stroke, part = PA.parts[st.key], ctx = part.getContext("2d");
+  ctx.putImageData(st.before, 0, 0);
+  if (PA.tool === "eraser") { ctx.globalCompositeOperation = "destination-out"; ctx.drawImage(st.layer, 0, 0); ctx.globalCompositeOperation = "source-over"; }
+  else if (PA.tool === "brush" || PA.tool === "outline") ctx.drawImage(paClampTo(st.layer, st.key), 0, 0);
+  paDraw();
+}
+function paHeal(st) {   // fill the stroke from the colours around it (diffusion from the part's own pixels outside the stroke)
+  const ctx = PA.parts[st.key].getContext("2d"), pad = 6;
+  const x0 = Math.max(0, Math.floor(st.box[0]) - pad), y0 = Math.max(0, Math.floor(st.box[1]) - pad);
+  const x1 = Math.min(PA_N, Math.ceil(st.box[2]) + pad), y1 = Math.min(PA_N, Math.ceil(st.box[3]) + pad), W = x1 - x0, H = y1 - y0;
+  if (W < 2 || H < 2) return;
+  const im = ctx.getImageData(x0, y0, W, H), d = im.data, s = st.layer.getContext("2d").getImageData(x0, y0, W, H).data;
+  const clamp = $("paClamp").checked && PA.tmpl[st.key] ? PA.tmpl[st.key].getContext("2d").getImageData(x0, y0, W, H).data : null;
+  const todo = new Uint8Array(W * H), known = new Uint8Array(W * H), col = new Float32Array(W * H * 3);
+  for (let i = 0; i < W * H; i++) { const inS = s[i * 4 + 3] > 0, ok = !clamp || clamp[i * 4 + 3] > 127 || d[i * 4 + 3] > 127;
+    if (inS && ok) todo[i] = 1; else if (d[i * 4 + 3] > 127) { known[i] = 1; col[i * 3] = d[i * 4]; col[i * 3 + 1] = d[i * 4 + 1]; col[i * 3 + 2] = d[i * 4 + 2]; } }
+  for (let pass = 0; pass < 200; pass++) {   // grow inward: every unknown pixel next to known ones takes their mean
+    let left = 0; const add = [];
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = y * W + x; if (!todo[i] || known[i]) continue;
+      let r = 0, g = 0, b = 0, c = 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) { const xx = x + dx, yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue; const j = yy * W + xx; if (known[j]) { r += col[j * 3]; g += col[j * 3 + 1]; b += col[j * 3 + 2]; c++; } }
+      if (c) add.push([i, r / c, g / c, b / c]); else left++; }
+    for (const [i, r, g, b] of add) { known[i] = 1; col[i * 3] = r; col[i * 3 + 1] = g; col[i * 3 + 2] = b; }
+    if (!add.length) break;
+  }
+  for (let pass = 0; pass < 3; pass++) for (let i = 0; i < W * H; i++) if (todo[i] && known[i]) {   // a light smoothing over the healed pixels
+    const x = i % W, y = (i / W) | 0; let r = 0, g = 0, b = 0, c = 0;
+    for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) { const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+      const j = yy * W + xx; if (known[j]) { r += col[j * 3]; g += col[j * 3 + 1]; b += col[j * 3 + 2]; c++; } }
+    col[i * 3] = r / c; col[i * 3 + 1] = g / c; col[i * 3 + 2] = b / c; }
+  for (let i = 0; i < W * H; i++) if (todo[i] && known[i]) { d[i * 4] = col[i * 3]; d[i * 4 + 1] = col[i * 3 + 1]; d[i * 4 + 2] = col[i * 3 + 2]; d[i * 4 + 3] = 255; }
+  ctx.putImageData(im, x0, y0);
+}
+function paEnd() {
+  const st = PA.stroke; if (!st) return; PA.stroke = null;
+  if (PA.tool === "heal") { PA.parts[st.key].getContext("2d").putImageData(st.before, 0, 0); paHeal(st); }
+  PA.undo.push({ key: st.key, before: st.before }); if (PA.undo.length > 25) PA.undo.shift(); PA.redo = [];
+  PA.dirty[st.key] = true; paLayers(); paStatus(); paDraw();
+}
+function paUndo(from, to) {
+  const u = from.pop(); if (!u) return; const ctx = PA.parts[u.key].getContext("2d");
+  to.push({ key: u.key, before: ctx.getImageData(0, 0, PA_N, PA_N) }); ctx.putImageData(u.before, 0, 0);
+  PA.dirty[u.key] = true; paLayers(); paStatus(); paDraw();
+}
+function paMaskStroke(a, b) { if (!PA.mask) PA.mask = paCanvas(); const m = PA.mask.getContext("2d"); m.fillStyle = "#ff2060"; paStamp(m, a, b, +$("paSize").value / 2); paDraw(); }
+function paWire() {
+  const cv = $("paCv");
+  cv.oncontextmenu = e => e.preventDefault();
+  cv.onwheel = e => { e.preventDefault(); const vw = PA.vw, s = paPos(e).s, z = Math.min(8, Math.max(1, vw.z * Math.exp(-e.deltaY * 0.0015)));
+    if (z === 1) { vw.ox = vw.oy = 0; } else { vw.ox = s[0] - (s[0] - vw.ox) * z / vw.z; vw.oy = s[1] - (s[1] - vw.oy) * z / vw.z; } vw.z = z; paDraw(); };
+  cv.onmousedown = e => { if (!PA.doc) return; e.preventDefault(); const p = paPos(e);
+    if (e.button === 1 || e.button === 2 || PA.space) { PA.pan = { s: p.s, ox: PA.vw.ox, oy: PA.vw.oy }; return; }
+    if (PA.tool === "pick" || e.altKey) { paPick(p.w); return; }
+    if (PA.tool === "mask") { PA.maskLast = p.w; paMaskStroke(p.w, p.w); return; }
+    if (!PA.sel) { paStatus(" select a layer first (click its name)"); return; }
+    if (PA.hidden.has(PA.sel)) { paStatus(" the selected layer is hidden"); return; }
+    paBegin(p.w); };
+  cv.onmousemove = e => { const p = paPos(e); PA.cursor = p.w;
+    if (PA.pan) { PA.vw.ox = PA.pan.ox + p.s[0] - PA.pan.s[0]; PA.vw.oy = PA.pan.oy + p.s[1] - PA.pan.s[1]; paDraw(); return; }
+    if (PA.maskLast && e.buttons & 1) { paMaskStroke(PA.maskLast, p.w); PA.maskLast = p.w; return; }
+    if (PA.stroke && e.buttons & 1) paExtend(p.w); else paDraw(); };
+  cv.onmouseleave = () => { PA.cursor = null; paDraw(); };
+  window.addEventListener("mouseup", () => { PA.pan = null; PA.maskLast = null; if (PA.stroke) paEnd(); });
+  window.addEventListener("keydown", e => {
+    if (!document.querySelector('.tab[data-t="parts"]').classList.contains("on") || ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
+    const k = e.key.toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && k === "z") { e.preventDefault(); paUndo(PA.undo, PA.redo); return; }
+    if ((e.ctrlKey || e.metaKey) && k === "y") { e.preventDefault(); paUndo(PA.redo, PA.undo); return; }
+    if (e.code === "Space") { e.preventDefault(); PA.space = true; return; }
+    const tools = { b: "brush", e: "eraser", h: "heal", o: "outline", i: "pick", m: "mask" };
+    if (tools[k]) paSetTool(tools[k]);
+    if (k === "[" || k === "]") { $("paSize").value = Math.max(1, Math.min(80, +$("paSize").value + (k === "]" ? 2 : -2))); $("paSizeV").textContent = $("paSize").value; paDraw(); }
+  });
+  window.addEventListener("keyup", e => { if (e.code === "Space") PA.space = false; });
+}
+function paPreview() {
+  const d = PA.doc, t = `&t=${d.stamp}`, strip = `walkstrip_${PA.view}.png`;
+  $("paWalk").style.backgroundImage = d.files.includes(strip) ? `url("${img(d.dir + "/" + strip)}${t}")` : "none";
+  $("paWalk").style.backgroundPosition = `-${+$("paFrame").value * 256}px 0`;
+  $("paPrev").innerHTML = ["rest_front.png", "rest_back.png"].filter(f => d.files.includes(f)).map(f =>
+    `<a href="${img(d.dir + "/" + f.replace("rest_", "walk_").replace(".png", ".gif"))}${t}" target="_blank"><img src="${img(d.dir + "/" + f)}${t}" style="width:126px;background:#c4c6cc;border-radius:3px"></a>`).join(" ");
+}
+async function openParts(build, id) {
+  if (Object.values(PA.dirty).some(Boolean) && (build !== PA.build || id !== PA.id) && !confirm("Discard the unsaved part edits?")) return;
+  await initParts(true);
+  PA.build = build; PA.id = id; PA.parts = {}; PA.tmpl = {}; PA.undo = []; PA.redo = []; PA.dirty = {}; PA.mask = null; PA.ghost = null;
+  PA.doc = await api("/api/ws/paint/parts", { build, id });
+  await paFillPickers();
+  await paLoadView(PA.view);
+  if (!PA.sel || !PA.doc.views[PA.view].order.includes(PA.sel)) PA.sel = "torso";
+  paLayers(); paPreview(); paStatus(); paDraw();
+}
+async function paFillPickers() {
+  const doc = await api("/api/ws/race/state", { race: (PA.build || "human.unisex").split(".")[0] });
+  const builds = Object.keys(doc.spec.races).flatMap(r => ["unisex", "male", "female"].map(s => `${r}.${s}`));
+  $("paBuild").innerHTML = builds.map(b => `<option ${b === PA.build ? "selected" : ""}>${b}</option>`).join("");
+  const st = await api("/api/ws/paint/state", { build: PA.build || builds[0] });
+  $("paCand").innerHTML = st.candidates.slice().reverse().map(c => `<option value="${c.id}" ${c.id === PA.id ? "selected" : ""}>${c.id}${c.id === st.approved ? " (approved)" : ""}${c.edited ? " · edited" : ""}</option>`).join("")
+    || `<option value="">(no paint candidates)</option>`;
+}
+async function paSave() {
+  const v = PA.view, parts = {};
+  for (const n of PA.doc.views[v].order) if (PA.dirty[paKey(v, n)]) parts[n] = PA.parts[paKey(v, n)].toDataURL("image/png");
+  const other = PA.doc.views[v === "front" ? "back" : "front"].order.filter(n => PA.dirty[paKey(v === "front" ? "back" : "front", n)]);
+  if (!Object.keys(parts).length && !other.length) { paStatus(" nothing to save"); return; }
+  if (Object.keys(parts).length) await api("/api/ws/paint/save", { build: PA.build, id: PA.id, view: v, parts });
+  if (other.length) { const ov = v === "front" ? "back" : "front", op = {};
+    for (const n of other) op[n] = PA.parts[paKey(ov, n)].toDataURL("image/png");
+    await api("/api/ws/paint/save", { build: PA.build, id: PA.id, view: ov, parts: op }); }
+  PA.dirty = {}; paLayers(); paStatus(" saved; the walk re-renders (queue)"); pollJobs();
+}
+async function paFix() {
+  if (!PA.sel) throw new Error("Select the layer to fix first.");
+  if (!PA.mask) throw new Error("Mark the area first (AI fix area tool, M).");
+  if (PA.dirty[paKey(PA.view, PA.sel)]) await paSave();   // the server paints on the saved part
+  await queue([{ kind: "paint_fix", build: PA.build, id: PA.id, view: PA.view, part: PA.sel, mask: PA.mask.toDataURL("image/png"),
+    prompt: $("paPrompt").value, label: `${PA.build} · paint ${PA.id} · AI fix ${PA.sel}` }]);
+  PA.fixPending = true; paStatus(" AI fix queued: the part reloads when it's done");
+}
+async function initParts(quiet) {
+  if (PA.inited) return; PA.inited = true;
+  paSize(); paWire(); paSetTool("brush");
+  document.querySelectorAll("#paTools [data-tool]").forEach(b => b.onclick = () => paSetTool(b.dataset.tool));
+  $("paSize").oninput = () => { $("paSizeV").textContent = $("paSize").value; paDraw(); };
+  ["paClamp", "paTop", "paGhost"].forEach(id => $(id).onchange = paDraw);
+  $("paZoom").onchange = () => { paSize(); paDraw(); };
+  $("paReset").onclick = () => { PA.vw = { z: 1, ox: 0, oy: 0 }; paDraw(); };
+  $("paUndo").onclick = () => paUndo(PA.undo, PA.redo); $("paRedo").onclick = () => paUndo(PA.redo, PA.undo);
+  $("paAll").onclick = () => { PA.hidden.clear(); paLayers(); paDraw(); };
+  $("paView").onchange = guard(async () => { PA.view = $("paView").value; PA.ghost = null; await paLoadView(PA.view); paLayers(); paPreview(); paDraw(); });
+  $("paFrame").oninput = paPreview;
+  $("paSave").onclick = guard(paSave);
+  $("paRevert").onclick = guard(async () => { if (!confirm("Throw away every edit of this candidate and go back to the painted parts?")) return;
+    await api("/api/ws/paint/revert", { build: PA.build, id: PA.id }); PA.dirty = {}; await openParts(PA.build, PA.id); });
+  $("paFix").onclick = guard(paFix);
+  $("paClearMask").onclick = () => { PA.mask = null; paDraw(); };
+  $("paBuild").onchange = guard(async () => { const st = await api("/api/ws/paint/state", { build: $("paBuild").value });
+    const c = st.approved || (st.candidates.length ? st.candidates[st.candidates.length - 1].id : null);
+    if (c) await openParts($("paBuild").value, c); else { PA.build = $("paBuild").value; await paFillPickers(); paStatus(" no paint candidates for this build yet (Races → Paint)"); } });
+  $("paCand").onchange = guard(async () => { if ($("paCand").value) await openParts($("paBuild").value, $("paCand").value); });
+  if (!quiet && !PA.doc) {   // first open: the newest approved paint of human.* (else nothing yet)
+    for (const b of ["human.male", "human.female", "human.unisex"]) { const st = await api("/api/ws/paint/state", { build: b });
+      const c = st.approved || (st.candidates.length ? st.candidates[st.candidates.length - 1].id : null);
+      if (c) { await openParts(b, c); return; } }
+    PA.build = "human.male"; await paFillPickers(); paStatus(" no paint candidates yet (Races → Paint)");
+  }
+}
+document.querySelector('.tab[data-t="parts"]').addEventListener("click", guard(() => initParts(false)));
+setInterval(() => {   // after a save or an AI fix: reload the previews (and the fixed part) once its job is done
+  if (!PA.doc) return;
+  const mine = jobs.filter(j => (j.kind === "paint_preview" || j.kind === "paint_fix") && j.label.startsWith(`${PA.build} · paint ${PA.id}`));
+  const done = mine.filter(j => j.status === "done" || j.status === "failed").length;
+  if (PA.jobsDone === undefined) { PA.jobsDone = done; return; }
+  if (done !== PA.jobsDone) { PA.jobsDone = done;
+    api("/api/ws/paint/parts", { build: PA.build, id: PA.id }).then(async d => {
+      PA.doc = d;
+      if (PA.fixPending) { PA.fixPending = false;   // reload the fixed parts (unsaved edits were saved first)
+        const fix = mine.filter(j => j.kind === "paint_fix").pop();
+        if (fix && fix.status === "failed") paStatus(` AI fix failed: ${fix.error}`);
+        else { PA.mask = null; for (const k of Object.keys(PA.parts)) if (!PA.dirty[k]) delete PA.parts[k];
+          await paLoadView(PA.view); paStatus(" AI fix applied"); } }
+      paPreview(); paDraw(); }).catch(e => err(e.message)); }
 }, 2000);
 
 function renderAll() { renderBoard(); renderBase(); renderStyle(); renderSets(); renderDrawer(false); }

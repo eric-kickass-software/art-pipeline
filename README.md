@@ -286,6 +286,28 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
      (`tpl/save`); "Save & render preview" also queues job kind `tpl`; "Re-measure" queues `tpl_measure` (throws the
      edits away, measures again from human.unisex). Next: painting all parts of a view as one parts sheet in one
      FLUX pass. Test: `tests/test_puppet_template.py`.
+   - **Paint** step per gender row (2026-10-24, `hdart/puppet_paint.py`): the clean template painted as the build,
+     figure first. (1) The template's parts assembled in the rest pose, tinted with the race's skin ramp (briefs zone
+     grey, eye/mouth marks from the face guides), are painted as one character (masked img2img, 0.8). (2) The parts
+     laid out apart (exploded sheet) with their painted visible pixels; only the hidden areas (round ends under the
+     parent, torso under the arms) are repainted (0.9). (3) Cleanup: near-white leftovers and detached strokes go.
+     (4) One even outline (4 px at 1024), none where a part crosses the interior of the next part at a joint, always
+     on the figure's silhouette. The back uses the painted front figure as reference. Prompts: race traits +
+     description + the sex text of `specs/races.json` + paint defaults (female face words, clothes), overridable with
+     a `paint` block in races.json (`{"female": "...", "female_clothes": "..."}`). Queue job `paint {build, n, seed}`
+     (~1 min each). Candidates in `sprites/ai/paint/<build>/<id>/`: `parts/<view>/<part>.png` (1024 px, rest pose),
+     `figure_*.png`, `sheet_*.png`, `rest_*.png`, `walk_*.gif`, `walkstrip_*.png`, `meta.json`, and the template they
+     were painted on (`template.json`, `template/<view>/`); flagged when the template changed since. Approve / Archive
+     (to `archive/workshop/paint/`). API: `paint/state|approve|archive|parts|save|revert`.
+   - **Parts** tab (Parts editor): touch up a paint candidate part by part (Races → Paint → Edit parts). Every part
+     is a layer in the rest pose (hide/show; the selected part drawn on top so its hidden ends can be painted, its
+     template shape as a cyan ghost). Tools: brush (+ eyedropper, Alt-click), eraser, heal (fills the stroke from the
+     colours around it), outline (the even outline's colour/weight), AI fix area (mark, optional prompt, "Fix marked
+     area": job `paint_fix` repaints only the marked pixels of the part, inside its template shape, with the figure
+     as context); "keep inside the template shape" clamp; wheel zoom to 8×, pan; undo/redo; keys B E H O I M [ ].
+     Save writes the parts (the painted originals are kept in `parts_orig/`, "Revert to painted" restores them) and
+     queues `paint_preview` (walk re-render; scrub its frames beside the canvas). Tests: `tests/test_puppet_paint.py`
+     (ComfyUI stubbed).
    - API: `race/state {race}`, `race/spec {spec}`, `race/approve {build, facing, file}`, `puppet/approve {build, on}`; queue job kind `race`
      `{race, sex, facing, n, seed}`. Tests: `tests/test_races.py` (ComfyUI stubbed).
 1. **Mannequins** tab: generate and approve the male/female/slim base (front, then a back made from the mirrored front, clamped to the
