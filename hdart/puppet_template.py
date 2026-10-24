@@ -182,6 +182,29 @@ def _limb_points(reg, p0, p1, r0, r1):
     return pts
 
 
+def _from_widths(Lin, name, V, disk):
+    """An old editor page (two circles per segment, schemaVersion 1) saved: keep the saved outline's contour, scaled
+    to the two circle sizes, with round caps around the new joints. Without a saved outline: a plain tapered shape."""
+    r0, r1 = Lin["widths"][0] / 2, Lin["widths"][-1] / 2
+    a, b = np.array(V["joints"][name.split(".")[0]][Lin["from"].split(".")[1]], float), np.array(V["joints"][name.split(".")[0]][Lin["to"].split(".")[1]], float)
+    Ln = float(np.linalg.norm(b - a)) or 1.0
+    def cap(t0, r, degs):
+        return [[round(t0 + r * math.cos(math.radians(d)) / Ln, 3), round(r * math.sin(math.radians(d)), 1)] for d in degs]
+    D = (disk or {}).get("limbs", {}).get(name, {})
+    old_pts = D.get("points")
+    if old_pts and len(old_pts) == 16 and disk:
+        da = np.array(disk["joints"][name.split(".")[0]][D["from"].split(".")[1]], float)
+        db = np.array(disk["joints"][name.split(".")[0]][D["to"].split(".")[1]], float)
+        Lo = float(np.linalg.norm(db - da)) or 1.0
+        r0o, r1o = max(1.0, -old_pts[14][0] * Lo), max(1.0, (old_pts[6][0] - 1.0) * Lo)
+        f = lambda t: r0 / r0o + (r1 / r1o - r0 / r0o) * t
+        side = lambda seq: [[t, round(q * f(t), 1)] for t, q in seq]
+        return side(old_pts[0:5]) + cap(1.0, r1, (60, 0, -60)) + side(old_pts[8:13]) + cap(0.0, r0, (240, 180, 120))
+    ts = STATIONS
+    return ([[t, round(r0 + (r1 - r0) * t, 1)] for t in ts] + cap(1.0, r1, (60, 0, -60))
+            + [[t, round(-(r0 + (r1 - r0) * t), 1)] for t in reversed(ts)] + cap(0.0, r0, (240, 180, 120)))
+
+
 def limb_world(V, L):
     """A limb outline's points in rig space (from its bone's frame)."""
     a, b = _joint(V, L["from"]), _joint(V, L["to"])
@@ -284,7 +307,8 @@ def save(spec):
         limbs = {}
         for k in LIMBS:
             for seg, a, b in SEGS:
-                pts = V["limbs"][f"{k}.{seg}"].get("points") or []
+                Lin = V["limbs"][f"{k}.{seg}"]
+                pts = Lin.get("points") or (_from_widths(Lin, f"{k}.{seg}", V, old.get("views", {}).get(v)) if "widths" in Lin else [])
                 ok = len(pts) >= 6 and all(isinstance(q, (list, tuple)) and len(q) == 2 and all(isinstance(c, (int, float)) for c in q)
                                            and -3 <= q[0] <= 4 and abs(q[1]) <= 250 for q in pts)
                 if not ok:

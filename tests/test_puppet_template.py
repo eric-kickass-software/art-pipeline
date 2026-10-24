@@ -63,6 +63,13 @@ tmp = Path(tempfile.mkdtemp()) / "puppet_template.json"; tmp.write_text(json.dum
 e = copy.deepcopy(spec); e["views"]["front"]["limbs"]["armB.upper"]["points"][2] = [0.5, 30]
 out = pt.save(e)
 assert out["views"]["front"]["limbs"]["armB.upper"]["points"][2] == [0.5, 30] and out["edited"] and out["from"] == spec["from"]
+u = copy.deepcopy(out); u["views"]["back"]["limbs"]["legA.lower"] = {"from": "legA.mid", "to": "legA.end", "widths": [44, 30]}
+up = pt.save(u)["views"]["back"]["limbs"]["legA.lower"]   # an old editor page (two circles) still saves: upgraded
+assert len(up["points"]) == 16 and "widths" not in up
+assert abs(up["points"][6][1]) < 0.5 and up["points"][6][0] > 1.0      # the round end cap around the ankle
+e = out
+
+
 def refused(mut):
     b = copy.deepcopy(spec); mut(b)
     try: pt.save(b)
