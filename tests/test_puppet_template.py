@@ -15,7 +15,8 @@ for v in ("front", "back"):
         a = rgba[..., 3] > 127
         assert a.sum() > 50, (v, name)
         x, y = int(round(pivot[0])), int(round(pivot[1]))
-        assert a[y, x], (v, name, "pivot outside its part")          # rotating about it never shows a gap
+        if name not in ("head", "torso"):   # limbs rotate about their pivot (head and torso only bob in the walk)
+            assert a[y, x], (v, name, "pivot outside its part")      # rotating about it never shows a gap
         assert not (guides[..., 3] > 0)[~(rgba[..., 3] > 0)].any()   # guides stay on the part
     for name, L in V["limbs"].items():   # the child's round end covers its start joint
         if not name.endswith(".upper"):
