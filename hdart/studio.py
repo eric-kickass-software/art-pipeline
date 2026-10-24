@@ -188,6 +188,17 @@ class Jobs:
                     from . import puppet
                     importlib.reload(puppet)
                     job["result"] = puppet.template(a["build"])
+                elif job["kind"] in ("paint", "paint_preview", "paint_fix"):   # puppet Paint step / Parts editor
+                    from . import puppet, puppet_template, puppet_paint
+                    for mod in (puppet, puppet_template, puppet_paint):
+                        importlib.reload(mod)
+                    if job["kind"] == "paint":
+                        job["result"] = puppet_paint.paint(a["build"], int(a.get("n", 1)), int(a.get("seed", 1)))
+                    elif job["kind"] == "paint_preview":
+                        job["result"] = puppet_paint.preview(a["build"], a["id"])["stamp"]
+                    else:
+                        job["result"] = puppet_paint.fix_region(a["build"], a["id"], a["view"], a["part"], a["mask"],
+                                                                a.get("prompt", ""), int(a.get("seed", 3)))
                 elif job["kind"] in ("tpl", "tpl_measure"):   # clean puppet template: re-measure (from the art) and/or preview
                     from . import puppet, puppet_template
                     importlib.reload(puppet); importlib.reload(puppet_template)
@@ -234,6 +245,25 @@ def workshop_post(st, action, b):
         from . import puppet
         importlib.reload(puppet)
         return puppet.approve(b["build"], b.get("on", True))
+    if action.startswith("paint/"):   # puppet Paint step (Races) and Parts editor
+        from . import puppet, puppet_template, puppet_paint as ppt
+        for mod in (puppet, puppet_template, ppt):
+            importlib.reload(mod)
+        if action == "paint/state":
+            return ppt.state(b["build"])
+        if action == "paint/approve":
+            return ppt.approve(b["build"], b["id"], b.get("on", True))
+        if action == "paint/archive":
+            return ppt.archive(b["build"], b["id"])
+        if action == "paint/parts":
+            return ppt.parts_doc(b["build"], b["id"])
+        if action == "paint/save":
+            out = ppt.save_parts(b["build"], b["id"], b["view"], b["parts"])
+            JOBS.add("paint_preview", {"build": b["build"], "id": b["id"]}, f"{b['build']} · paint {b['id']} · preview")
+            return out
+        if action == "paint/revert":
+            return ppt.revert_parts(b["build"], b["id"])
+        raise ValueError(f"unknown action {action}")
     if action in ("tpl/state", "tpl/save"):   # clean puppet template editor
         from . import puppet, puppet_template
         importlib.reload(puppet); importlib.reload(puppet_template)
