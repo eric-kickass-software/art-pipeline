@@ -275,6 +275,11 @@ def cmd_dungeon_export(a):
     print(dungeon.export(a.set))
 
 
+def cmd_puppet_export(a):
+    from . import unity_export
+    print(unity_export.export(a.race, a.size))
+
+
 def cmd_dungeon_capture(a):
     from . import dungeon
     for f in dungeon.capture(a.set):
@@ -388,6 +393,11 @@ def main(argv=None):
     de = sub.add_parser("dungeon-export", help="export a dungeon set's approved pieces to Unity (StreamingAssets)")
     de.add_argument("set", nargs="?", default="crypt")
     de.set_defaults(fn=cmd_dungeon_export)
+
+    pe = sub.add_parser("puppet-export", help="export a race's painted puppet, hair, faces and ramps to Unity (StreamingAssets)")
+    pe.add_argument("race", nargs="?", default="human")
+    pe.add_argument("--size", type=int, default=512, help="canvas px (the paint's 1024 px rest pose scaled to this)")
+    pe.set_defaults(fn=cmd_puppet_export)
 
     dc = sub.add_parser("dungeon-capture", help="export a dungeon set and screenshot Prototype V with it (Unity batch)")
     dc.add_argument("set", nargs="?", default="crypt")
