@@ -249,8 +249,9 @@ tab is gone: its descriptor groups are there, its mannequin clothing / builds / 
      generated per gender later. Kept through the male/female and back edits.
    - **Unisex front:** txt2img from the chosen style groups with the race pose, traits, description, unisex body and base body. A race
      with `from` (Elf → Human) instead edits that race's approved unisex with `from_edit`, so the races share proportions.
-   - **Male / female front:** FLUX edit of the race's approved unisex front that keeps head, face, skin, pose, scale and
-     feet and changes only the body (Eric: same head, pose, feet).
+   - **Male / female:** no mannequin any more (2026-10-24): they're painted from the Template (Paint step). Their old
+     front/back mannequins and Puppet outputs were archived to `archive/workshop/` (`work/ui_tests/archive_mf.py`);
+     `race_needs` / `approve_race` refuse male/female mannequin steps (`MANNEQUIN_SEXES`).
    - **Backs:** FLUX edit of the approved front, a 3/4 back view in the same A-pose (perspective-correct; the mirrored
      silhouette only works for flat cards). Approving a front queues its back and drops the old back.
    - Each candidate records the image it was made from; when a newer source is approved it's flagged "made from an
@@ -335,7 +336,14 @@ tab is gone: its descriptor groups are there, its mannequin clothing / builds / 
    correction, and FLUX redoes only that area. Approve → the kit rebuilds.
 3. **Sets**: save the approved parts as a named set; the Studio can switch sets. (The Style tab's prompts moved to Race and Board.)
 4. Cards: backs whose file name has `_card_` are silhouette-matched. Older backs show as `redo-back` on the board.
-5. **Ramps** tab: edit the colour ramps in `specs/palettes.json` (any group; skin tones are the `skin` group). A tone is a
+5. **Ramps** tab (2026-10-24: painted puppets + skin tone sets): pick a **race**; the preview recolours its painted
+   **male and female** puppets (approved Paint, else the newest), front and back, full size and 64 px. Skin levels are
+   measured on the assembled rest pose of both views together (`puppet_paint.ramp_preview`, action
+   `paint/ramp_preview`). A race's **skin tone set** = every `skin` ramp tagged with it: shown as a male/female grid
+   (click one to edit), "Add this ramp to the set" / "Remove it from the set" (tags the race and saves), "Create
+   starter set" (one ramp per chosen Monk tone, `<race>_monk<n>`, default sliders; existing names are kept). Human has
+   a starter set (Monk 1, 3, 5, 7, 9).
+   Editing: edit the colour ramps in `specs/palettes.json` (any group; skin tones are the `skin` group). A tone is a
    5-colour ramp, darkest first; the art keeps its cel levels and the game colours them, so one mannequin and one puppet rig
    serve every tone (decided 2026-10-22, see the vault's Art Pipeline note).
    - Base (midtone) colour with the **Monk Skin Tone Scale** (Google, 10 tones) as presets; sliders for saturation, hue

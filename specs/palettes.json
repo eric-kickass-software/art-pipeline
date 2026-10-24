@@ -27,6 +27,131 @@
       },
       "ash": {
         "base": "#9aa3b5"
+      },
+      "human_monk1": {
+        "base": "#f6ede4",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#6f635f",
+          "#b2a69f",
+          "#f6ede4",
+          "#fff7ef",
+          "#fff9f2"
+        ],
+        "races": [
+          "human"
+        ]
+      },
+      "human_monk3": {
+        "base": "#f7ead0",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#6f5e54",
+          "#b3a28f",
+          "#f7ead0",
+          "#fff4dd",
+          "#fff6e3"
+        ],
+        "races": [
+          "human"
+        ]
+      },
+      "human_monk5": {
+        "base": "#d7bd96",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#614537",
+          "#9c7d63",
+          "#d7bd96",
+          "#ecd5b0",
+          "#ffebc9"
+        ],
+        "races": [
+          "human"
+        ]
+      },
+      "human_monk7": {
+        "base": "#825c43",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#3a1a14",
+          "#5e3729",
+          "#825c43",
+          "#af8567",
+          "#dbb191"
+        ],
+        "races": [
+          "human"
+        ]
+      },
+      "human_monk9": {
+        "base": "#3a312a",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#1a1210",
+          "#2a201c",
+          "#3a312a",
+          "#7a6b5e",
+          "#bba897"
+        ],
+        "races": [
+          "human"
+        ]
       }
     },
     "hair": {

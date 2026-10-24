@@ -64,6 +64,12 @@ st = ppt.state("human.female")
 assert st["candidates"][0]["id"] == c[0] and st["candidates"][0]["stale"] is False and st["approved"] is None
 assert ppt.approve("human.female", c[0])["approved"] == c[0]
 
+# Ramps tab: the approved paint, front and back, with one shared set of skin levels
+rp = ppt.ramp_preview("human.female")
+assert rp["id"] == c[0] and rp["approved"] and set(rp["facings"]) == {"front", "back"}
+assert len(rp["facings"]["front"]["key"]) == 5 and rp["facings"]["front"]["key"] == rp["facings"]["back"]["key"]
+assert rp["facings"]["front"]["levels"].startswith("data:image/png;base64,") and ppt.ramp_preview("elf.male")["id"] is None
+
 # Parts editor: save one edited part (backup of the originals), revert
 doc = ppt.parts_doc("human.female", c[0])
 assert set(doc["views"]["front"]["parts"]) == set(spec["views"]["front"]["order"]) and doc["views"]["front"]["template"]

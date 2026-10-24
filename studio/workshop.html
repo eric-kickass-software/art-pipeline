@@ -137,9 +137,9 @@
 
   <!-- RACES -->
   <section id="races">
-    <p class="hint">A race has three builds: <b>unisex</b>, <b>male</b> and <b>female</b>. Each row has its <b>body text</b>, the A-pose
-      <b>mannequin</b> (reference art; the unisex one is what the Template is measured from) and the <b>Paint</b> step, which paints the
-      Template's parts as that build. Every prompt is next to the button it drives; the wording shared by all races is in
+    <p class="hint">A race has three builds: <b>unisex</b>, <b>male</b> and <b>female</b>. Each row has its <b>body text</b> and the
+      <b>Paint</b> step, which paints the Template's parts as that build; the unisex row also has the A-pose <b>mannequin</b>, the reference
+      art the Template is measured from. Every prompt is next to the button it drives; the wording shared by all races is in
       <b>Shared prompts</b>. Specs: <code>specs/races.json</code>, <code>specs/paint.json</code>.</p>
     <div class="card"><div class="row"><label>Race</label><select id="raceSel" style="max-width:220px"></select><button id="raceNew">New race</button>
       <label>Candidates</label><input id="raceN" type="number" value="4" min="1" max="8" style="max-width:70px">
@@ -265,7 +265,8 @@
   <!-- RAMPS -->
   <section id="ramps">
     <p class="hint">A skin tone (or any colour) is a ramp of colours, darkest first. The art keeps its cel levels and the game colours them
-      from the chosen ramp, so one mannequin and one puppet rig serve every tone. Saved to <code>specs/palettes.json</code>.</p>
+      from the chosen ramp, so one painted puppet serves every tone. The preview recolours the race's painted male and female puppets
+      (their approved Paint, else the newest); a race's <b>skin tone set</b> is every skin ramp tagged with it. Saved to <code>specs/palettes.json</code>.</p>
     <div class="rampgrid">
       <div>
         <div class="card"><div class="row"><label>Group</label><select id="rGroup" style="max-width:140px"></select>
@@ -283,11 +284,17 @@
         </div>
       </div>
       <div>
-        <div class="card"><div class="row"><label>Mannequin</label><select id="rBuild" style="max-width:160px"></select>
-          <label><input type="checkbox" id="rAll" style="width:auto"> every ramp in the group</label></div>
+        <div class="card"><div class="row"><label>Race</label><select id="rRace" style="max-width:160px"></select>
+          <span class="hint" id="rSrc"></span></div>
           <div class="pv" id="rPrev"></div>
           <div class="hint" id="rKey"></div></div>
-        <div class="card" id="rAllCard" style="display:none"><h2 style="margin-top:0">All ramps (64 px, front)</h2><div class="pv" id="rAllPrev"></div></div>
+        <div class="card"><h2 style="margin-top:0">Skin tone set <span class="hint" id="rSetName"></span></h2>
+          <div class="row"><button id="rSetAdd">Add this ramp to the set</button><button id="rSetDel">Remove it from the set</button>
+            <label>Monk tones</label><input id="rMonkPick" value="1,3,5,7,9" style="max-width:110px" title="Monk Skin Tone Scale numbers (1 = lightest, 10 = darkest)">
+            <button id="rSetMake">Create starter set</button></div>
+          <div class="hint">Every skin ramp tagged with the race, on its male and female (front, 64 px). Click one to edit it. "Create starter set"
+            adds one ramp per Monk tone (named &lt;race&gt;_monk&lt;n&gt;, default sliders; existing names are kept) to tune from.</div>
+          <div class="pv" id="rAllPrev"></div></div>
       </div>
     </div>
     <input type="color" id="rPick" style="position:absolute;left:-9999px">
@@ -670,19 +677,32 @@ async function initRamps() {
     $("rBaseHex").onchange = () => { if (/^#[0-9a-f]{6}$/i.test($("rBaseHex").value)) { RS.base = $("rBaseHex").value.toLowerCase(); drawRamp(); } };
     $("rReset").onclick = () => { RS.tune = {...TUNE0}; RS.over = {}; drawRamp(); };
     $("rGroup").onchange = () => { RS.group = $("rGroup").value; RS.name = null; $("rName").value = ""; listRamps(); };
-    $("rBuild").onchange = guard(loadPreview);
-    $("rAll").onchange = drawAll;
+    $("rRace").onchange = guard(loadPreview);
     $("rNew").onclick = () => { RS.name = null; $("rName").value = "new_tone"; RS.base = "#c98d63"; RS.tune = {...TUNE0}; RS.over = {}; $("rRaces").value = ""; listRamps(); drawRamp(); };
     $("rDup").onclick = () => { RS.name = null; $("rName").value = ($("rName").value || "tone") + "_copy"; listRamps(); };
     $("rDel").onclick = guard(async () => { if (!RS.name || !confirm(`Delete ${RS.group}.${RS.name}?`)) return;
       RS.doc = await api("/api/ws/ramp/delete", { group: RS.group, name: RS.name }); RS.name = null; $("rName").value = ""; listRamps(); });
     $("rSave").onclick = guard(saveRamp);
     $("rPick").oninput = () => { RS.over[RS.pick] = $("rPick").value; drawRamp(); };
+    const setTag = (on) => guard(async () => {   // add / remove the race on the ramp being edited, then save it
+      const race = $("rRace").value, races = new Set($("rRaces").value.split(",").map(x => x.trim()).filter(Boolean));
+      if (RS.group !== "skin") throw new Error("Skin tone sets are made of ramps in the skin group.");
+      on ? races.add(race) : races.delete(race); $("rRaces").value = [...races].join(", "); await saveRamp(); });
+    $("rSetAdd").onclick = setTag(true); $("rSetDel").onclick = setTag(false);
+    $("rSetMake").onclick = guard(async () => {
+      const race = $("rRace").value, size = RS.doc.rampSize || 5, have = RS.doc.groups.skin || {};
+      const picks = $("rMonkPick").value.split(",").map(x => +x.trim()).filter(n => n >= 1 && n <= 10);
+      if (!picks.length) throw new Error("List Monk tone numbers 1-10, e.g. 1,3,5,7,9.");
+      let made = 0;
+      for (const i of picks) { const name = `${race}_monk${i}`; if (have[name]) continue;
+        RS.doc = await api("/api/ws/ramp/save", { group: "skin", name, base: MONK[i - 1], tune: {...TUNE0},
+          colors: rampFrom(MONK[i - 1], TUNE0, size).map(rgb2hex), races: [race] }); made++; }
+      RS.group = "skin"; $("rGroup").value = "skin"; listRamps(); $("rStatus").textContent = ` made ${made} ramp${made === 1 ? "" : "s"} for ${race}`; });
   }
   RS.doc = await api("/api/ws/ramp/palettes", {});
   $("rGroup").innerHTML = Object.keys(RS.doc.groups).map(g => `<option ${g===RS.group?"selected":""}>${g}</option>`).join("");
-  const builds = Object.keys(S.state.builds).filter(b => S.state.builds[b].front && S.state.builds[b].front.approved);
-  const keep = $("rBuild").value; $("rBuild").innerHTML = builds.map(b => `<option>${b}</option>`).join(""); if (keep) $("rBuild").value = keep;
+  const races = Object.keys((await api("/api/ws/race/state", { race: $("rRace").value || "human" })).spec.races);
+  const keep = $("rRace").value; $("rRace").innerHTML = races.map(r => `<option>${r}</option>`).join(""); if (keep) $("rRace").value = keep;
   listRamps(); await loadPreview();
 }
 function listRamps() {
@@ -712,18 +732,24 @@ function drawRamp() {
   document.querySelectorAll("#rSw span").forEach(sp => {
     sp.onclick = () => { RS.pick = +sp.dataset.i; $("rPick").value = rgb2hex(r[RS.pick]); $("rPick").click(); };
     sp.oncontextmenu = ev => { ev.preventDefault(); delete RS.over[+sp.dataset.i]; drawRamp(); }; });
-  drawPreview();
-}
-async function loadPreview() {
-  const b = $("rBuild").value; if (!b) { $("rPrev").innerHTML = `<p class="hint">Approve a mannequin front first.</p>`; return; }
-  RS.prev = await api("/api/ws/ramp/preview", { build: b }); RS.imgs = {};
-  const load = src => new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = src; });
-  for (const [f, v] of Object.entries(RS.prev.facings)) RS.imgs[f] = { art: await load(img(v.art)), lev: await load(v.levels) };
-  $("rKey").textContent = Object.entries(RS.prev.facings).map(([f,v]) => `${f} skin levels found in the art: ${v.key.map(rgb2hex).join(" ")}`).join(" · ");
   drawPreview(); drawAll();
 }
-function recolor(f, ramp) {   // the mannequin with its skin levels coloured from `ramp`
-  const I = RS.imgs[f], W = I.art.naturalWidth, H = I.art.naturalHeight;
+async function loadPreview() {   // the race's painted male and female puppets (approved Paint, else the newest), front and back
+  const race = $("rRace").value; if (!race) return;
+  RS.imgs = {}; const src = [];
+  const load = s_ => new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = s_; });
+  for (const sex of ["male", "female"]) {
+    const pv = await api("/api/ws/paint/ramp_preview", { build: `${race}.${sex}` });
+    src.push(pv.id ? `${sex}: ${pv.id}${pv.approved ? " (approved)" : " (newest, not approved)"}` : `${sex}: no paint yet (Race → Paint)`);
+    for (const [f, v] of Object.entries(pv.facings)) RS.imgs[`${sex}|${f}`] = { art: await load(v.art), lev: await load(v.levels), key: v.key };
+  }
+  $("rSrc").textContent = src.join(" · ");
+  $("rKey").textContent = ["male", "female"].filter(s_ => RS.imgs[`${s_}|front`]).map(s_ => `${s_} skin levels found: ${RS.imgs[`${s_}|front`].key.map(rgb2hex).join(" ")}`).join(" · ");
+  $("rSetName").textContent = `(${race})`;
+  drawPreview(); drawAll();
+}
+function recolor(k, ramp) {   // a painted puppet with its skin levels coloured from `ramp`
+  const I = RS.imgs[k], W = I.art.naturalWidth, H = I.art.naturalHeight;
   const c = document.createElement("canvas"); c.width = W; c.height = H; const x = c.getContext("2d"); x.drawImage(I.art, 0, 0);
   const d = x.getImageData(0, 0, W, H);
   const l = document.createElement("canvas"); l.width = W; l.height = H; const lx = l.getContext("2d"); lx.drawImage(I.lev, 0, 0, W, H);
@@ -731,21 +757,31 @@ function recolor(f, ramp) {   // the mannequin with its skin levels coloured fro
   for (let p = 0; p < ld.length; p += 4) if (ld[p+3] > 0) { const col = ramp[Math.min(ramp.length-1, ld[p])]; d.data[p]=col[0]; d.data[p+1]=col[1]; d.data[p+2]=col[2]; }
   x.putImageData(d, 0, 0); return c;
 }
-function small(src, n) { const c = document.createElement("canvas"); c.width = n; c.height = n; const x = c.getContext("2d");
-  x.imageSmoothingEnabled = true; x.imageSmoothingQuality = "high"; x.drawImage(src, 0, 0, n, n); return c; }
+function onBg(src, n) { const c = document.createElement("canvas"); c.width = n; c.height = n; const x = c.getContext("2d");
+  x.fillStyle = "#c4c6cc"; x.fillRect(0, 0, n, n); x.imageSmoothingEnabled = true; x.imageSmoothingQuality = "high"; x.drawImage(src, 0, 0, n, n); return c; }
+function small(src, n) { return onBg(src, n); }
 function shown(c, css, cap) { c.style.width = css + "px"; c.style.height = css + "px";
   const fig = document.createElement("figure"); fig.appendChild(c); const fc = document.createElement("figcaption"); fc.textContent = cap; fig.appendChild(fc); return fig; }
 function drawPreview() {
-  if (!RS.prev) return; const el = $("rPrev"); el.innerHTML = ""; const ramp = curRamp();
-  for (const f of Object.keys(RS.imgs)) { const full = recolor(f, ramp);
-    el.appendChild(shown(full, 300, `${f}, full`)); el.appendChild(shown(small(full, 64), 256, `${f}, 64 px`)); }
+  if (!RS.imgs) return; const el = $("rPrev"); el.innerHTML = ""; const ramp = curRamp();
+  const keys = Object.keys(RS.imgs);
+  if (!keys.length) { el.innerHTML = `<p class="hint">No painted puppets for this race yet: Race → Paint.</p>`; return; }
+  for (const k of keys) el.appendChild(shown(onBg(recolor(k, ramp), 512), 220, k.replace("|", ", ")));
+  for (const k of keys) el.appendChild(shown(small(recolor(k, ramp), 64), 128, `${k.replace("|", ", ")}, 64 px`));
 }
-function drawAll() {
-  $("rAllCard").style.display = $("rAll").checked ? "" : "none";
-  if (!$("rAll").checked || !RS.imgs.front || !RS.doc) return;
-  const el = $("rAllPrev"); el.innerHTML = "";
-  for (const [n, e] of Object.entries(RS.doc.groups[RS.group] || {}))
-    el.appendChild(shown(small(recolor("front", n === RS.name ? curRamp() : rampOf(e)), 64), 128, n));
+function drawAll() {   // the race's skin tone set: every skin ramp tagged with it, on its male and female fronts
+  if (!RS.doc || !RS.imgs) return;
+  const el = $("rAllPrev"), race = $("rRace").value; el.innerHTML = "";
+  const tones = Object.entries(RS.doc.groups.skin || {}).filter(([n, e]) => (e.races || []).includes(race));
+  if (!tones.length) { el.innerHTML = `<p class="hint">No skin ramps tagged "${race}" yet: add the one you're editing, or create a starter set.</p>`; return; }
+  for (const [n, e] of tones) {
+    const ramp = RS.group === "skin" && n === RS.name ? curRamp() : rampOf(e);
+    const box = document.createElement("div"); box.className = "ritem" + (RS.group === "skin" && n === RS.name ? " on" : ""); box.style.display = "inline-block";
+    for (const sex of ["male", "female"]) if (RS.imgs[`${sex}|front`]) box.appendChild(shown(small(recolor(`${sex}|front`, ramp), 64), 110, sex));
+    const cap = document.createElement("div"); cap.className = "hint"; cap.textContent = n; box.appendChild(cap);
+    box.onclick = () => { if (RS.group !== "skin") { RS.group = "skin"; $("rGroup").value = "skin"; } selectRamp(n); };
+    el.appendChild(box);
+  }
 }
 async function saveRamp() {
   const name = $("rName").value.trim();
@@ -860,11 +896,12 @@ function paintBlock(sex) {   // the Paint step: the clean template painted as th
 function renderRaceGrid() {
   const a = document.activeElement;   // don't re-render under the cursor while a prompt is being typed
   if ($("raceGrid").contains(a) && ["TEXTAREA", "INPUT"].includes(a.tagName)) return;
-  const rows = { unisex: "Unisex (the race's base)", male: "Male (edit of the unisex)", female: "Female (edit of the unisex)" };
+  const rows = { unisex: "Unisex (the race's base; its mannequin is the Template's reference art)", male: "Male (painted from the Template)",
+                 female: "Female (painted from the Template)" };
   $("raceGrid").innerHTML = Object.entries(rows).map(([sex, label]) => `<div class="card"><h2 style="margin-top:0">${label}</h2>
-    ${promptField(`sex:${sex}`, `Body (${sex})`, RC.st.spec.sexes[sex], 2, `Every race's ${sex}: used by the ${sex} mannequin below and by its Paint step.`)}
+    ${promptField(`sex:${sex}`, `Body (${sex})`, RC.st.spec.sexes[sex], 2, `Every race's ${sex}: used by ${RC.st.builds[sex] ? `the ${sex} mannequin below and ` : ""}its Paint step.`)}
     <div class="row"><button data-sexsave="${sex}">Save body text</button></div>
-    <div class="grid2">${["front", "back"].map(f => {
+    ${RC.st.builds[sex] ? `<div class="grid2">${["front", "back"].map(f => {
       const d = RC.st.builds[sex][f];
       const cands = d.candidates.map(c => `<div class="cand ${c===d.approved?"on":""}"><img loading="lazy" src="${img(c)}">
         ${d.stale[c] ? `<div class="hint" style="color:var(--warn)">made from an older source</div>` : ""}
@@ -873,7 +910,7 @@ function renderRaceGrid() {
       return `<div><div class="row"><b>Mannequin ${f}</b>
         ${d.ready === true ? `<button class="primary" data-rgen="${sex}" data-f="${f}">Queue candidates</button>` : `<span class="hint">${d.ready}</span>`}</div>
         <details><summary class="hint">the prompt this sends (${d.mode === "edit" ? "FLUX edit of the source image" : "text to image"})</summary><div class="prompt">${esc(d.prompt)}</div></details>
-        <div class="cands bcands">${cands || `<p class="hint">No candidates yet.</p>`}</div></div>`; }).join("")}</div>${paintBlock(sex)}</div>`).join("");
+        <div class="cands bcands">${cands || `<p class="hint">No candidates yet.</p>`}</div></div>`; }).join("")}</div>` : ""}${paintBlock(sex)}</div>`).join("");
   document.querySelectorAll("#raceGrid [data-draft]").forEach(t => t.oninput = () => { RCD[t.dataset.draft] = t.value; });
   document.querySelectorAll("[data-sexsave]").forEach(btn => btn.onclick = guard(async () => {
     const sex = btn.dataset.sexsave, doc = RC.st.spec;

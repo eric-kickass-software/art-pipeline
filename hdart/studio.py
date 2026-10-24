@@ -258,6 +258,8 @@ def workshop_post(st, action, b):
             if b.get("build"):
                 out["composed"] = ppt.composed(b["build"])
             return out
+        if action == "paint/ramp_preview":
+            return ppt.ramp_preview(b["build"])
         if action == "paint/approve":
             return ppt.approve(b["build"], b["id"], b.get("on", True))
         if action == "paint/archive":

@@ -336,6 +336,9 @@ def approve_base(build, facing, file):
 
 RACES = ROOT / "specs" / "races.json"
 SEXES = ("unisex", "male", "female")
+# only the unisex has an A-pose mannequin (the Template's reference art); male and female are painted from the Template
+# (Paint step, hdart/puppet_paint.py). Their old mannequins were archived on 2026-10-24.
+MANNEQUIN_SEXES = ("unisex",)
 RACE_TAIL = ("Same pixel art style, same colours, same size and position in the frame, plain white background, "
              "nothing beneath the feet.")
 
@@ -367,6 +370,8 @@ def race_needs(race, sex, facing, s=None, doc=None):
     prerequisite isn't approved yet."""
     s = s or load_state(); doc = doc or races_doc()
     r = doc["races"][race]
+    if sex not in MANNEQUIN_SEXES:
+        raise ValueError(f"Only the unisex has a mannequin; {sex} is painted from the Template (Paint step).")
     if facing == "back":
         src = _approved(s, race_build(race, sex), "front")
         if not src:
@@ -401,9 +406,7 @@ def race_prompt(race, sex, facing, doc=None, st=None):
         parts = [style_text(st, tuple(groups)), doc["pose"], r["traits"], r.get("description", ""),
                  doc["sexes"]["unisex"], body]
         return ", ".join(p.strip() for p in parts if p and p.strip())
-    desc = f" {r['description'].strip()}." if r.get("description", "").strip() else ""
-    return (f"Keep this exact character's head, face, skin, pose, scale, position and feet exactly the same and change only "
-            f"the body into {doc['sexes'][sex]}. Keep {body}. Same {r['traits']}.{desc} " + RACE_TAIL)
+    raise ValueError(f"Only the unisex has a mannequin; {sex} is painted from the Template (Paint step).")
 
 
 def gen_race(race, sex, facing, n=4, seed=1):
@@ -439,6 +442,8 @@ def gen_race(race, sex, facing, n=4, seed=1):
 
 def approve_race(build, facing, file):
     """Approve one race mannequin image. A new front invalidates that build's back."""
+    if build.split(".", 1)[-1] not in MANNEQUIN_SEXES:
+        raise ValueError("Only the unisex has a mannequin.")
     s = load_state()
     b = s["builds"][build]
     b[facing]["approved"] = file
@@ -449,11 +454,11 @@ def approve_race(build, facing, file):
 
 
 def race_state(race):
-    """For the Races tab: per sex and facing the candidates, approval and whether it's stale (made from an image that
-    is no longer the approved source)."""
+    """For the Race tab: the unisex mannequin per facing (candidates, approval, whether it's stale = made from an image
+    that is no longer the approved source). Male and female have no mannequin (painted from the Template)."""
     doc = races_doc(); s = load_state()
     out = {"race": race, "spec": doc, "builds": {}}
-    for sex in SEXES:
+    for sex in MANNEQUIN_SEXES:
         build = race_build(race, sex)
         b = s["builds"].get(build, {"front": {}, "back": {}})
         row = {}
@@ -465,14 +470,9 @@ def race_state(race):
                 src, ready = None, str(e)
             meta = d.get("meta", {})
             row[f] = {"candidates": d.get("candidates", []), "approved": d.get("approved"), "ready": ready,
-                      "prompt": race_prompt(race, sex, f, doc), "mode": "edit" if (f == "back" or sex != "unisex" or
+                      "prompt": race_prompt(race, sex, f, doc), "mode": "edit" if (f == "back" or
                                                                                  doc["races"][race].get("from")) else "txt2img",
                       "stale": {c: bool(meta.get(c, {}).get("from")) and meta[c]["from"] != src for c in d.get("candidates", [])}}
-        pup = b.get("puppet")
-        cur = {f: b.get(f, {}).get("approved") for f in ("front", "back")}
-        row["puppet"] = {"ready": bool(cur["front"] and cur["back"]), "made": pup.get("made") if pup else None,
-                         "approved": bool(pup and pup.get("approved")), "stale": bool(pup) and pup.get("from") != cur,
-                         "dir": f"puppet/{build}"}
         out["builds"][sex] = row
     pal = palettes_doc()
     out["ramps"] = {n: e for n, e in pal["groups"].get("skin", {}).items() if race in e.get("races", [])}

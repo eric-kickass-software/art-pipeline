@@ -28,7 +28,7 @@ def err(f, *a):
     raise SystemExit("no error")
 
 # order is enforced
-assert "unisex front first" in err(ws.gen_race, "human", "male", "front", 1)
+assert "painted from the Template" in err(ws.gen_race, "human", "male", "front", 1)   # only the unisex has a mannequin
 assert "approve the human unisex front first" in err(ws.gen_race, "elf", "unisex", "front", 1)
 assert "front first" in err(ws.gen_race, "human", "unisex", "back", 1)
 
@@ -39,27 +39,21 @@ assert "unclothed" in calls[-1][1] and "Adventurer" not in calls[-1][1] and "sho
 assert Image.open(ak.AI_DIR / c[0]).size == (ak.BIG, ak.BIG)
 ws.approve_race("human.unisex", "front", c[0])
 
-# male = edit of the approved unisex, keeping head/pose/feet; back = edit of the approved front
-m = ws.gen_race("human", "male", "front", 1)
-assert calls[-1][0] == "edit" and calls[-1][1] == Path(c[0]).name and "Keep this exact character's head" in calls[-1][2]
-assert ws.races_doc()["sexes"]["male"] in calls[-1][2]                  # the gender's body text (Race tab) is sent
-ws.approve_race("human.male", "front", m[0])
-bk = ws.gen_race("human", "male", "back", 1)
-assert calls[-1][1] == Path(m[0]).name and "from behind" in calls[-1][2]
-ws.approve_race("human.male", "back", bk[0])
+# back = edit of the approved front; male and female have no mannequin any more (painted from the Template)
+bk = ws.gen_race("human", "unisex", "back", 1)
+assert calls[-1][0] == "edit" and calls[-1][1] == Path(c[0]).name and "from behind" in calls[-1][2]
+ws.approve_race("human.unisex", "back", bk[0])
+assert "Only the unisex" in err(ws.approve_race, "human.male", "front", bk[0])
 
 # elf unisex = edit of the human unisex
 e = ws.gen_race("elf", "unisex", "front", 1)
 assert calls[-1][0] == "edit" and calls[-1][1] == Path(c[0]).name and "pointed elf ears" in calls[-1][2]
 
-# a new unisex front: the male made from the old one is stale; a new male front drops the male back
+# a new unisex front drops its back; the back made from the old front is stale
 ws.approve_race("human.unisex", "front", c[1])
 st = ws.race_state("human")
-assert st["builds"]["male"]["front"]["stale"][m[0]] is True and st["builds"]["unisex"]["front"]["stale"][c[0]] is False
-assert st["builds"]["female"]["front"]["ready"] is True and st["builds"]["female"]["back"]["ready"] != True
-m2 = ws.gen_race("human", "male", "front", 1, seed=9)
-ws.approve_race("human.male", "front", m2[0])
-assert ws.load_state()["builds"]["human.male"]["back"].get("approved") is None
+assert set(st["builds"]) == {"unisex"} and ws.load_state()["builds"]["human.unisex"]["back"].get("approved") is None
+assert st["builds"]["unisex"]["back"]["stale"][bk[0]] is True and st["builds"]["unisex"]["front"]["stale"][c[0]] is False
 
 # spec validation
 doc = ws.races_doc(); doc["races"]["Bad Id"] = {"name": "x", "traits": "x"}

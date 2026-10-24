@@ -473,6 +473,36 @@ def state(build):
     return {"build": build, "candidates": cands, "approved": p.get("approved")}
 
 
+def ramp_preview(build):
+    """Ramps tab: the build's approved paint (else its newest) assembled in the rest pose, front and back, as transparent
+    512 px PNGs, plus skin level maps (R = level, A = skin) measured on both views together, so front and back share
+    one set of cel levels."""
+    import base64, io
+    st = state(build)
+    cands = sorted(st["candidates"], key=lambda c: c["meta"].get("made", 0))
+    cid = st["approved"] or (cands[-1]["id"] if cands else None)
+    out = {"build": build, "id": cid, "approved": bool(st["approved"]), "facings": {}}
+    if not cid:
+        return out
+    d = out_dir(build) / cid; spec = _spec_for(d); size = ws.palettes_doc().get("rampSize", 5)
+    comps = {}
+    for v in VIEWS:
+        cv = Image.new("RGBA", (pp.PX * S, pp.PX * S))
+        for n in spec["views"][v]["order"]:
+            cv.alpha_composite(Image.open(d / "parts" / v / f"{n}.png").convert("RGBA"))
+        comps[v] = cv.resize((pp.PX, pp.PX), Image.LANCZOS)
+    both = Image.new("RGB", (pp.PX * 2, pp.PX), (255, 255, 255))
+    for i, v in enumerate(VIEWS):
+        both.paste(comps[v], (i * pp.PX, 0), comps[v])
+    lev, cent = ws.skin_levels(both, size)
+    url = lambda im: "data:image/png;base64," + base64.b64encode((lambda b: (im.save(b, "PNG"), b.getvalue())[1])(io.BytesIO())).decode()
+    for i, v in enumerate(VIEWS):
+        lv = lev[:, i * pp.PX:(i + 1) * pp.PX]
+        enc = np.zeros(lv.shape + (4,), np.uint8); enc[..., 0] = np.clip(lv, 0, 255); enc[..., 3] = np.where(lv >= 0, 255, 0)
+        out["facings"][v] = {"art": url(comps[v]), "levels": url(Image.fromarray(enc)), "key": cent}
+    return out
+
+
 def approve(build, cid, on=True):
     if on and not (out_dir(build) / cid).exists():
         raise ValueError(f"No paint candidate {cid} for {build}.")
