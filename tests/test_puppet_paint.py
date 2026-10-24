@@ -26,8 +26,25 @@ class FakeComfy:
 
 
 ppt.comfy = FakeComfy
+shutil.copy(ppt.SPEC, tmp / "paint.json"); ppt.SPEC = tmp / "paint.json"
 body, clothes = ppt.prompts("human.female")
 assert "female" in body and "eyelashes" in body and "sports bra" in clothes
+
+# the paint prompts are a spec edited in the Workshop: saving changes what gets sent, bad input is refused
+sp = ppt.spec(); sp["sexes"]["female"]["clothes"] = "a red tunic"; sp["figure"]["front"] = "Hero {body} wearing {clothes}."
+ppt.save_spec(sp)
+c_ = ppt.composed("human.female")
+assert c_["front"]["figure"].endswith("Hero " + ppt.prompts("human.female")[0] + " wearing a red tunic.")
+assert c_["back"]["figure"].endswith(sp["back_reference"]) and "a red tunic" in c_["fix"]
+for bad in ({"figure": {"front": "no placeholder", "back": "x {body}"}}, {"fix": "no placeholder"}):
+    b_ = dict(ppt.spec(), **bad)
+    try:
+        ppt.save_spec(b_); raise SystemExit("no error")
+    except ValueError:
+        pass
+sp["sexes"]["female"]["clothes"] = "plain grey sports bra and grey briefs, bald head, barefoot"; sp["figure"]["front"] = json.loads(
+    (Path(ppt.__file__).parents[1] / "specs" / "paint.json").read_text())["figure"]["front"]
+ppt.save_spec(sp)
 
 c = ppt.paint("human.female", n=1, seed=4)
 assert len(c) == 1 and len(calls) == 4                         # figure + completion, front and back

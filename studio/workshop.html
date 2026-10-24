@@ -91,13 +91,12 @@
 <body>
 <header>
   <h1>Sprite Workshop</h1>
-  <button class="tab on" data-t="board">Board</button>
-  <button class="tab" data-t="races">Races</button>
-  <button class="tab" data-t="template">Template</button>
+  <button class="tab on" data-t="template">Template</button>
+  <button class="tab" data-t="races">Race</button>
   <button class="tab" data-t="parts">Parts</button>
-  <button class="tab" data-t="style">Style</button>
   <button class="tab" data-t="ramps">Ramps</button>
   <button class="tab" data-t="sets">Sets</button>
+  <button class="tab" data-t="board">Board</button>
   <button id="jobsBtn">Queue: idle</button>
   <a href="/">Sprite Studio →</a>
 </header>
@@ -106,7 +105,7 @@
   <div id="err" class="err"></div>
 
   <!-- BOARD -->
-  <section id="board" class="on">
+  <section id="board">
     <div class="card">
       <div class="row"><b>Coverage</b><span class="hint">Every part × mannequin. Click a cell to open it; tick cells (or use the shortcuts) and queue candidates for all of them.</span></div>
       <div class="row">
@@ -123,14 +122,25 @@
         <span class="st needs-cut">needs cut</span> · <span class="st unreviewed">unreviewed</span> · <span class="st approved">approved</span> ·
         <span class="st redo-back">redo back</span> (made before backs became the card's reverse side)</div>
     </div>
+    <details class="card"><summary><b>Board prompts</b> <span class="hint">(the old mannequin builds and their parts: clothing, builds, the full prompt; style descriptors are in Race → Shared prompts)</span></summary>
+      <div class="grid2"><div>
+        <div class="card"><h2 style="margin-top:0">Mannequin clothing (all builds)</h2><textarea id="baseText" rows="2"></textarea><div class="hint" id="baseHint"></div></div>
+        <div class="card"><h2 style="margin-top:0">Builds</h2><div id="builds"></div>
+          <div class="row"><input id="newBuild" placeholder="new build id, e.g. male_broad" style="flex:1"><button id="addBuild">Add build</button></div></div>
+        <button class="primary" id="saveBoardPrompts">Save board prompts</button><span class="hint" id="boardPromptStatus"></span></div>
+      <div>
+        <div class="card"><h2 style="margin-top:0">Full mannequin prompt</h2><div class="row"><select id="previewBuild"></select></div><div class="prompt" id="fullPrompt"></div></div>
+        <div class="card"><h2 style="margin-top:0">Descriptor ideas</h2><div id="ideas"></div></div></div></div>
+    </details>
     <table class="board" id="boardTable"></table>
   </section>
 
   <!-- RACES -->
   <section id="races">
-    <p class="hint">A race is three puppet-ready A-pose mannequins: the <b>unisex</b> base, then <b>male</b> and <b>female</b> as edits of it
-      (same head, face, pose, scale and feet; only the body changes). Approving a front queues its back (a 3/4 back view made from the
-      front). If a newer unisex is approved, candidates made from the old one are flagged. Specs: <code>specs/races.json</code>.</p>
+    <p class="hint">A race has three builds: <b>unisex</b>, <b>male</b> and <b>female</b>. Each row has its <b>body text</b>, the A-pose
+      <b>mannequin</b> (reference art; the unisex one is what the Template is measured from) and the <b>Paint</b> step, which paints the
+      Template's parts as that build. Every prompt is next to the button it drives; the wording shared by all races is in
+      <b>Shared prompts</b>. Specs: <code>specs/races.json</code>, <code>specs/paint.json</code>.</p>
     <div class="card"><div class="row"><label>Race</label><select id="raceSel" style="max-width:220px"></select><button id="raceNew">New race</button>
       <label>Candidates</label><input id="raceN" type="number" value="4" min="1" max="8" style="max-width:70px">
       <label>Seed</label><input id="raceSeed" type="number" value="1" style="max-width:90px"></div>
@@ -141,22 +151,32 @@
       <div class="row" id="raceFromRow"><label>Edit</label><textarea id="raceFromEdit" rows="2" style="flex:1"></textarea></div>
       <div class="row"><button class="primary" id="raceSave">Save race</button><span class="hint" id="raceStatus"></span></div>
       <div class="row"><label>Skin tones</label><div id="raceRampList" class="chips" style="flex:1"></div><button id="raceRamps">Edit in Ramps →</button></div></div>
-    <details class="card" id="racePrompts"><summary><b>Shared prompts</b> <span class="hint">(all races: pose, base body, gender bodies, style groups)</span></summary>
-      <div class="row"><label style="min-width:90px">Pose</label><textarea id="rpPose" rows="2" style="flex:1"></textarea></div>
-      <div class="row"><label style="min-width:90px">Base body</label><textarea id="rpBody" rows="2" style="flex:1"></textarea></div>
-      <div class="hint">The base body is kept smooth and unclothed for every race and gender, so clothing is generated per gender later.</div>
-      <div class="row"><label style="min-width:90px">Unisex</label><textarea id="rpUnisex" rows="1" style="flex:1"></textarea></div>
-      <div class="row"><label style="min-width:90px">Male</label><textarea id="rpMale" rows="2" style="flex:1"></textarea></div>
-      <div class="row"><label style="min-width:90px">Female</label><textarea id="rpFemale" rows="2" style="flex:1"></textarea></div>
-      <div class="row"><label style="min-width:90px">Style groups</label><span id="rpGroups" class="chips"></span>
-        <span class="hint">from the Style tab; medium/world add adventurer gear, so they're off by default</span></div>
-      <div class="row"><button class="primary" id="rpSave">Save shared prompts</button><span class="hint" id="rpStatus"></span></div>
+    <details class="card" id="racePrompts"><summary><b>Shared prompts</b> <span class="hint">(every race and gender: style descriptors, mannequin pose, paint wording; each gender's body text is in its row below)</span></summary>
+      <h2>Style descriptors</h2>
+      <div class="hint">Every generation starts from these groups (in this order). No negative prompts (the model runs at CFG 1): describe what you want.</div>
+      <div id="groups" class="grid2"></div>
+      <div class="row"><button class="primary" id="saveStyle">Save style descriptors</button><span class="hint" id="styleStatus"></span></div>
+      <h2>Mannequins</h2>
+      <div class="row"><label style="min-width:120px">Pose</label><textarea id="rpPose" rows="2" style="flex:1"></textarea></div>
+      <div class="row"><label style="min-width:120px">Base body</label><textarea id="rpBody" rows="2" style="flex:1"></textarea></div>
+      <div class="row"><label style="min-width:120px">Style groups</label><span id="rpGroups" class="chips"></span>
+        <span class="hint">used by the unisex mannequin; medium/world add adventurer gear, so they're off by default</span></div>
+      <div class="row"><button class="primary" id="rpSave">Save mannequin prompts</button><span class="hint" id="rpStatus"></span></div>
+      <h2>Paint</h2>
+      <div class="hint">{body} = race traits + description + the gender's body text + its paint face &amp; body words; {clothes} = the gender's paint clothes. Spec: <code>specs/paint.json</code>.</div>
+      <div class="row"><label style="min-width:120px">Style groups</label><span id="ppGroups" class="chips"></span></div>
+      <div class="row"><label style="min-width:120px">Figure, front</label><textarea id="ppFigFront" rows="3" style="flex:1"></textarea></div>
+      <div class="row"><label style="min-width:120px">Figure, back</label><textarea id="ppFigBack" rows="3" style="flex:1"></textarea></div>
+      <div class="row"><label style="min-width:120px">Back reference</label><textarea id="ppBackRef" rows="1" style="flex:1"></textarea></div>
+      <div class="row"><label style="min-width:120px">Completion, front</label><textarea id="ppCmpFront" rows="3" style="flex:1"></textarea></div>
+      <div class="row"><label style="min-width:120px">Completion, back</label><textarea id="ppCmpBack" rows="3" style="flex:1"></textarea></div>
+      <div class="row"><button class="primary" id="ppSave">Save paint wording</button><span class="hint" id="ppStatus"></span></div>
     </details>
     <div id="raceGrid"></div>
   </section>
 
   <!-- MANNEQUINS -->
-  <section id="template">
+  <section id="template" class="on">
     <p class="hint">The <b>clean puppet template</b>: the generic unisex body as whole, separately drawn parts (nothing is cut from a figure).
       It is the rig: the walk uses these joints, and every race and gender is painted onto these shapes. Spec: <code>specs/puppet_template.json</code>.</p>
     <div class="card">
@@ -210,6 +230,8 @@
         <label class="chip"><input id="paGhost" type="checkbox" checked style="width:auto"> template outline</label></div>
       <div class="row" id="paFixRow"><label>AI fix</label><input id="paPrompt" placeholder="optional: what to paint there (e.g. smooth skin, the shoulder of the grey top)" style="flex:1">
         <button class="primary" id="paFix">Fix marked area</button><button id="paClearMask">Clear mark</button></div>
+      <details><summary class="hint">AI fix wording (every fix; {body} and {clothes} come from the build's paint prompts in Race; your text above is added)</summary>
+        <div class="row"><textarea id="paFixBase" rows="2" style="flex:1"></textarea><button id="paFixSave">Save</button><span class="hint" id="paFixStatus"></span></div></details>
       <div class="row" style="align-items:flex-start;flex-wrap:nowrap">
         <div style="min-width:190px"><div class="row" style="margin:0 0 4px"><b>Layers</b><button id="paAll" style="padding:1px 8px">all</button></div>
           <div id="paLayers"></div></div>
@@ -240,20 +262,6 @@
   </section>
 
   <!-- STYLE -->
-  <section id="style">
-    <p class="hint">Every generation is built from these descriptor groups, in order. No negative prompts (the model runs at CFG 1): phrase everything as what you want.</p>
-    <div class="grid2"><div id="groups"></div>
-      <div>
-        <div class="card"><h2 style="margin-top:0">Mannequin clothing (all builds)</h2><textarea id="baseText" rows="2"></textarea><div class="hint" id="baseHint"></div></div>
-        <div class="card"><h2 style="margin-top:0">Builds</h2><div id="builds"></div>
-          <div class="row"><input id="newBuild" placeholder="new build id, e.g. male_broad" style="flex:1"><button id="addBuild">Add build</button></div></div>
-        <div class="card"><h2 style="margin-top:0">Full mannequin prompt</h2><div class="row"><select id="previewBuild"></select></div><div class="prompt" id="fullPrompt"></div></div>
-        <div class="card"><h2 style="margin-top:0">Descriptor ideas</h2><div id="ideas"></div></div>
-        <button class="primary" id="saveStyle">Save style</button><span class="hint" id="styleStatus"></span>
-      </div>
-    </div>
-  </section>
-
   <!-- RAMPS -->
   <section id="ramps">
     <p class="hint">A skin tone (or any colour) is a ramp of colours, darkest first. The art keeps its cel levels and the game colours them
@@ -610,6 +618,7 @@ function currentStyle() {
 function previewPrompt() { const c = currentStyle(), b = $("previewBuild").value;
   $("fullPrompt").textContent = ORDER.map(g => c.groups[g]).filter(x => x.trim()).join(", ") + ", " + (c.builds[b] || "") + ", " + c.base; }
 $("saveStyle").onclick = guard(async () => { await api("/api/ws/style", currentStyle()); await refresh(); renderStyle(true); $("styleStatus").textContent = " saved"; });
+$("saveBoardPrompts").onclick = guard(async () => { await api("/api/ws/style", currentStyle()); await refresh(); renderStyle(true); $("boardPromptStatus").textContent = " saved"; });
 $("addBuild").onclick = () => { const id = $("newBuild").value.trim(); if (!id) return;
   S.style.builds[id] = "describe this build: sex, body, bald head, plain grey top"; renderStyle(true); };
 
@@ -760,10 +769,16 @@ async function initRaces() {
       doc.races[id] = { name: id[0].toUpperCase() + id.slice(1), traits: id };
       await api("/api/ws/race/spec", { spec: doc }); RC.race = id; await loadRace(); });
     $("raceRamps").onclick = () => document.querySelector('.tab[data-t="ramps"]').click();
+    $("ppSave").onclick = guard(async () => {
+      const sp = JSON.parse(JSON.stringify(RC.pspec.spec));
+      sp.figure = { front: $("ppFigFront").value.trim(), back: $("ppFigBack").value.trim() };
+      sp.complete = { front: $("ppCmpFront").value.trim(), back: $("ppCmpBack").value.trim() };
+      sp.back_reference = $("ppBackRef").value.trim();
+      sp.style_groups = [...document.querySelectorAll("#ppGroups input:checked")].map(i => i.dataset.g);
+      await api("/api/ws/paint/spec", { spec: sp }); $("ppStatus").textContent = " saved"; await loadRace(); });
     $("rpSave").onclick = guard(async () => {
       const doc = RC.st.spec;
       doc.pose = $("rpPose").value.trim(); doc.base_body = $("rpBody").value.trim();
-      doc.sexes = { unisex: $("rpUnisex").value.trim(), male: $("rpMale").value.trim(), female: $("rpFemale").value.trim() };
       doc.style_groups = [...document.querySelectorAll("#rpGroups input:checked")].map(i => i.dataset.g);
       await api("/api/ws/race/spec", { spec: doc }); $("rpStatus").textContent = " saved"; await loadRace(); });
   }
@@ -773,9 +788,15 @@ function fillSharedPrompts() {
   const doc = RC.st.spec, keep = id => document.activeElement === $(id);
   if (!keep("rpPose")) $("rpPose").value = doc.pose || "";
   if (!keep("rpBody")) $("rpBody").value = doc.base_body || "";
-  if (!keep("rpUnisex")) $("rpUnisex").value = doc.sexes.unisex || "";
-  if (!keep("rpMale")) $("rpMale").value = doc.sexes.male || "";
-  if (!keep("rpFemale")) $("rpFemale").value = doc.sexes.female || "";
+  const ps = (RC.pspec || {}).spec;
+  if (ps) {
+    const set = (id, v) => { if (!keep(id)) $(id).value = v || ""; };
+    set("ppFigFront", ps.figure.front); set("ppFigBack", ps.figure.back); set("ppBackRef", ps.back_reference);
+    set("ppCmpFront", ps.complete.front); set("ppCmpBack", ps.complete.back);
+    const pon = new Set(ps.style_groups || []);
+    if (!$("ppGroups").contains(document.activeElement))
+      $("ppGroups").innerHTML = ORDER.map(g => `<label class="chip"><input type="checkbox" data-g="${g}" style="width:auto" ${pon.has(g)?"checked":""}> ${g}</label>`).join("");
+  }
   const on = new Set(doc.style_groups || []);
   if (!$("rpGroups").contains(document.activeElement))
     $("rpGroups").innerHTML = ORDER.map(g => `<label class="chip"><input type="checkbox" data-g="${g}" style="width:auto" ${on.has(g)?"checked":""}> ${g}</label>`).join("");
@@ -783,9 +804,11 @@ function fillSharedPrompts() {
 async function loadRace() {
   const first = await api("/api/ws/race/state", { race: RC.race || "human" });
   RC.race = first.race; RC.st = first;
-  RC.paint = {};   // the Paint step's candidates per sex
+  RC.paint = {}; RC.pcomposed = {};   // the Paint step's candidates and the prompts it sends, per sex
   await Promise.all(["unisex", "male", "female"].map(async sex => {
-    try { RC.paint[sex] = await api("/api/ws/paint/state", { build: `${RC.race}.${sex}` }); } catch (e) { RC.paint[sex] = null; } }));
+    try { RC.paint[sex] = await api("/api/ws/paint/state", { build: `${RC.race}.${sex}` });
+      const ps = await api("/api/ws/paint/spec", { build: `${RC.race}.${sex}` }); RC.pspec = ps; RC.pcomposed[sex] = ps.composed; }
+    catch (e) { RC.paint[sex] = null; } }));
   const doc = RC.st.spec;
   $("raceSel").innerHTML = Object.entries(doc.races).map(([id, r]) => `<option value="${id}" ${id===RC.race?"selected":""}>${r.name} (${id})</option>`).join("");
   const r = doc.races[RC.race];
@@ -800,11 +823,19 @@ async function loadRace() {
   const ramps = Object.entries(RC.st.ramps);
   $("raceRampList").innerHTML = ramps.length ? ramps.map(([n, e]) => `<span class="ritem" title="${n}"><span class="nm">${n}</span><span class="strip">${(e.colors || []).map(c => `<i style="background:${c}"></i>`).join("")}</span></span>`).join("")
     : `<span class="hint">No skin ramps tagged "${RC.race}" yet: tag them in the Ramps tab (Races field).</span>`;
-  renderRaceGrid();
+  fillSharedPrompts(); renderRaceGrid();
+}
+const RCD = {};   // unsaved prompt text in the race grid (survives the periodic refresh), by data-draft key
+const draft = (key, saved) => (key in RCD ? RCD[key] : (saved || ""));
+const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+function promptField(key, label, saved, rows = 2, hint = "") {
+  return `<div class="row" style="margin:4px 0"><label style="min-width:120px">${label}</label>
+    <textarea data-draft="${key}" rows="${rows}" style="flex:1">${esc(draft(key, saved))}</textarea></div>${hint ? `<div class="hint">${hint}</div>` : ""}`;
 }
 function paintBlock(sex) {   // the Paint step: the clean template painted as this build (figure first, then hidden areas)
-  const p = (RC.paint || {})[sex], build = `${RC.race}.${sex}`;
-  if (!p) return "";
+  const p = (RC.paint || {})[sex], build = `${RC.race}.${sex}`, ps = RC.pspec;
+  if (!p || !ps) return "";
+  const e = ps.spec.sexes[sex] || {}, comp = (RC.pcomposed || {})[sex];
   const cands = p.candidates.slice().reverse().map(c => {
     const u = (f) => `${img(c.dir + "/" + f)}&t=${c.stamp}`, on = c.id === p.approved;
     const has = (f) => c.files.includes(f);
@@ -815,81 +846,46 @@ function paintBlock(sex) {   // the Paint step: the clean template painted as th
         <button data-ppedit="${c.id}" data-sex="${sex}" title="Open in the Parts editor">Edit parts</button>
         ${on ? "" : `<button data-pparc="${c.id}" data-sex="${sex}" title="Archive (moves to archive/workshop/paint/)" style="width:auto;padding:2px 8px">✕</button>`}</div></div>`; }).join("");
   return `<div style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px"><div class="row"><b>Paint</b>
-    <label>Candidates</label><input data-ppn="${sex}" type="number" value="2" min="1" max="6" style="max-width:60px">
-    <label>Seed</label><input data-ppseed="${sex}" type="number" value="${(p.candidates.length * 7 + 1)}" style="max-width:80px">
-    <button class="primary" data-ppgen="${sex}">Queue paint candidates</button>
     <span class="hint">the clean template (Template tab) painted as ${build}: figure first, then the hidden ends; ~1 min each</span></div>
+    ${promptField(`pex:${sex}`, `Face &amp; body (${sex})`, e.extra, 2)}
+    ${promptField(`pcl:${sex}`, `Clothes (${sex})`, e.clothes, 1, `Both apply to every race's ${sex}; they're added to the body text above. Shared paint wording (view, completion): Shared prompts card.`)}
+    <div class="row"><button data-ppsave="${sex}">Save paint prompts</button>
+      <label>Candidates</label><input data-ppn="${sex}" type="number" value="2" min="1" max="6" style="max-width:60px">
+      <label>Seed</label><input data-ppseed="${sex}" type="number" value="${(p.candidates.length * 7 + 1)}" style="max-width:80px">
+      <button class="primary" data-ppgen="${sex}">Queue paint candidates</button></div>
+    ${comp ? `<details><summary class="hint">the prompts this sends (front / back; figure pass, then completion pass)</summary>
+      ${["front", "back"].map(v => `<div class="hint">${v}: figure</div><div class="prompt">${esc(comp[v].figure)}</div><div class="hint">${v}: completion</div><div class="prompt">${esc(comp[v].complete)}</div>`).join("")}</details>` : ""}
     <div class="cands pcands">${cands || `<p class="hint">No paint candidates yet.</p>`}</div></div>`;
 }
-function puppetBlock(sex) {   // the puppet template step: skeleton + rigid pieces + test walk from the approved pair
-  const p = RC.st.builds[sex].puppet, t = p.made ? `&t=${p.made}` : "";
-  const im = (name, w) => `<a href="${img(p.dir + "/" + name)}${t}" target="_blank"><img src="${img(p.dir + "/" + name)}${t}" style="width:${w}px;image-rendering:pixelated;background:#c4c6cc;border-radius:4px"></a>`;
-  const btn = !p.ready ? `<span class="hint">Approve the front and back first.</span>`
-    : `<button class="primary" data-pbuild="${sex}">${p.made ? "Rebuild" : "Build"} puppet template</button>`;
-  const status = !p.made ? "" : p.stale ? `<span class="hint" style="color:var(--warn)">made from an older front/back: rebuild</span>`
-    : p.approved ? `<span class="hint" style="color:var(--ok)">✓ approved</span> <button data-papp="${sex}" data-on="0">Unapprove</button>`
-    : `<button data-papp="${sex}" data-on="1">Approve template</button>`;
-  return `<div style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px"><div class="row"><b>Puppet</b> ${btn} ${status}
-    <span class="hint">skeleton (blue = shoulder/hip, red = elbow/knee, orange = wrist/ankle, cyan = hip cut), rigid pieces, test walk</span></div>
-    ${p.made ? `<div class="row" style="align-items:flex-start">${im("skeleton_front.png", 220)}${im("skeleton_back.png", 220)}${im("walk_front.gif", 220)}${im("walk_back.gif", 220)}${im("walk_4dir_64.gif", 440)}</div>
-    <details><summary class="hint">pieces (front / back)</summary>${im("pieces_front.png", 1000)}<br>${im("pieces_back.png", 1000)}</details>
-    <details data-jed="${sex}"><summary class="hint">edit joints (drag the dots, then Save &amp; rebuild)</summary>
-      <div class="row" style="align-items:flex-start"><canvas data-jcv="${sex}|front" width="512" height="512" style="width:420px;cursor:grab;background:#fff;border-radius:4px"></canvas>
-      <canvas data-jcv="${sex}|back" width="512" height="512" style="width:420px;cursor:grab;background:#fff;border-radius:4px"></canvas></div>
-      <div class="row"><button class="primary" data-jsave="${sex}">Save joints &amp; rebuild</button><button data-jreset="${sex}">Back to detected</button>
-      <span class="hint">blue = shoulder/hip, red = elbow/knee, orange = wrist/ankle; hand-placed joints are kept on rebuilds</span></div></details>` : ""}</div>`;
-}
-const JE = {};   // joint editor state per sex: {view: {limb: {pivot, mid, end}}}
-async function openJointEditor(sex) {
-  const build = `${RC.race}.${sex}`, tpl = await api("/api/ws/puppet/template", { build });
-  JE[sex] = {};
-  for (const v of ["front", "back"]) {
-    JE[sex][v] = JSON.parse(JSON.stringify(tpl.views[v].joints));
-    const cv = document.querySelector(`[data-jcv="${sex}|${v}"]`), x = cv.getContext("2d");
-    const art = new Image(); art.src = img(tpl.from[v]);
-    await new Promise(ok => art.onload = ok);
-    const COL = { pivot: "#2a50ff", mid: "#ff2a2a", end: "#ff9a00" };
-    const draw = () => { x.drawImage(art, 0, 0, 512, 512);
-      for (const [k, j] of Object.entries(JE[sex][v])) {
-        x.strokeStyle = "#ff2a2a"; x.lineWidth = 2; x.beginPath(); x.moveTo(...j.pivot); x.lineTo(...j.mid); x.lineTo(...j.end); x.stroke();
-        x.strokeStyle = "#2a50ff"; x.beginPath(); x.arc(j.pivot[0], j.pivot[1], j.R, 0, 7); x.stroke();
-        for (const n of ["pivot", "mid", "end"]) { x.fillStyle = COL[n]; x.beginPath(); x.arc(j[n][0], j[n][1], 6, 0, 7); x.fill(); } } };
-    draw();
-    let drag = null;
-    const pos = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * 512 / r.width, (e.clientY - r.top) * 512 / r.height]; };
-    cv.onmousedown = e => { const p = pos(e); let best = 12;
-      for (const [k, j] of Object.entries(JE[sex][v])) for (const n of ["pivot", "mid", "end"]) {
-        const d = Math.hypot(j[n][0] - p[0], j[n][1] - p[1]); if (d < best) { best = d; drag = [k, n]; } } };
-    cv.onmousemove = e => { if (!drag) return; JE[sex][v][drag[0]][drag[1]] = pos(e).map(Math.round); draw(); };
-    window.addEventListener("mouseup", () => drag = null);
-  }
-}
 function renderRaceGrid() {
+  const a = document.activeElement;   // don't re-render under the cursor while a prompt is being typed
+  if ($("raceGrid").contains(a) && ["TEXTAREA", "INPUT"].includes(a.tagName)) return;
   const rows = { unisex: "Unisex (the race's base)", male: "Male (edit of the unisex)", female: "Female (edit of the unisex)" };
   $("raceGrid").innerHTML = Object.entries(rows).map(([sex, label]) => `<div class="card"><h2 style="margin-top:0">${label}</h2>
+    ${promptField(`sex:${sex}`, `Body (${sex})`, RC.st.spec.sexes[sex], 2, `Every race's ${sex}: used by the ${sex} mannequin below and by its Paint step.`)}
+    <div class="row"><button data-sexsave="${sex}">Save body text</button></div>
     <div class="grid2">${["front", "back"].map(f => {
       const d = RC.st.builds[sex][f];
       const cands = d.candidates.map(c => `<div class="cand ${c===d.approved?"on":""}"><img loading="lazy" src="${img(c)}">
         ${d.stale[c] ? `<div class="hint" style="color:var(--warn)">made from an older source</div>` : ""}
         <div class="row" style="gap:4px;margin:0"><button data-rap="${c}" data-sex="${sex}" data-f="${f}" style="flex:1">${c===d.approved?"✓ approved":"Approve"}</button>
         ${c===d.approved ? "" : `<button data-rdel="${c}" data-sex="${sex}" data-f="${f}" title="Archive (moves to archive/workshop/)" style="width:auto;padding:2px 8px">✕</button>`}</div></div>`).join("");
-      return `<div><div class="row"><b>${f}</b>
+      return `<div><div class="row"><b>Mannequin ${f}</b>
         ${d.ready === true ? `<button class="primary" data-rgen="${sex}" data-f="${f}">Queue candidates</button>` : `<span class="hint">${d.ready}</span>`}</div>
-        <details><summary class="hint">prompt (${d.mode === "edit" ? "FLUX edit of the source image" : "text to image"})</summary><div class="prompt">${d.prompt}</div></details>
-        <div class="cands bcands">${cands || `<p class="hint">No candidates yet.</p>`}</div></div>`; }).join("")}</div>${puppetBlock(sex)}${paintBlock(sex)}</div>`).join("");
-  document.querySelectorAll("[data-pbuild]").forEach(btn => btn.onclick = guard(async () => {
-    await queue([{ kind: "puppet", build: `${RC.race}.${btn.dataset.pbuild}`, label: `${RC.race} · ${btn.dataset.pbuild} · puppet` }]); }));
-  document.querySelectorAll("[data-jed]").forEach(d => d.addEventListener("toggle", guard(async () => { if (d.open) await openJointEditor(d.dataset.jed); })));
-  document.querySelectorAll("[data-jsave]").forEach(btn => btn.onclick = guard(async () => {
-    const sex = btn.dataset.jsave, build = `${RC.race}.${sex}`;
-    for (const v of ["front", "back"]) await api("/api/ws/puppet/joints", { build, view: v, joints: JE[sex][v] });
-    await queue([{ kind: "puppet", build, label: `${RC.race} · ${sex} · puppet` }]); }));
-  document.querySelectorAll("[data-jreset]").forEach(btn => btn.onclick = guard(async () => {
-    const sex = btn.dataset.jreset, build = `${RC.race}.${sex}`;
-    for (const v of ["front", "back"]) await api("/api/ws/puppet/joints", { build, view: v, joints: null });
-    await queue([{ kind: "puppet", build, label: `${RC.race} · ${sex} · puppet` }]); }));
+        <details><summary class="hint">the prompt this sends (${d.mode === "edit" ? "FLUX edit of the source image" : "text to image"})</summary><div class="prompt">${esc(d.prompt)}</div></details>
+        <div class="cands bcands">${cands || `<p class="hint">No candidates yet.</p>`}</div></div>`; }).join("")}</div>${paintBlock(sex)}</div>`).join("");
+  document.querySelectorAll("#raceGrid [data-draft]").forEach(t => t.oninput = () => { RCD[t.dataset.draft] = t.value; });
+  document.querySelectorAll("[data-sexsave]").forEach(btn => btn.onclick = guard(async () => {
+    const sex = btn.dataset.sexsave, doc = RC.st.spec;
+    doc.sexes[sex] = draft(`sex:${sex}`, doc.sexes[sex]).trim();
+    await api("/api/ws/race/spec", { spec: doc }); delete RCD[`sex:${sex}`]; await loadRace(); }));
+  document.querySelectorAll("[data-ppsave]").forEach(btn => btn.onclick = guard(async () => {
+    const sex = btn.dataset.ppsave, sp = JSON.parse(JSON.stringify(RC.pspec.spec)), e = sp.sexes[sex] || (sp.sexes[sex] = {});
+    e.extra = draft(`pex:${sex}`, e.extra).trim(); e.clothes = draft(`pcl:${sex}`, e.clothes).trim();
+    await api("/api/ws/paint/spec", { spec: sp }); delete RCD[`pex:${sex}`]; delete RCD[`pcl:${sex}`]; await loadRace(); }));
   document.querySelectorAll("[data-ppgen]").forEach(btn => btn.onclick = guard(async () => {
     const sex = btn.dataset.ppgen, n = +document.querySelector(`[data-ppn="${sex}"]`).value, seed = +document.querySelector(`[data-ppseed="${sex}"]`).value;
+    if (RCD[`pex:${sex}`] !== undefined || RCD[`pcl:${sex}`] !== undefined) throw new Error("Save the paint prompts first (they'd be ignored).");
     await queue([{ kind: "paint", build: `${RC.race}.${sex}`, n, seed, label: `${RC.race} · ${sex} · paint` }]); }));
   document.querySelectorAll("[data-ppapp]").forEach(btn => btn.onclick = guard(async () => {
     await api("/api/ws/paint/approve", { build: `${RC.race}.${btn.dataset.sex}`, id: btn.dataset.ppapp, on: btn.dataset.on === "1" }); await loadRace(); }));
@@ -897,10 +893,9 @@ function renderRaceGrid() {
     await api("/api/ws/paint/archive", { build: `${RC.race}.${btn.dataset.sex}`, id: btn.dataset.pparc }); await loadRace(); }));
   document.querySelectorAll("[data-ppedit]").forEach(btn => btn.onclick = guard(async () => {
     document.querySelector('.tab[data-t="parts"]').click(); await openParts(`${RC.race}.${btn.dataset.sex}`, btn.dataset.ppedit); }));
-  document.querySelectorAll("[data-papp]").forEach(btn => btn.onclick = guard(async () => {
-    await api("/api/ws/puppet/approve", { build: `${RC.race}.${btn.dataset.papp}`, on: btn.dataset.on === "1" }); await loadRace(); }));
   document.querySelectorAll("[data-rgen]").forEach(btn => btn.onclick = guard(async () => {
     const sex = btn.dataset.rgen, f = btn.dataset.f, n = +$("raceN").value, seed = +$("raceSeed").value;
+    if (RCD[`sex:${sex}`] !== undefined) throw new Error("Save the body text first (it'd be ignored).");
     await queue([{ kind: "race", race: RC.race, sex, facing: f, n, seed, label: `${RC.race} · ${sex} · ${f}` }]);
     $("raceSeed").value = seed + n; }));
   document.querySelectorAll("[data-rap]").forEach(btn => btn.onclick = guard(async () => {
@@ -1362,6 +1357,9 @@ async function initParts(quiet) {
   $("paRevert").onclick = guard(async () => { if (!confirm("Throw away every edit of this candidate and go back to the painted parts?")) return;
     await api("/api/ws/paint/revert", { build: PA.build, id: PA.id }); PA.dirty = {}; await openParts(PA.build, PA.id); });
   $("paFix").onclick = guard(paFix);
+  api("/api/ws/paint/spec", {}).then(r => { PA.pspec = r.spec; $("paFixBase").value = r.spec.fix; }).catch(e => err(e.message));
+  $("paFixSave").onclick = guard(async () => { const sp = JSON.parse(JSON.stringify(PA.pspec)); sp.fix = $("paFixBase").value.trim();
+    PA.pspec = (await api("/api/ws/paint/spec", { spec: sp })).spec; $("paFixStatus").textContent = " saved"; });
   $("paClearMask").onclick = () => { PA.mask = null; paDraw(); };
   $("paBuild").onchange = guard(async () => { const st = await api("/api/ws/paint/state", { build: $("paBuild").value });
     const c = st.approved || (st.candidates.length ? st.candidates[st.candidates.length - 1].id : null);
@@ -1393,6 +1391,7 @@ setInterval(() => {   // after a save or an AI fix: reload the previews (and the
 
 function renderAll() { renderBoard(); renderBase(); renderStyle(); renderSets(); renderDrawer(false); }
 refresh().then(pollJobs).catch(e => err(e.message));
+guard(initTemplate)();   // Template is the first step and the tab open on load
 </script>
 </body>
 </html>

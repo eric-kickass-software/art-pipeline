@@ -42,7 +42,7 @@ ws.approve_race("human.unisex", "front", c[0])
 # male = edit of the approved unisex, keeping head/pose/feet; back = edit of the approved front
 m = ws.gen_race("human", "male", "front", 1)
 assert calls[-1][0] == "edit" and calls[-1][1] == Path(c[0]).name and "Keep this exact character's head" in calls[-1][2]
-assert "unclothed" in calls[-1][2] and "male build" in calls[-1][2]
+assert ws.races_doc()["sexes"]["male"] in calls[-1][2]                  # the gender's body text (Race tab) is sent
 ws.approve_race("human.male", "front", m[0])
 bk = ws.gen_race("human", "male", "back", 1)
 assert calls[-1][1] == Path(m[0]).name and "from behind" in calls[-1][2]

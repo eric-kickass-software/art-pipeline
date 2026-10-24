@@ -29,18 +29,7 @@ LINE = (40, 32, 30)
 BRIEFS = ((92, 94, 100), (176, 178, 184))
 SKIN_DEFAULT = ((150, 92, 66), (232, 176, 138))
 VIEWS = ("front", "back")
-# extra words per sex for the painted face/body (races.json may override them with a "paint" block)
-PAINT_DEFAULT = {"female": "pretty feminine face, big eyes with long eyelashes, thin arched eyebrows, a small nose, "
-                           "pink lips, petite rounded shoulders, slim graceful arms, an hourglass figure",
-                 "male": "", "unisex": ""}
-CLOTHES_DEFAULT = {"female": "plain grey sports bra and grey briefs", "male": "plain grey boxer briefs",
-                   "unisex": "plain grey briefs"}
-FIG_VIEW = {"front": "full body, three-quarter view facing left, seen slightly from above, standing in an A-pose, arms "
-                     "held out and down away from the body; a face with eyes, eyebrows and a small neutral mouth",
-            "back": "full body, seen from behind in a three-quarter back view, seen slightly from above, standing in the "
-                    "same A-pose; the back of the bald head and the ears"}
-PART_VIEW = {"front": "every part seen in a three-quarter view facing left, from slightly above",
-             "back": "every part seen from behind, in a three-quarter back view, from slightly above"}
+SPEC = ai_kit.ROOT / "specs" / "paint.json"   # the paint prompts (edited in the Workshop's Race tab)
 
 
 def out_dir(build):
@@ -49,21 +38,57 @@ def out_dir(build):
 
 # ----------------------------------------------------------------------------- prompts and colours
 
-def prompts(build):
-    """(body text, clothes) for a race build, from specs/races.json (+ the paint defaults)."""
+def spec():
+    return json.loads(SPEC.read_text(encoding="utf-8"))
+
+
+def save_spec(doc):
+    """Validate + write specs/paint.json (Workshop: Paint block fields, Shared prompts card, AI fix row)."""
+    old = spec()
+    for k in ("figure", "complete"):
+        for v in VIEWS:
+            t = (doc.get(k) or {}).get(v)
+            if not isinstance(t, str) or "{body}" not in t:
+                raise ValueError(f"{k}.{v} must be text containing {{body}}")
+    if "{body}" not in str(doc.get("fix", "")):
+        raise ValueError("fix must contain {body}")
+    for sex, e in (doc.get("sexes") or {}).items():
+        if not isinstance(e, dict) or not all(isinstance(e.get(x, ""), str) for x in ("extra", "clothes")):
+            raise ValueError(f"sexes.{sex} needs text fields extra and clothes")
+    out = {"_doc": old.get("_doc", ""), "style_groups": doc.get("style_groups") or old["style_groups"],
+           "figure": doc["figure"], "back_reference": str(doc.get("back_reference", "")), "complete": doc["complete"],
+           "fix": doc["fix"], "sexes": doc.get("sexes") or old["sexes"]}
+    SPEC.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8", newline="\n")
+    return out
+
+
+def prompts(build, doc=None):
+    """(body text, clothes) for a race build: race traits + description + the gender body (specs/races.json) +
+    the paint extra and clothes of its sex (specs/paint.json)."""
     race, sex = build.split(".", 1)
-    doc = ws.races_doc(); r = doc["races"][race]
-    paint = doc.get("paint", {})
-    extra = paint.get(sex, PAINT_DEFAULT.get(sex, ""))
-    clothes = paint.get(f"{sex}_clothes", CLOTHES_DEFAULT.get(sex, CLOTHES_DEFAULT["unisex"]))
-    body = ", ".join(x.strip() for x in (r.get("traits", ""), r.get("description", ""), doc["sexes"].get(sex, ""), extra)
+    rd = ws.races_doc(); r = rd["races"][race]; e = (doc or spec())["sexes"].get(sex, {})
+    body = ", ".join(x.strip() for x in (r.get("traits", ""), r.get("description", ""), rd["sexes"].get(sex, ""), e.get("extra", ""))
                      if x and x.strip())
-    return body, f"{clothes}, bald head, barefoot"
+    return body, e.get("clothes", "").strip() or "bald head, barefoot"
 
 
-def style_text():
-    st = ws.style()
-    return ", ".join(st["groups"][g]["text"] for g in ("style", "proportions", "rendering") if g in st["groups"])
+def style_text(doc=None):
+    st = ws.style(); groups = (doc or spec()).get("style_groups", ["style", "proportions", "rendering"])
+    return ", ".join(st["groups"][g]["text"] for g in groups if g in st["groups"] and st["groups"][g]["text"].strip())
+
+
+def composed(build, doc=None):
+    """The full prompts the Paint step will send for a build, per view: figure pass and completion pass."""
+    doc = doc or spec(); body, clothes = prompts(build, doc); style = style_text(doc)
+    fill = lambda t: t.replace("{body}", body).replace("{clothes}", clothes)
+    out = {}
+    for v in VIEWS:
+        fig = f"{style}. {fill(doc['figure'][v])}"
+        if v == "back" and doc.get("back_reference"):
+            fig += " " + doc["back_reference"]
+        out[v] = {"figure": fig, "complete": f"{style}. {fill(doc['complete'][v])}"}
+    out["fix"] = f"{style}. {fill(doc['fix'])}"
+    return out
 
 
 def skin_ramp(race):
@@ -383,7 +408,7 @@ def paint(build, n=1, seed=1):
     spec = pt.load()
     if not spec["views"]["front"]["shapes"]["head"].get("face"):
         raise ValueError("The template has no face guides yet: add them (Template tab / puppet_template.add_face).")
-    body, clothes = prompts(build); ramp = skin_ramp(race); style = style_text()
+    ramp = skin_ramp(race); P = composed(build)
     rendered = {v: pt.render(spec, v, S) for v in VIEWS}
     lays = {v: layout(rendered[v], spec["views"][v]["order"], spec["views"][v]) for v in VIEWS}
     made = []
@@ -395,16 +420,12 @@ def paint(build, n=1, seed=1):
         for v in VIEWS:
             V = spec["views"][v]; order = V["order"]; parts = rendered[v]
             inits = inits_for(spec, v, parts, ramp)
-            fprompt = f"{style}. One {body}, {clothes}, {FIG_VIEW[v]}, on a pure white background."
-            if v == "back":
-                fprompt += " The same character as in the reference image, now seen from behind."
+            fprompt = P[v]["figure"]
             fpaint, fig_px = figure_pass(order, inits, fprompt, sd, f"{build}_{cid}_{v}_fig", [ref] if ref else [])
             fpaint.save(d / f"figure_{v}.png")
             if v == "front":
                 ref = d / "figure_front.png"
-            cprompt = (f"{style}. A character parts sheet for 2D cutout animation: the separate body parts of one {body}, "
-                       f"{clothes}, laid out apart on a pure white background, each part drawn whole with rounded joint "
-                       f"ends; complete the hidden ends of every part in the same skin, colours and outline. {PART_VIEW[v]}.")
+            cprompt = P[v]["complete"]
             csheet, raw = complete_pass(order, lays[v], inits, fig_px, owners(parts, order), cprompt, sd,
                                         f"{build}_{cid}_{v}_cmp", [ref])
             csheet.save(d / f"sheet_{v}.png")
@@ -561,9 +582,7 @@ def fix_region(build, cid, view, part, mask, prompt="", seed=3, denoise=0.75):
     box = (x0, y0, x0 + side, y0 + side)
     init = comp.convert("RGB").crop(box).resize((SHEET, SHEET), Image.LANCZOS)
     mk = Image.fromarray(np.where(m, 255, 0).astype(np.uint8)).crop(box).resize((SHEET, SHEET), Image.NEAREST)
-    body, clothes = prompts(build)
-    text = (f"{style_text()}. Part of one {body}, {clothes}. Repaint the marked area so it blends in seamlessly with the "
-            f"same skin, colours, shading and outline. {prompt}").strip()
+    text = f"{composed(build)['fix']} {prompt}".strip()
     out = _run(init, np.asarray(mk.filter(ImageFilter.MaxFilter(3))) > 0, text, seed, denoise, f"{build}_{cid}_{view}_{part}_fix")
     patch = np.asarray(out.resize((side, side), Image.LANCZOS)).astype(float)
     if not (d / "parts_orig").exists():

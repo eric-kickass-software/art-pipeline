@@ -251,6 +251,13 @@ def workshop_post(st, action, b):
             importlib.reload(mod)
         if action == "paint/state":
             return ppt.state(b["build"])
+        if action == "paint/spec":   # the paint prompts (+ the composed ones of a build)
+            if b.get("spec"):
+                ppt.save_spec(b["spec"])
+            out = {"spec": ppt.spec()}
+            if b.get("build"):
+                out["composed"] = ppt.composed(b["build"])
+            return out
         if action == "paint/approve":
             return ppt.approve(b["build"], b["id"], b.get("on", True))
         if action == "paint/archive":

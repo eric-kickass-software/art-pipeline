@@ -235,11 +235,16 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
   - Wall-run join edges and white outline bleed are cleaned up automatically when pieces are cut.
 
 ## Workshop (curated AI character parts)
-0. **Races** tab (2026-10-22): a race = three puppet-ready **A-pose** mannequins, `<race>.unisex`, `<race>.male`,
+Tabs in process order (2026-10-24): **Template** (open on load) > **Race** > **Parts** > **Ramps** > **Sets** > **Board**. Every
+prompt is editable next to the button that generates with it; wording shared by all races is in Race → Shared prompts (the Style
+tab is gone: its descriptor groups are there, its mannequin clothing / builds / prompt preview are in Board → Board prompts).
+
+0. **Race** tab (2026-10-22; was "Races"): a race = three puppet-ready **A-pose** mannequins, `<race>.unisex`, `<race>.male`,
    `<race>.female` (specs: `specs/races.json`; state in `sprites/ai/workshop.json` next to the older builds).
-   - **Prompts are visible and editable** in the tab: per race `traits` + `description`; shared (all races) `pose`,
-     `base_body`, the unisex/male/female bodies and `style_groups` (which Style groups are included; medium/world are off
-     because they add adventurer gear). Each step shows the exact prompt sent. The Mannequins tab is gone (2026-10-22).
+   - **Prompts are visible and editable** in the tab: per race `traits` + `description`; each gender's **body text** in its
+     row (used by its mannequin and its Paint step); shared (Shared prompts card) the style descriptor groups
+     (`specs/ai_style.json`), the mannequin `pose`, `base_body` and `style_groups` (medium/world are off because they add
+     adventurer gear), and the paint wording. Each step shows the exact prompt it sends. The Mannequins tab is gone (2026-10-22).
    - **Base body (Eric):** unclothed and completely smooth, like a plastic toy doll, no anatomical detail, so clothing is
      generated per gender later. Kept through the male/female and back edits.
    - **Unisex front:** txt2img from the chosen style groups with the race pose, traits, description, unisex body and base body. A race
@@ -251,15 +256,9 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
    - Each candidate records the image it was made from; when a newer source is approved it's flagged "made from an
      older source". Order is enforced (`race_needs`). ✕ archives like the Mannequins tab.
    - Skin tones: the race lists the `skin` ramps whose `races` include it (tag them in the Ramps tab).
-   - **Puppet** step per gender row (2026-10-23, `hdart/puppet.py`): once the front and back are approved, "Build puppet
-     template" (queue job kind `puppet {build}`, ~20 s) finds the skeleton in the art (shoulder/elbow/wrist,
-     hip/knee/ankle), limb-width shoulder/hip circles owned by the limb, the torso complete underneath with a flesh
-     armpit, a curved leotard cut at the hips, and cuts 14 rigid pieces per view (child joint ends tucked under the
-     parent; thighs get a soft band from pelvis to thigh). Writes `sprites/ai/puppet/<build>/`: `front/`, `back/` (one
-     PNG per piece), `template.json` (order, pivots, bones, joints), `skeleton_*.png`, `pieces_*.png`, `walk_*.gif` (a
-     foot-driven IK marionette walk) and `walk_4dir_64.gif`. Review and "Approve template"; flagged if the front/back
-     changed since. Method and history: the puppet tests of 2026-10-21 (scripts in `work/puppet_test2/scripts`, vault
-     note). Test: `tests/test_puppet.py` (uses the real approved human.male pair; skipped without it).
+   - The detection-based **Puppet** step (`hdart/puppet.py`, 2026-10-23: skeleton found in the mannequin art, rigid pieces
+     cut from it) was removed from the tab on 2026-10-24: the clean template is the rig now. Its module and API stay for
+     reference (`tests/test_puppet.py`).
    - **Clean puppet template** (2026-10-23, `hdart/puppet_template.py`, `specs/puppet_template.json`): the generic
      unisex body as **whole, separately drawn parts** (Klei symbol / Live2D template style), so nothing is cut from a
      figure. The spec (schemaVersion 2) is numbers in 512 px rig space per view: joints; per limb segment a bone +
@@ -293,12 +292,15 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
      parent, torso under the arms) are repainted (0.9). (3) Cleanup: near-white leftovers and detached strokes go.
      (4) One even outline (4 px at 1024), none where a part crosses the interior of the next part at a joint, always
      on the figure's silhouette. The back uses the painted front figure as reference. Prompts: race traits +
-     description + the sex text of `specs/races.json` + paint defaults (female face words, clothes), overridable with
-     a `paint` block in races.json (`{"female": "...", "female_clothes": "..."}`). Queue job `paint {build, n, seed}`
+     description + the gender's body text (`specs/races.json`) + the gender's paint **face & body** words and **clothes**
+     (`specs/paint.json`, edited in the Paint block, next to its button); the figure / completion / back-reference wording
+     and the paint style groups are in Shared prompts, the AI fix wording next to the Parts tab's fix button. The Paint
+     block shows the exact prompts it sends. Queue job `paint {build, n, seed}`
      (~1 min each). Candidates in `sprites/ai/paint/<build>/<id>/`: `parts/<view>/<part>.png` (1024 px, rest pose),
      `figure_*.png`, `sheet_*.png`, `rest_*.png`, `walk_*.gif`, `walkstrip_*.png`, `meta.json`, and the template they
      were painted on (`template.json`, `template/<view>/`); flagged when the template changed since. Approve / Archive
-     (to `archive/workshop/paint/`). API: `paint/state|approve|archive|parts|save|revert`.
+     (to `archive/workshop/paint/`). API: `paint/state|spec|approve|archive|parts|save|revert` (`paint/spec {spec?, build?}`
+     saves/returns the paint prompts and the composed ones of a build).
    - **Parts** tab (Parts editor): touch up a paint candidate part by part (Races → Paint → Edit parts). Every part
      is a layer in the rest pose (hide/show; the selected part drawn on top so its hidden ends can be painted, its
      template shape as a cyan ghost). Tools: brush (+ eyedropper, Alt-click), eraser, heal (fills the stroke from the
@@ -331,7 +333,7 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
 2. **Board**: each cell is part × build. Generate candidates, approve a raw image (its back is queued automatically), then **Cut**:
    auto threshold/speck, brush keep/remove, magic wand, undo, native-grid QA. **Fix region**: paint an area, prompt a
    correction, and FLUX redoes only that area. Approve → the kit rebuilds.
-3. **Style** tab: the descriptor groups (`specs/ai_style.json`). **Sets**: save the approved parts as a named set; the Studio can switch sets.
+3. **Sets**: save the approved parts as a named set; the Studio can switch sets. (The Style tab's prompts moved to Race and Board.)
 4. Cards: backs whose file name has `_card_` are silhouette-matched. Older backs show as `redo-back` on the board.
 5. **Ramps** tab: edit the colour ramps in `specs/palettes.json` (any group; skin tones are the `skin` group). A tone is a
    5-colour ramp, darkest first; the art keeps its cel levels and the game colours them, so one mannequin and one puppet rig
