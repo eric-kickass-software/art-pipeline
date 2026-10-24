@@ -174,10 +174,10 @@ def measure_view(B):
             prev_end = float(w[-1])
             limbs[f"{k}.{seg}"] = {"from": f"{k}.{a}", "to": f"{k}.{b}", "widths": [round(float(x), 1) for x in w]}
     torso, y_w, y_hip = _torso_points(B)
-    head = _smooth_ring(_radial(_smooth_mask(B["pieces"]["head"].rgba[..., 3] > 0, 3)), 7)
+    head = _smooth_ring(_radial(_smooth_mask(B["pieces"]["head"].rgba[..., 3] > 0, 3)), 7)[::6]   # 16 landmarks
     # waistband (briefs): between the waist and the hips; bowed for the view from above
     return {"joints": joints, "limbs": limbs,
-            "shapes": {"torso": {"points": torso}, "head": {"poly": head}},
+            "shapes": {"torso": {"points": torso}, "head": {"points": head}},
             "seams": {"waist": {"y": round(float(y_w + 0.6 * (y_hip - y_w)), 1), "bow": 0.18}},
             "order": _order(B)}
 
@@ -210,6 +210,75 @@ def measure(build="human.unisex", save=True):
 
 def load():
     return json.loads(SPEC.read_text(encoding="utf-8"))
+
+
+def _pt(v, what):
+    if not (isinstance(v, (list, tuple)) and len(v) == 2 and all(isinstance(x, (int, float)) and -PX <= x <= 2 * PX for x in v)):
+        raise ValueError(f"{what}: expected [x, y] in rig space, got {v!r}")
+    return [round(float(x), 1) for x in v]
+
+
+def save(spec):
+    """Validate and write an edited spec (from the Workshop template editor). Keeps `from`; stamps `edited`."""
+    old = load() if SPEC.exists() else {}
+    out = {"schemaVersion": 1, "_doc": old.get("_doc", __doc__.split("\n\n")[1]), "px": PX,
+           "from": old.get("from", spec.get("from")), "made": old.get("made"), "edited": int(time.time()), "views": {}}
+    for v in ("front", "back"):
+        V = (spec.get("views") or {}).get(v)
+        if not V:
+            raise ValueError(f"missing view {v}")
+        j = {}
+        for k in LIMBS:
+            jk = V["joints"][k]
+            j[k] = {n: _pt(jk[n], f"{v} {k}.{n}") for n in ("pivot", "mid", "end", "tip")}
+            j[k]["R"] = round(float(jk["R"]), 1)
+            if not 2 <= j[k]["R"] <= 120:
+                raise ValueError(f"{v} {k}: joint radius {j[k]['R']} out of range")
+        for n in ("neck", "pelvis", "crotch"):
+            j[n] = _pt(V["joints"][n], f"{v} {n}")
+        limbs = {}
+        for k in LIMBS:
+            for seg, a, b in SEGS:
+                L = V["limbs"][f"{k}.{seg}"]; w = [round(float(x), 1) for x in L["widths"]]
+                if len(w) < 2 or min(w) < 1 or max(w) > 250:
+                    raise ValueError(f"{v} {k}.{seg}: widths must be 2+ values between 1 and 250 px")
+                limbs[f"{k}.{seg}"] = {"from": f"{k}.{a}", "to": f"{k}.{b}", "widths": w}
+            j[k]["R"] = round(limbs[f"{k}.upper"]["widths"][0] / 2, 1)   # the shoulder/hip circle = the upper cap
+        shapes = {}
+        for n in ("torso", "head"):
+            pts = V["shapes"][n].get("points")
+            if not pts or len(pts) < 6:
+                raise ValueError(f"{v} {n}: needs at least 6 outline points")
+            shapes[n] = {"points": [_pt(p, f"{v} {n} point") for p in pts]}
+        w = V["seams"]["waist"]
+        seams = {"waist": {"y": round(float(w["y"]), 1), "bow": round(float(w.get("bow", 0.18)), 3)}}
+        order = V.get("order") or (old.get("views", {}).get(v, {}).get("order"))
+        if sorted(order) != sorted(list(limbs) + ["torso", "head"]):
+            raise ValueError(f"{v}: draw order must list every part once")
+        out["views"][v] = {"joints": j, "limbs": limbs, "shapes": shapes, "seams": seams, "order": order}
+    SPEC.write_text(json.dumps(out, indent=1), encoding="utf-8")
+    return out
+
+
+def state():
+    """What the Workshop template editor needs: the spec, the art it was measured from, the preview files."""
+    spec = load(); out = out_dir()
+    frm = spec.get("from") or {}
+    art = {v: frm.get(v) for v in ("front", "back") if frm.get(v) and (ai_kit.AI_DIR / frm[v]).exists()}
+    files = sorted(p.name for p in out.glob("*.*")) if out.exists() else []
+    made = int(max((p.stat().st_mtime for p in out.glob("*.*")), default=0)) if out.exists() else 0
+    return {"spec": spec, "art": art, "dir": ws.rel(out), "files": files, "preview_made": made}
+
+
+def rig_from_spec(spec, view):
+    """The rig the walk needs (neck, pelvis, per limb: pivot, R, mid, end, tip), straight from the template: the
+    template is the rig, no detection on the art."""
+    V = spec["views"][view]; a = lambda p: np.array(p, float)
+    jt = {k: {"pivot": a(V["joints"][k]["pivot"]), "R": float(V["joints"][k]["R"])} for k in LIMBS}
+    C = {k: {n: a(V["joints"][k][n]) for n in ("mid", "end", "tip")} for k in LIMBS}
+    jt["crotch"] = a(V["joints"]["crotch"])
+    J = {"neck": a(V["joints"]["neck"]), "pelvis": a(V["joints"]["pelvis"])}
+    return {"J": J, "C": C, "joints": jt, "order": ["legA", "legB", "armA", "torso", "head", "armB"], "soft": {}}
 
 
 # ----------------------------------------------------------------------------- rendering (from the spec only)
@@ -317,6 +386,17 @@ def render(spec, view, s=2):
 
 # ----------------------------------------------------------------------------- previews (rest pose, parts, walk)
 
+def _save(im, path, **kw):
+    """Save, retrying briefly: a viewer or virus scan can hold a fresh preview file for a moment (Errno 22 on Windows)."""
+    for i in range(10):
+        try:
+            return im.save(path, **kw)
+        except OSError:
+            if i == 9:
+                raise
+            time.sleep(0.4)
+
+
 def _compose(parts, order, guides=False):
     N = next(iter(parts.values()))[0].shape[0]
     cv = Image.new("RGBA", (N, N))
@@ -360,23 +440,26 @@ def rig_from(B, parts):
     return B2, pieces
 
 
-def preview(spec=None, s=2, frames=8, rig=None):
+def preview(spec=None, s=2, frames=8):
+    """Render every part from the spec and walk them on the rig made from the same spec."""
     spec = spec or load()
     out = out_dir(); out.mkdir(parents=True, exist_ok=True)
-    views = rig or _rig(spec["from"]["build"])[0]
+    frm = spec.get("from") or {}
     res = {}
     for v in ("front", "back"):
         V = spec["views"][v]; parts = render(spec, v, s); order = V["order"]
         (out / v).mkdir(exist_ok=True)
         for n, (rgba, g, _) in parts.items():
-            Image.fromarray(rgba).save(out / v / f"{n}.png"); Image.fromarray(g).save(out / v / f"{n}.guides.png")
-        _exploded(parts, order).save(out / f"parts_{v}.png")
+            _save(Image.fromarray(rgba), out / v / f"{n}.png"); _save(Image.fromarray(g), out / v / f"{n}.guides.png")
+        _save(_exploded(parts, order), out / f"parts_{v}.png")
         rest = _compose(parts, order); rest_g = _compose(parts, order, guides=True)
-        B2, pieces = rig_from(views[v], parts)
+        B2, pieces = rig_from(rig_from_spec(spec, v), parts)
         B2["rigid"] = (pieces, order)
         imgs = [pp.on_bg(pp.render(B2, v, i / frames)) for i in range(frames)]
-        imgs[0].save(out / f"walk_{v}.gif", save_all=True, append_images=imgs[1:], duration=120, loop=0)
-        res[v] = {"rest": rest, "guides": rest_g, "walk": imgs[2], "art": views[v]["img"]}
+        _save(imgs[0], out / f"walk_{v}.gif", save_all=True, append_images=imgs[1:], duration=120, loop=0)
+        art_p = ai_kit.AI_DIR / frm[v] if frm.get(v) else None
+        art = Image.open(art_p).convert("RGB").resize((PX, PX)) if art_p and art_p.exists() else Image.new("RGB", (PX, PX), pp.BG)
+        res[v] = {"rest": rest, "guides": rest_g, "walk": imgs[2], "art": art}
     T = 400; f = ImageFont.load_default(size=18)
     cols = (("art", "approved unisex art"), ("rest", "template: rest pose"), ("guides", "template + guides"), ("walk", "template on the walk"))
     sheet = Image.new("RGB", (len(cols) * T, 2 * T + 34), (60, 60, 60)); d = ImageDraw.Draw(sheet)
@@ -386,5 +469,5 @@ def preview(spec=None, s=2, frames=8, rig=None):
             im = res[v][key]
             im = pp.on_bg(np.asarray(im.convert("RGBA").resize((PX, PX), Image.LANCZOS))) if key in ("rest", "guides") else im.convert("RGB")
             sheet.paste(im.resize((T, T), Image.LANCZOS), (c * T, 34 + r * T))
-    sheet.save(out / "template_sheet.png")
+    _save(sheet, out / "template_sheet.png")
     return {"dir": ws.rel(out), "files": sorted(p.name for p in out.glob("*.*"))}

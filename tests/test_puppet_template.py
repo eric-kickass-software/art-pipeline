@@ -44,4 +44,33 @@ syn = {"views": {"front": {
 p = pt.render(syn, "front", s=1)
 assert all((p[n][0][..., 3] > 127).sum() > 50 for n in p)
 assert (p["torso"][1][..., 3] > 0).any()       # waistband guide drawn
+
+# the template is the rig: the walk poses straight from the spec's joints (no art)
+import hdart.puppet as pp
+for v in ("front", "back"):
+    assert len(spec["views"][v]["shapes"]["head"]["points"]) >= 8
+    B = pt.rig_from_spec(spec, v)
+    T, bones = pp.pose(B, v, 0.25, "walk")
+    assert set(T) >= set(spec["views"][v]["order"])
+    for k in pt.LIMBS:   # bone lengths are kept by the walk
+        L = np.linalg.norm(np.subtract(spec["views"][v]["joints"][k]["mid"], spec["views"][v]["joints"][k]["pivot"]))
+        assert abs(np.linalg.norm(bones[k][1] - bones[k][0]) - L) < 1.0, (v, k)
+
+# editor saves: validated, the upper cap width sets the joint radius, bad input refused
+import copy, json, tempfile
+from pathlib import Path
+tmp = Path(tempfile.mkdtemp()) / "puppet_template.json"; tmp.write_text(json.dumps(spec)); pt.SPEC = tmp
+e = copy.deepcopy(spec); e["views"]["front"]["limbs"]["armB.upper"]["widths"][0] = 40
+out = pt.save(e)
+assert out["views"]["front"]["joints"]["armB"]["R"] == 20 and out["edited"] and out["from"] == spec["from"]
+def refused(mut):
+    b = copy.deepcopy(spec); mut(b)
+    try: pt.save(b)
+    except ValueError: return True
+    return False
+assert refused(lambda b: b["views"].pop("back"))
+assert refused(lambda b: b["views"]["front"]["limbs"]["legA.lower"]["widths"].__setitem__(2, 0))
+assert refused(lambda b: b["views"]["back"]["shapes"]["torso"].__setitem__("points", [[1, 1]] * 3))
+assert refused(lambda b: b["views"]["front"]["joints"]["neck"].__setitem__(0, "x"))
+assert json.loads(tmp.read_text())["views"]["front"]["joints"]["armB"]["R"] == 20   # refused saves wrote nothing
 print("ok")

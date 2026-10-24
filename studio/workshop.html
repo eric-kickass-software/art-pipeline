@@ -88,6 +88,7 @@
   <h1>Sprite Workshop</h1>
   <button class="tab on" data-t="board">Board</button>
   <button class="tab" data-t="races">Races</button>
+  <button class="tab" data-t="template">Template</button>
   <button class="tab" data-t="style">Style</button>
   <button class="tab" data-t="ramps">Ramps</button>
   <button class="tab" data-t="sets">Sets</button>
@@ -149,6 +150,29 @@
   </section>
 
   <!-- MANNEQUINS -->
+  <section id="template">
+    <p class="hint">The <b>clean puppet template</b>: the generic unisex body as whole, separately drawn parts (nothing is cut from a figure).
+      It is the rig: the walk uses these joints, and every race and gender is painted onto these shapes. Spec: <code>specs/puppet_template.json</code>.</p>
+    <div class="card">
+      <div class="row"><label>Part</label><select id="tpPart" style="max-width:170px"></select>
+        <label>Art</label><input id="tpArt" type="range" min="0" max="1" step="0.05" value="0.45" style="max-width:110px">
+        <label>Parts</label><input id="tpParts" type="range" min="0" max="1" step="0.05" value="0.75" style="max-width:110px">
+        <label class="chip"><input id="tpGuides" type="checkbox" checked style="width:auto"> guides</label>
+        <label>Size</label><select id="tpZoom" style="max-width:80px"><option value="440">small</option><option value="560" selected>medium</option><option value="760">large</option></select>
+        <button id="tpUndo">Undo</button><button class="primary" id="tpSave">Save</button><button class="primary" id="tpRender">Save &amp; render preview</button>
+        <button id="tpMeasure" title="Throw away edits and measure again from the approved human.unisex rig">Re-measure</button>
+        <span class="hint" id="tpStatus"></span></div>
+      <div class="row" style="align-items:flex-start"><canvas id="tpCv_front" width="512" height="512" style="width:560px;cursor:crosshair;border-radius:4px"></canvas>
+        <canvas id="tpCv_back" width="512" height="512" style="width:560px;cursor:crosshair;border-radius:4px"></canvas></div>
+      <p class="hint">Drag: <b style="color:#2a50ff">shoulder/hip</b>, <b style="color:#ff2a2a">elbow/knee</b>, <b style="color:#ff9a00">wrist/ankle</b>,
+        <b style="color:#22b14c">fingertip/toe</b>, <b style="color:#a24bd6">neck/pelvis/crotch</b>, <b style="color:#e1288f">waistband</b>.
+        Click a part to select it (in both views): <b style="color:#ffd23f">width handles</b> on limbs (the first width of an upper arm/thigh is the shoulder/hip circle),
+        <b style="color:#20c0c0">outline points</b> on the torso and head (double-click the outline to add one, Alt-click a point to remove it). Ctrl+Z undoes.</p>
+      <div class="hint" id="tpInfo"></div>
+    </div>
+    <div class="card"><h2 style="margin-top:0">Preview (rendered by the pipeline)</h2><div id="tpPreview" class="row" style="align-items:flex-start"></div></div>
+  </section>
+
   <section id="base">
     <div class="row"><label>Build</label><select id="bBuild" style="max-width:220px"></select>
       <label>Candidates</label><input id="bN" type="number" value="4" min="1" max="8" style="max-width:70px">
@@ -817,6 +841,173 @@ setInterval(() => {   // refresh while race jobs run, and once more when the que
   if (busy || RC.busy) loadRace().catch(() => {});
   RC.busy = busy;
 }, 4000);
+
+// ------------------------------------------------------------------ template editor (clean puppet template = the rig)
+const TP = { st: null, spec: null, sel: null, undo: [], art: {}, dirty: false, inited: false, drag: null, tplDone: -1 };
+const TP_LIMBS = ["armA", "armB", "legA", "legB"], TP_SEGS = [["upper", "pivot", "mid"], ["lower", "mid", "end"], ["hand", "end", "tip"]];
+const TPC = { pivot: "#2a50ff", mid: "#ff2a2a", end: "#ff9a00", tip: "#22b14c", body: "#a24bd6", width: "#ffd23f", shape: "#20c0c0", seam: "#e1288f" };
+const tpJ = (V, name) => { const [k, j] = name.split("."); return j ? V.joints[k][j] : V.joints[name]; };
+function tpCatmull(P, n = 10) {   // closed Catmull-Rom through the landmarks (same as the Python renderer)
+  const out = [], L = P.length;
+  for (let i = 0; i < L; i++) {
+    const p0 = P[(i - 1 + L) % L], p1 = P[i], p2 = P[(i + 1) % L], p3 = P[(i + 2) % L];
+    for (let s = 0; s < n; s++) { const t = s / n, t2 = t * t, t3 = t2 * t;
+      out.push([0, 1].map(c => 0.5 * (2 * p1[c] + (-p0[c] + p2[c]) * t + (2 * p0[c] - 5 * p1[c] + 4 * p2[c] - p3[c]) * t2 + (-p0[c] + 3 * p1[c] - 3 * p2[c] + p3[c]) * t3))); }
+  }
+  return out;
+}
+function tpDiscs(V, name) {   // a limb part as a sweep of discs: [[x, y, r], ...]
+  const L = V.limbs[name], a = tpJ(V, L.from), b = tpJ(V, L.to), w = L.widths, len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const n = Math.max(16, Math.round(len / 2)), out = [];
+  for (let i = 0; i <= n; i++) { const t = i / n, f = t * (w.length - 1), k = Math.min(w.length - 2, Math.floor(f)), r = (w[k] + (w[k + 1] - w[k]) * (f - k)) / 2;
+    out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, r]); }
+  return out;
+}
+function tpWidthHandles(V, name) {
+  const L = V.limbs[name], a = tpJ(V, L.from), b = tpJ(V, L.to), len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+  const nrm = [-(b[1] - a[1]) / len, (b[0] - a[0]) / len];
+  return L.widths.map((w, i) => { const t = i / (L.widths.length - 1), base = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    return { i, base, nrm, p: [base[0] + nrm[0] * w / 2, base[1] + nrm[1] * w / 2] }; });
+}
+function tpPath(pts) { const p = new Path2D(), c = tpCatmull(pts); p.moveTo(...c[0]); c.slice(1).forEach(q => p.lineTo(...q)); p.closePath(); return p; }
+function tpWaist(V) {   // the waistband handle sits on the torso's centre line
+  const n = V.joints.neck, c = V.joints.crotch, y = V.seams.waist.y, t = (y - n[1]) / ((c[1] - n[1]) || 1);
+  return [n[0] + (c[0] - n[0]) * t, y];
+}
+function tpDraw(v) {
+  const cv = $(`tpCv_${v}`), x = cv.getContext("2d"), V = TP.spec.views[v];
+  x.fillStyle = "#c4c6cc"; x.fillRect(0, 0, 512, 512);
+  const aop = +$("tpArt").value, pop = +$("tpParts").value;
+  if (TP.art[v] && aop > 0) { x.globalAlpha = aop; x.drawImage(TP.art[v], 0, 0, 512, 512); x.globalAlpha = 1; }
+  if (pop > 0) {   // parts drawn opaque off-screen in draw order (outline pass, then clay), then laid over the art
+    const off = document.createElement("canvas"); off.width = off.height = 512; const o = off.getContext("2d");
+    for (const name of V.order) {
+      const sel = name === TP.sel, fill = sel ? "#e7dcc0" : "#d2d0cb";
+      if (V.limbs[name]) { const D = tpDiscs(V, name);
+        o.fillStyle = "#3a3432"; D.forEach(([px, py, r]) => { o.beginPath(); o.arc(px, py, r + 1.6, 0, 7); o.fill(); });
+        o.fillStyle = fill; D.forEach(([px, py, r]) => { o.beginPath(); o.arc(px, py, r, 0, 7); o.fill(); });
+      } else { const p = tpPath(V.shapes[name].points); o.fillStyle = fill; o.fill(p); o.strokeStyle = "#3a3432"; o.lineWidth = 2.2; o.stroke(p); }
+    }
+    x.globalAlpha = pop; x.drawImage(off, 0, 0); x.globalAlpha = 1;
+  }
+  const dot = (p, col, r = 5) => { x.fillStyle = col; x.beginPath(); x.arc(p[0], p[1], r, 0, 7); x.fill(); x.strokeStyle = "#000"; x.lineWidth = 1; x.stroke(); };
+  if ($("tpGuides").checked) {
+    x.lineWidth = 1.5; x.strokeStyle = "rgba(40,150,230,.9)";
+    for (const k of TP_LIMBS) { const j = V.joints[k]; x.beginPath(); x.moveTo(...j.pivot); x.lineTo(...j.mid); x.lineTo(...j.end); x.lineTo(...j.tip); x.stroke();
+      x.setLineDash([4, 3]); x.beginPath(); x.arc(j.pivot[0], j.pivot[1], j.R, 0, 7); x.stroke(); x.setLineDash([]); }
+    x.beginPath(); x.moveTo(...V.joints.neck); x.lineTo(...V.joints.pelvis); x.stroke();
+    const w = tpWaist(V), tp = V.shapes.torso.points, xs = tp.map(p => p[0]), hw = (Math.max(...xs) - Math.min(...xs)) * 0.42;
+    x.strokeStyle = TPC.seam; x.lineWidth = 2; x.beginPath();
+    for (let u = -1; u <= 1.001; u += 0.1) { const px = w[0] + hw * u, py = w[1] + V.seams.waist.bow * hw * (1 - u * u); u === -1 ? x.moveTo(px, py) : x.lineTo(px, py); }
+    x.stroke(); dot(w, TPC.seam, 5);
+  }
+  for (const k of TP_LIMBS) for (const n of ["pivot", "mid", "end", "tip"]) dot(V.joints[k][n], TPC[n]);
+  for (const n of ["neck", "pelvis", "crotch"]) dot(V.joints[n], TPC.body);
+  if (TP.sel && V.limbs[TP.sel]) tpWidthHandles(V, TP.sel).forEach(h => {
+    x.strokeStyle = TPC.width; x.lineWidth = 1; x.beginPath(); x.moveTo(...h.base); x.lineTo(...h.p); x.stroke();
+    x.fillStyle = TPC.width; x.fillRect(h.p[0] - 4, h.p[1] - 4, 8, 8); x.strokeStyle = "#000"; x.strokeRect(h.p[0] - 4, h.p[1] - 4, 8, 8); });
+  if (TP.sel && V.shapes[TP.sel]) V.shapes[TP.sel].points.forEach(p => dot(p, TPC.shape, 4.5));
+}
+function tpDrawAll() {
+  if (!TP.spec) return;
+  ["front", "back"].forEach(tpDraw);
+  $("tpStatus").textContent = TP.dirty ? " unsaved changes" : "";
+  const info = [];
+  for (const v of ["front", "back"]) { const V = TP.spec.views[v];
+    if (TP.sel && V.limbs[TP.sel]) info.push(`${v}: widths ${V.limbs[TP.sel].widths.map(w => w.toFixed(0)).join(" · ")}`);
+    if (TP.sel && V.shapes[TP.sel]) info.push(`${v}: ${V.shapes[TP.sel].points.length} outline points`); }
+  $("tpInfo").textContent = TP.sel ? `${TP.sel}: ${info.join("   |   ")}` : "No part selected.";
+}
+function tpPushUndo() { TP.undo.push(JSON.stringify(TP.spec.views)); if (TP.undo.length > 80) TP.undo.shift(); }
+function tpUndo() { if (!TP.undo.length) return; TP.spec.views = JSON.parse(TP.undo.pop()); TP.dirty = true; tpDrawAll(); }
+function tpHit(V, p) {   // the handle under the cursor (selected part's handles first), else the part under it
+  const near = (q, r = 9) => Math.hypot(q[0] - p[0], q[1] - p[1]) < r;
+  if (TP.sel && V.limbs[TP.sel]) for (const h of tpWidthHandles(V, TP.sel)) if (near(h.p)) return { type: "w", part: TP.sel, i: h.i };
+  if (TP.sel && V.shapes[TP.sel]) { const pts = V.shapes[TP.sel].points; for (let i = 0; i < pts.length; i++) if (near(pts[i], 8)) return { type: "pt", part: TP.sel, i }; }
+  for (const k of TP_LIMBS) for (const n of ["tip", "end", "mid", "pivot"]) if (near(V.joints[k][n])) return { type: "joint", name: `${k}.${n}` };
+  for (const n of ["neck", "pelvis", "crotch"]) if (near(V.joints[n])) return { type: "joint", name: n };
+  if ($("tpGuides").checked && near(tpWaist(V))) return { type: "seam" };
+  const x = $("tpCv_front").getContext("2d");
+  for (const name of [...V.order].reverse()) {
+    if (V.limbs[name]) { if (tpDiscs(V, name).some(([px, py, r]) => Math.hypot(px - p[0], py - p[1]) <= r)) return { type: "part", name }; }
+    else if (x.isPointInPath(tpPath(V.shapes[name].points), p[0], p[1])) return { type: "part", name };
+  }
+  return null;
+}
+function tpWire(v) {
+  const cv = $(`tpCv_${v}`);
+  const pos = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * 512 / r.width, (e.clientY - r.top) * 512 / r.height]; };
+  cv.onmousedown = e => { if (!TP.spec) return; e.preventDefault();
+    const V = TP.spec.views[v], p = pos(e), h = tpHit(V, p);
+    if (!h) { TP.sel = null; $("tpPart").value = ""; tpDrawAll(); return; }
+    if (h.type === "part") { TP.sel = h.name; $("tpPart").value = h.name; tpDrawAll(); return; }
+    if (h.type === "pt" && e.altKey) { const pts = V.shapes[h.part].points;
+      if (pts.length > 6) { tpPushUndo(); pts.splice(h.i, 1); TP.dirty = true; tpDrawAll(); } return; }
+    tpPushUndo(); TP.drag = { v, ...h }; };
+  cv.ondblclick = e => {   // add an outline point on the selected torso/head, between the two nearest neighbours
+    const V = TP.spec.views[v]; if (!TP.sel || !V.shapes[TP.sel]) return;
+    const p = pos(e), pts = V.shapes[TP.sel].points; let best = 0, bd = 1e9;
+    for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length], m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      const d = Math.hypot(m[0] - p[0], m[1] - p[1]); if (d < bd) { bd = d; best = i; } }
+    tpPushUndo(); pts.splice(best + 1, 0, p.map(c => Math.round(c * 10) / 10)); TP.dirty = true; tpDrawAll(); };
+  cv.onmousemove = e => { const d = TP.drag; if (!d || d.v !== v) return;
+    const V = TP.spec.views[v], p = pos(e).map(c => Math.round(c * 10) / 10);
+    if (d.type === "joint") { const [k, j] = d.name.split("."); if (j) V.joints[k][j] = p; else V.joints[k] = p; }
+    else if (d.type === "pt") V.shapes[d.part].points[d.i] = p;
+    else if (d.type === "seam") V.seams.waist.y = p[1];
+    else if (d.type === "w") { const h = tpWidthHandles(V, d.part)[d.i];
+      const w = Math.max(2, Math.round(2 * Math.abs((p[0] - h.base[0]) * h.nrm[0] + (p[1] - h.base[1]) * h.nrm[1]) * 10) / 10);
+      V.limbs[d.part].widths[d.i] = w;
+      if (d.part.endsWith(".upper") && d.i === 0) V.joints[d.part.split(".")[0]].R = w / 2; }
+    TP.dirty = true; tpDrawAll(); };
+}
+window.addEventListener("mouseup", () => { TP.drag = null; });
+window.addEventListener("keydown", e => {
+  if (!document.querySelector('.tab[data-t="template"]').classList.contains("on")) return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) { e.preventDefault(); tpUndo(); }
+});
+function tpPreview() {
+  const st = TP.st, t = `&t=${st.preview_made}`;
+  const im = (name, w) => st.files.includes(name) ? `<a href="${img(st.dir + "/" + name)}${t}" target="_blank"><img src="${img(st.dir + "/" + name)}${t}" style="width:${w}px;background:#c4c6cc;border-radius:4px"></a>` : "";
+  $("tpPreview").innerHTML = st.files.length ? `${im("template_sheet.png", 900)}<div>${im("walk_front.gif", 260)}<br>${im("walk_back.gif", 260)}</div>
+    <details style="width:100%"><summary class="hint">parts (front / back)</summary>${im("parts_front.png", 1100)}<br>${im("parts_back.png", 1100)}</details>`
+    : `<p class="hint">No preview yet: Save &amp; render preview.</p>`;
+}
+async function tpLoad(keepSpec) {
+  TP.st = await api("/api/ws/tpl/state", {});
+  if (!keepSpec || !TP.spec) { TP.spec = TP.st.spec; TP.dirty = false; TP.undo = []; }
+  for (const v of ["front", "back"]) if (TP.st.art[v] && !TP.art[v]) {
+    const a = new Image(); a.src = img(TP.st.art[v]); await new Promise(ok => { a.onload = ok; a.onerror = ok; }); TP.art[v] = a; }
+  const V = TP.spec.views.front;
+  $("tpPart").innerHTML = `<option value="">(none)</option>` + V.order.slice().sort().map(n => `<option ${n === TP.sel ? "selected" : ""}>${n}</option>`).join("");
+  tpPreview(); tpDrawAll();
+}
+async function tpSave(render) {
+  TP.st = await api("/api/ws/tpl/save", { spec: TP.spec, render });
+  TP.spec = TP.st.spec; TP.dirty = false; tpDrawAll();
+  $("tpStatus").textContent = render ? " saved; rendering the preview (queue)" : " saved"; if (render) pollJobs();
+}
+async function initTemplate() {
+  if (TP.inited) return; TP.inited = true;
+  ["front", "back"].forEach(tpWire);
+  ["tpArt", "tpParts", "tpGuides"].forEach(id => $(id).oninput = tpDrawAll);
+  $("tpZoom").onchange = () => ["front", "back"].forEach(v => $(`tpCv_${v}`).style.width = $("tpZoom").value + "px");
+  $("tpPart").onchange = () => { TP.sel = $("tpPart").value || null; tpDrawAll(); };
+  $("tpUndo").onclick = tpUndo;
+  $("tpSave").onclick = guard(() => tpSave(false));
+  $("tpRender").onclick = guard(() => tpSave(true));
+  $("tpMeasure").onclick = guard(async () => {
+    if (!confirm("Throw away the template edits and measure it again from the approved human.unisex rig?")) return;
+    await queue([{ kind: "tpl_measure", build: "human.unisex", label: "template · re-measure" }]); TP.measuring = true; });
+  await tpLoad(false);
+}
+document.querySelector('.tab[data-t="template"]').addEventListener("click", guard(initTemplate));
+setInterval(() => {   // when a template job finishes: new preview (and, after a re-measure, the new spec)
+  if (!TP.inited) return;
+  const done = jobs.filter(j => (j.kind === "tpl" || j.kind === "tpl_measure") && (j.status === "done" || j.status === "failed")).length;
+  if (TP.tplDone === -1) { TP.tplDone = done; return; }
+  if (done !== TP.tplDone) { TP.tplDone = done; const m = TP.measuring; TP.measuring = false; tpLoad(!m).catch(e => err(e.message)); }
+}, 2000);
 
 function renderAll() { renderBoard(); renderBase(); renderStyle(); renderSets(); renderDrawer(false); }
 refresh().then(pollJobs).catch(e => err(e.message));

@@ -269,9 +269,16 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
      numbers from an approved build's puppet rig (hand-fixed joints included); `render(spec, view, s)` draws every
      part from the spec alone (clay shading lit from the top left, full outline, guide lines on a separate layer);
      `preview()` writes `sprites/ai/puppet_template/` (`front/`, `back/` parts + `.guides.png`, `parts_*.png`,
-     `template_sheet.png`, `walk_*.gif` on the existing IK walk, all rigid). Next: a Workshop editor for the
-     landmarks/widths, then painting all parts of a view as one parts sheet in one FLUX pass. Test:
-     `tests/test_puppet_template.py`.
+     `template_sheet.png`, `walk_*.gif` on the IK walk, all rigid). **The template is the rig**: `rig_from_spec`
+     builds the walk's skeleton from the spec's joints (no detection on the art), so edits change the rig itself.
+     **Template tab** in the Workshop (2026-10-24): front and back canvases draw the template live over the
+     approved unisex art (art / parts opacity, guides, size); drag joints (shoulder/hip, elbow/knee, wrist/ankle,
+     fingertip/toe, neck/pelvis/crotch) and the waistband; click a part (selected in both views) for its width
+     handles (limbs; an upper arm/thigh's first width is the shoulder/hip circle) or outline points (torso, head:
+     double-click the outline to add one, Alt-click to remove); Ctrl+Z undoes. Save validates and writes the spec
+     (`tpl/save`); "Save & render preview" also queues job kind `tpl`; "Re-measure" queues `tpl_measure` (throws the
+     edits away, measures again from human.unisex). Next: painting all parts of a view as one parts sheet in one
+     FLUX pass. Test: `tests/test_puppet_template.py`.
    - API: `race/state {race}`, `race/spec {spec}`, `race/approve {build, facing, file}`, `puppet/approve {build, on}`; queue job kind `race`
      `{race, sex, facing, n, seed}`. Tests: `tests/test_races.py` (ComfyUI stubbed).
 1. **Mannequins** tab: generate and approve the male/female/slim base (front, then a back made from the mirrored front, clamped to the

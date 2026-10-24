@@ -188,6 +188,11 @@ class Jobs:
                     from . import puppet
                     importlib.reload(puppet)
                     job["result"] = puppet.template(a["build"])
+                elif job["kind"] in ("tpl", "tpl_measure"):   # clean puppet template: re-measure (from the art) and/or preview
+                    from . import puppet, puppet_template
+                    importlib.reload(puppet); importlib.reload(puppet_template)
+                    spec = puppet_template.measure(a.get("build", "human.unisex")) if job["kind"] == "tpl_measure" else None
+                    job["result"] = puppet_template.preview(spec)
                 elif job["kind"] == "race":
                     job["result"] = ws.gen_race(a["race"], a["sex"], a["facing"], int(a.get("n", 4)), int(a.get("seed", 1)))
                 elif job["kind"] == "part":
@@ -229,6 +234,14 @@ def workshop_post(st, action, b):
         from . import puppet
         importlib.reload(puppet)
         return puppet.approve(b["build"], b.get("on", True))
+    if action in ("tpl/state", "tpl/save"):   # clean puppet template editor
+        from . import puppet, puppet_template
+        importlib.reload(puppet); importlib.reload(puppet_template)
+        if action == "tpl/save":
+            puppet_template.save(b["spec"])
+            if b.get("render"):
+                JOBS.add("tpl", {}, "template · render preview")
+        return puppet_template.state()
     if action == "race/state":
         return ws.race_state(b["race"])
     if action == "race/spec":
