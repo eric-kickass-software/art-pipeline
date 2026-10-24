@@ -203,7 +203,8 @@ class Jobs:
                     from . import puppet, puppet_template, puppet_paint, puppet_face
                     for mod in (puppet, puppet_template, puppet_paint, puppet_face):
                         importlib.reload(mod)
-                    job["result"] = puppet_face.generate(a["race"], a["kind"], a.get("sex", "male"), int(a.get("n", 1)),
+                    # `what` = hair / face (`kind` is the job's own kind, face_gen)
+                    job["result"] = puppet_face.generate(a["race"], a["what"], a.get("sex", "male"), int(a.get("n", 1)),
                                                          int(a.get("seed", 1)))
                 elif job["kind"] in ("tpl", "tpl_measure"):   # clean puppet template: re-measure (from the art) and/or preview
                     from . import puppet, puppet_template

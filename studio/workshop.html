@@ -1520,7 +1520,7 @@ function fcRender() {
   document.querySelectorAll("[data-fcgen]").forEach(b_ => b_.onclick = guard(async () => {
     const kind = b_.dataset.fcgen;
     if (`${kind}:${FC.race}` in FC.drafts) throw new Error("Save the text first (it'd be ignored).");
-    await queue([{ kind: "face_gen", race: FC.race, sex: $("fcSex").value, n: +document.querySelector(`[data-fcn="${kind}"]`).value,
+    await queue([{ kind: "face_gen", what: kind, race: FC.race, sex: $("fcSex").value, n: +document.querySelector(`[data-fcn="${kind}"]`).value,
       seed: +document.querySelector(`[data-fcseed="${kind}"]`).value, label: `${FC.race} · ${kind} · face` }]); }));
   document.querySelectorAll("[data-fcset]").forEach(b_ => b_.onclick = guard(async () => {
     FC.st = await api("/api/ws/face/set", { race: FC.race, kind: b_.dataset.kind, id: b_.dataset.fcset, on: b_.dataset.on === "1" }); fcRender(); }));

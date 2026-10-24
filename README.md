@@ -359,7 +359,7 @@ tab is gone: its descriptor groups are there, its mannequin clothing / builds / 
      the keyed pixel count). "Add to the set" builds the race's **hair set** / **face set** (state: `<race>.unisex.face_sets`);
      ✕ archives. A colour picker per card re-renders the previews with any hair / eye ramp (`face/preview`). Each card has
      the race's text next to its Queue button and the prompts it sends; shared wording + key colours in Shared prompts.
-   - Jobs `face_gen {race, kind, sex, n, seed}`; actions `face/state|spec|set|archive|preview|ramp_preview`.
+   - Jobs `face_gen {race, what (hair|face), sex, n, seed}`; actions `face/state|spec|set|archive|preview|ramp_preview`.
      Tests: `tests/test_puppet_face.py` (ComfyUI stubbed with a fake that paints the keys).
 5. **Ramps** tab (2026-10-24: painted puppets + the race's colour set): pick a **race**; the preview recolours its painted
    **male and female** puppets (approved Paint, else the newest), front and back, full size and 64 px. Skin levels are
