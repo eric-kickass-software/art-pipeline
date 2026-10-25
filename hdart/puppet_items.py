@@ -224,7 +224,11 @@ def prompts(race, build, item_id, doc=None):
     mats = " ".join(doc["material_text"].replace("{name}", "metal" if m == "metal" else m).replace("{word}", doc["materials"][m]["word"])
                     for m in it["materials"])
     fill = lambda t: t.replace("{style}", style).replace("{body}", body).replace("{item}", it["text"]).replace("{materials}", mats)
-    return {"front": fill(doc["prompt"]), "back": fill(doc["prompt_back"]), "held": fill(doc["prompt_held"]),
+    held = doc.get("prompt_held_shield", PROMPT_HELD_SHIELD) if it.get("held_as") == "shield" else doc["prompt_held"]
+    # an item drawn alone gets the style without the body proportions (chibi, stubby legs): with them FLUX puts a little
+    # character behind a shield
+    held_style = ppt.style_text({"style_groups": doc.get("held_style_groups", ["style", "rendering"])})
+    return {"front": fill(doc["prompt"]), "back": fill(doc["prompt_back"]), "held": fill(held.replace("{style}", held_style)),
             "complete": fill(doc.get("prompt_complete", PROMPT_COMPLETE)), "back_edit": fill(doc.get("back_edit", BACK_EDIT))}
 
 
@@ -233,6 +237,12 @@ BACK_EDIT = ("Show this exact character from behind: a three-quarter back view f
              "of the garment over the shoulder blades and the spine, its back seams; nothing from the front of the body or "
              "the garment (no chest, no front opening or buttons), the same size and position in the frame, plain white "
              "background. {materials}")
+
+
+PROMPT_HELD_SHIELD = ("{style}. A single {item} on its own, seen straight from the front, face-on and flat to the viewer, "
+                      "upright, its whole front face visible, centred, game item art. Only the shield itself: no handle, no "
+                      "hilt, no grip, no pole, nothing sticking out below or behind it, no hand, no arm. {materials} "
+                      "Clean dark outlines, on a pure white background.")
 
 
 PROMPT_COMPLETE = ("{style}. A parts sheet for 2D cutout animation: {item}, cut into its separate pieces (body, sleeves, "
@@ -474,28 +484,48 @@ def _rot(u, deg):
     return np.array([c * u[0] + s_ * u[1], -s_ * u[0] + c * u[1]])
 
 
-def held_layer(doc, it, sp, view, parts, img, lev_img, grip=None):
-    """A held item (RGBA + levels, upright, tip at the top) placed on its hand: its grip point (`grip_at` = [x, y]
-    fractions of the image, else the middle of its leather, else 85% down) on the hand's grip point, its length along
-    the hand's grip axis (from the build's approved grip hand, else from the Template), turned by `grip_angle` degrees,
-    tip the other way with `flip`. Returns (hand part name, RGBA, levels) on the rest-pose canvas."""
-    V = sp["views"][view]; arm = it.get("hand", "armA"); hand = f"{arm}.hand"
+def held_frame(doc, it, sp, view, parts, img, lev_img, grip=None):
+    """Where a held item goes on its hand, before `grip_angle` and `flip`: g = its grip point (px in the image), scale,
+    c = the hand's grip point and u0 = the grip axis (rest-pose canvas). held_layer and the Studio's live stage share it."""
+    arm = it.get("hand", "armA")
     a = img[..., 3] > 127; ys, xs = np.nonzero(a); H_, W_ = a.shape
     if it.get("grip_at"):
         gx, gy = it["grip_at"][0] * W_, it["grip_at"][1] * H_
         if view == "back":   # the image is mirrored for the back view
             gx = W_ - gx
+    elif it.get("held_as") == "shield":   # the strap behind its middle
+        gy, gx = (ys.min() + ys.max()) / 2, (xs.min() + xs.max()) / 2
     else:
         g = a & (lev_img[..., 1] == doc["materials"]["leather"]["channel"]) & (lev_img[..., 0] < 254)   # not the outline
         gy, gx = (np.nonzero(g)[0].mean(), np.nonzero(g)[1].mean()) if g.sum() > 50 else (ys.min() + 0.85 * (ys.max() - ys.min()), xs.mean())
-    fig = np.any([parts[n][..., 3] > 127 for n in V["order"]], 0); fy = np.nonzero(fig)[0]
-    scale = it.get("length", 0.5) * (fy.max() - fy.min()) / max(1, ys.max() - ys.min())
+    scale = it.get("length", 0.5) * figure_height(sp, view, parts) / max(1, ys.max() - ys.min())
+    c, u = hand_grip(sp, view, parts, arm, grip)
+    return {"g": [float(gx), float(gy)], "scale": float(scale), "c": [float(x) for x in c], "u0": [float(x) for x in u]}
+
+
+def figure_height(sp, view, parts):
+    fig = np.any([parts[n][..., 3] > 127 for n in sp["views"][view]["order"]], 0); fy = np.nonzero(fig)[0]
+    return float(fy.max() - fy.min())
+
+
+def hand_grip(sp, view, parts, arm, grip=None):
+    """(grip point, grip axis) of a hand: from the build's approved grip hand, else from the Template."""
     if grip:
-        c, u = np.array(grip["c"], float), np.array(grip["u"], float)
-    else:
-        _, d, _ = hand_frame(sp, view, parts, arm); u = grip_axis(d, spec().get("grip", {}).get("wrist", GRIP_WRIST), view)
-        c = grip_point(sp, view, arm)
-    u = _rot(u, it.get("grip_angle", 0) * (1 if view == "front" else -1))
+        return np.array(grip["c"], float), np.array(grip["u"], float)
+    _, d, _ = hand_frame(sp, view, parts, arm)
+    return grip_point(sp, view, arm), grip_axis(d, spec().get("grip", {}).get("wrist", GRIP_WRIST), view)
+
+
+def held_layer(doc, it, sp, view, parts, img, lev_img, grip=None):
+    """A held item (RGBA + levels, upright, tip at the top) placed on its hand: its grip point (`grip_at` = [x, y]
+    fractions of the image, else the middle of its leather, else 85% down) on the hand's grip point, its length along
+    the hand's grip axis (from the build's approved grip hand, else from the Template), turned by `grip_angle` degrees,
+    tip the other way with `flip`. A shield (`held_as`) grips at its middle by default.
+    Returns (hand part name, RGBA, levels) on the rest-pose canvas."""
+    hand = f"{it.get('hand', 'armA')}.hand"
+    f = held_frame(doc, it, sp, view, parts, img, lev_img, grip)
+    gx, gy, scale, c = *f["g"], f["scale"], np.array(f["c"])
+    u = _rot(np.array(f["u0"]), it.get("grip_angle", 0) * (1 if view == "front" else -1))
     if it.get("flip"):
         u = -u
     ang = np.degrees(np.arctan2(-u[1], u[0])) - 90   # the image's up (0, -1) onto u
@@ -776,6 +806,43 @@ def render(build, worn, hair_fn=None, frames=8, painted=False):
     return out
 
 
+def held_stage(race, item_id, build, cid=None, unsaved=None, ramps=None):
+    """The Studio's live grip stage (rest pose, both views): the build drawn below and above the held item (`unsaved`
+    = the form's hand / held_as over the saved ones), the hand's grip point and axis, the figure height, and with a
+    candidate its coloured image (mirrored for the back) with the automatic grip point and scale. The browser turns
+    the item by `grip_angle` / `flip` as held_layer does, so the angle can be dragged live."""
+    doc = spec(); it = dict(doc["items"][item_id]); it.pop("grip_at", None)
+    it.update({k: v for k, v in (unsaved or {}).items() if k in ("hand", "held_as") and v})
+    arm = it.get("hand", "armA")
+    _, sp, parts = pf.base(build); out = {}
+    for v in VIEWS:
+        P = parts[v]; order = [n for n in sp["views"][v]["order"] if n in P]
+        g = grip_assets(race, build, v).get(arm); hn = f"{arm}.hand"
+        below, above = Image.new("RGBA", (N, N)), Image.new("RGBA", (N, N)); cv = below
+        for n in order:
+            if n == hn:   # under-hand < weapon < fingers (grip hand), else weapon < the painted hand
+                if g:
+                    below.alpha_composite(Image.fromarray(g["under"])); above.alpha_composite(Image.fromarray(g["over"]))
+                else:
+                    above.alpha_composite(Image.fromarray(P[n]))
+                cv = above
+                continue
+            cv.alpha_composite(Image.fromarray(P[n]))
+        c, u = hand_grip(sp, v, P, arm, g)
+        o = {"below": _url(below), "above": _url(above), "c": [float(x) for x in c], "u0": [float(x) for x in u],
+             "fig": figure_height(sp, v, P), "grip_hand": bool(g)}
+        if cid:
+            d = out_dir(race, item_id) / cid
+            img = np.asarray(Image.open(d / "held.png").convert("RGBA")); lev = np.asarray(Image.open(d / "held_levels.png").convert("RGBA"))
+            if v == "back":
+                img, lev = img[:, ::-1].copy(), lev[:, ::-1].copy()
+            f = held_frame(doc, it, sp, v, P, img, lev, g); ys = np.nonzero(img[..., 3] > 127)[0]
+            o.update(img=_url(Image.fromarray(colour(lev, ramps, doc))), g_auto=f["g"], w=img.shape[1], h=img.shape[0],
+                     span=float(ys.max() - ys.min()))
+        out[v] = o
+    return {"N": N, "views": out}
+
+
 # ----------------------------------------------------------------------------- Item Workshop (state, API, jobs)
 
 SEXES = ("male", "female")
@@ -850,6 +917,7 @@ def candidates(race, item_id):
 def state(race):
     from . import workshop as ws
     doc = spec(); st = load_state(race); pal = ws.palettes_doc()["groups"]
+    doc.setdefault("prompt_held_shield", PROMPT_HELD_SHIELD)
     return {"spec": doc, "approved": st["approved"], "builds": _builds(race),
             "candidates": {i: candidates(race, i) for i in doc["items"]},
             "masks": {i: sorted(f.name[len(i) + 1:-4] for f in ZONES.glob(f"{i}.*.png")) for i in doc["items"]} if ZONES.exists() else {},
@@ -861,7 +929,7 @@ def state(race):
 ITEM_KEYS = {"slot": str, "kind": str, "text": str, "materials": list, "depth": (int, float), "bulk": (int, float),
              "clips": list, "fit": str, "hand": str, "length": (int, float), "tilt": (int, float), "zones": list,
              "denoise": (int, float), "complete": bool, "cover": bool, "guide": (int, float),
-             "grip_angle": (int, float), "flip": bool, "grip_at": list}
+             "grip_angle": (int, float), "flip": bool, "grip_at": list, "held_as": str}
 
 
 def save_item(item_id, d, old_id=None):
@@ -885,6 +953,8 @@ def save_item(item_id, d, old_id=None):
     bad = [m for m in it.get("materials", []) if m not in doc["materials"]]
     if bad or not it.get("materials"):
         raise ValueError(f"materials must be some of {list(doc['materials'])}")
+    if it.get("held_as", "weapon") not in ("weapon", "shield"):
+        raise ValueError("held_as is weapon or shield")
     if it.get("fit", "shared") not in ("shared", "per_sex"):
         raise ValueError("fit is shared or per_sex")
     doc["items"][item_id] = it
@@ -894,12 +964,12 @@ def save_item(item_id, d, old_id=None):
 
 def save_prompts(d):
     doc = spec()
-    for k in ("prompt", "prompt_back", "prompt_held", "prompt_complete", "material_text"):
+    for k in ("prompt", "prompt_back", "prompt_held", "prompt_held_shield", "prompt_complete", "material_text"):
         if k in d:
             if not isinstance(d[k], str) or not d[k].strip():
                 raise ValueError(f"{k} can't be empty")
             doc[k] = d[k]
-    for k in ("prompt", "prompt_back", "prompt_held", "prompt_complete"):
+    for k in ("prompt", "prompt_back", "prompt_held", "prompt_held_shield", "prompt_complete"):
         if k in doc and "{item}" not in doc[k]:
             raise ValueError(f"{k} must contain {{item}}")
     _write_spec(doc)
@@ -1332,6 +1402,8 @@ def api(action, b):
         return state(race)
     if action == "grip/prompts":
         return grip_prompts(b["build"])
+    if action == "held/stage":   # the live grip stage (rest pose) the browser turns the held item on
+        return held_stage(race, b["item"], b["build"], b.get("id"), b.get("def"), b.get("ramps"))
     if action == "held/preview":   # a held item in the hand (rest + one walk frame, both views) with unsaved settings
         doc = spec(); doc["items"][b["item"]].update(b.get("def", {}))
         global spec_override

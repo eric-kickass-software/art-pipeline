@@ -401,9 +401,11 @@
               <span class="hint">px (1024 canvas) FLUX may paint past the zone</span>
               <label><input type="checkbox" id="itClipHair" style="width:auto"> clips the hair</label>
               <label><input type="checkbox" id="itComplete" style="width:auto"> FLUX pass for hidden joint areas</label></div>
-            <label class="itheld">Held</label><div class="row itheld" style="margin:0"><label>hand</label><select id="itHand" style="width:150px"><option value="armB">armB (near hand)</option><option value="armA">armA (far hand)</option></select>
+            <label class="itheld">Held</label><div class="row itheld" style="margin:0"><label>as</label><select id="itHeldAs" style="width:110px" title="picks the held prompt (Prompts below) and the default grip point">
+                <option value="weapon">weapon</option><option value="shield">shield</option></select><label>hand</label><select id="itHand" style="width:150px"><option value="armB">armB (near hand)</option><option value="armA">armA (far hand)</option></select>
               <label>length</label><input id="itLength" type="number" step="0.02" style="width:70px" title="the weapon's height as a fraction of the figure's">
               <label>grip angle°</label><input id="itGripAngle" type="number" step="5" style="width:70px" title="turns the weapon in the fist (counter-clockwise in the front view)">
+              <input id="itGripAngleR" type="range" min="-180" max="180" step="1" style="width:160px" title="grip angle: or drag on the stage in the Grip card">
               <label><input type="checkbox" id="itFlip" style="width:auto"> flip (tip the other way)</label></div>
           </div>
           <div class="row"><button class="primary" id="itSave">Save item</button><span class="hint" id="itSaved"></span></div>
@@ -439,11 +441,16 @@
               <label>Back close-up</label><textarea id="gripPBack" rows="3"></textarea></div>
             <div class="row"><button id="gripSaveSpec">Save grip prompts + wrist</button></div></details>
           <h2>Weapon in the hand</h2>
+          <div class="row"><label>Candidate</label><select id="gripCand" style="width:180px"></select><label>On</label><select id="gripBuild" style="width:140px"></select>
+            <label><input type="checkbox" id="gripZoom" style="width:auto" checked> zoom on the hand</label>
+            <span class="hint" id="gripStageMsg">drag on a view to turn the item; angle, length, flip and grip point update live</span></div>
+          <div class="row" style="align-items:flex-start">
+            <figure style="margin:0"><canvas id="gripStage_front" data-gsv="front" width="512" height="512" style="width:384px;background:#c4c6cc;border-radius:4px;cursor:grab;touch-action:none"></canvas><figcaption class="hint">front (rest)</figcaption></figure>
+            <figure style="margin:0"><canvas id="gripStage_back" data-gsv="back" width="512" height="512" style="width:384px;background:#c4c6cc;border-radius:4px;cursor:grab;touch-action:none"></canvas><figcaption class="hint">back (rest)</figcaption></figure></div>
           <div class="row" style="align-items:flex-start">
             <figure style="margin:0"><canvas id="gripImg" width="160" height="320" style="background:#fff;border-radius:4px;cursor:crosshair"></canvas>
               <figcaption class="hint">click the grip point<br><span id="gripAt"></span> <a href="#" id="gripAtReset">auto</a></figcaption></figure>
-            <div><div class="row"><label>Candidate</label><select id="gripCand" style="width:180px"></select><label>On</label><select id="gripBuild" style="width:140px"></select>
-              <button class="primary" id="gripPreview">Preview</button><span class="hint">uses the settings above, saved or not</span></div>
+            <div><div class="row"><button class="primary" id="gripPreview">Preview walk</button><span class="hint">the full render (rest + walk frames), uses the settings above, saved or not</span></div>
               <div id="gripOut" class="row" style="align-items:flex-start"></div></div></div>
         </div>
 
@@ -459,6 +466,7 @@
               <label>Back</label><textarea id="ipBack" rows="3"></textarea>
               <label>Hidden areas</label><textarea id="ipComplete" rows="3"></textarea>
               <label>Held</label><textarea id="ipHeld" rows="2"></textarea>
+              <label>Held (shield)</label><textarea id="ipHeldShield" rows="2"></textarea>
               <label>Material text</label><input id="ipMat">
             </div>
             <div class="row"><button id="ipSave">Save templates</button></div></details>
@@ -1846,7 +1854,8 @@ function itRenderForm() {
   $("itId").value = IT.sel; $("itSlot").value = d.slot || ""; $("itKind").value = d.kind || ""; $("itFit").value = d.fit || "shared";
   $("itText").value = d.text || ""; $("itDepth").value = d.depth ?? 3; $("itBulk").value = d.bulk ?? 6;
   $("itClipHair").checked = (d.clips || []).includes("hair"); $("itComplete").checked = d.complete !== false;
-  $("itHand").value = d.hand || "armB"; $("itLength").value = d.length ?? 0.48; $("itGripAngle").value = d.grip_angle ?? 0;
+  $("itHand").value = d.hand || "armB"; $("itLength").value = d.length ?? 0.48; $("itGripAngle").value = $("itGripAngleR").value = d.grip_angle ?? 0;
+  $("itHeldAs").value = d.held_as || "weapon";
   $("itFlip").checked = !!d.flip; GR.at = d.grip_at || null; if (itHeld()) gripRender();
   $("itMats").innerHTML = Object.entries(IT.st.spec.materials).map(([m, e]) => `<label style="display:flex;align-items:center;gap:4px">
     <input type="checkbox" data-mat="${m}" style="width:auto" ${(d.materials || []).includes(m) ? "checked" : ""}>
@@ -1877,7 +1886,7 @@ async function itRenderPrompts() {
   const sp = IT.st.spec;
   if (document.activeElement?.closest?.("details") == null) {
     $("ipFront").value = sp.prompt || ""; $("ipBack").value = sp.prompt_back || ""; $("ipComplete").value = sp.prompt_complete || "";
-    $("ipHeld").value = sp.prompt_held || ""; $("ipMat").value = sp.material_text || ""; }
+    $("ipHeld").value = sp.prompt_held || ""; $("ipHeldShield").value = sp.prompt_held_shield || ""; $("ipMat").value = sp.material_text || ""; }
   if (!IT.sel || !$("itBuild").value) return;
   try { const P = await itApi("prompts", { item: IT.sel, build: $("itBuild").value });
     $("itPrompt").textContent = itHeld() ? `Held: ${P.held}` : `Front: ${P.front}\n\nBack (front as reference): ${P.back}` +
@@ -1886,9 +1895,11 @@ async function itRenderPrompts() {
 $("itBuild").onchange = () => itRenderPrompts();
 $("ipSave").onclick = guard(async () => {
   await itApi("spec/save", { prompts: { prompt: $("ipFront").value, prompt_back: $("ipBack").value, prompt_complete: $("ipComplete").value,
-    prompt_held: $("ipHeld").value, material_text: $("ipMat").value } }); await itRefresh(); });
+    prompt_held: $("ipHeld").value, prompt_held_shield: $("ipHeldShield").value, material_text: $("ipMat").value } }); await itRefresh(); });
 $("itGen").onclick = guard(async () => {
   if (!itHeld() && ZE.dirty) throw new Error("Save the zone first (or undo your strokes).");
+  if (itHeld() && ($("itHeldAs").value !== (itDef().held_as || "weapon") || $("itText").value.trim() !== (itDef().text || "")))
+    throw new Error("Save the item first: Generate uses the saved description and held type.");
   const n = +$("itN").value, seed = +$("itSeed").value, build = $("itBuild").value;
   await queue([{ kind: "item", action: "generate", race: IT.race, item: IT.sel, build, n, seed, label: `${IT.sel} · ${build} ×${n} (s${seed})` }]);
   $("itSeed").value = seed + n;
@@ -2009,7 +2020,7 @@ document.addEventListener("keydown", (e) => {
 // ---- grip (held items)
 const GR = { at: null, imgEl: null, imgKey: null };
 const gripDef = () => ({ hand: $("itHand").value, length: +$("itLength").value || 0.48, grip_angle: +$("itGripAngle").value || 0,
-  flip: $("itFlip").checked, grip_at: GR.at });
+  flip: $("itFlip").checked, grip_at: GR.at, held_as: $("itHeldAs").value });
 function gripRender() {
   const st = IT.st, gs = st.grip_spec;
   if (document.activeElement?.closest?.("#gripCard details") == null) { $("gripPFront").value = gs.prompt; $("gripPBack").value = gs.prompt_back; }
@@ -2033,7 +2044,7 @@ function gripRender() {
   $("gripCand").innerHTML = cands.map(c => `<option>${c.id}</option>`).join("");
   if (cands.some(c => c.id === cur)) $("gripCand").value = cur;
   const bcur = $("gripBuild").value; $("gripBuild").innerHTML = st.builds.map(b => `<option>${b}</option>`).join(""); if (st.builds.includes(bcur)) $("gripBuild").value = bcur;
-  gripDrawImg();
+  gripDrawImg(); gripStageLoad();
 }
 async function gripDrawImg() {
   const c = (IT.st.candidates[IT.sel] || []).find(x => x.id === $("gripCand").value);
@@ -2048,9 +2059,91 @@ async function gripDrawImg() {
 }
 $("gripImg").onclick = (e) => { if (!GR.box) return; const r = $("gripImg").getBoundingClientRect();
   const fx = ((e.clientX - r.left) * $("gripImg").width / r.width - GR.box[0]) / GR.box[2], fy = ((e.clientY - r.top) * $("gripImg").height / r.height - GR.box[1]) / GR.box[3];
-  if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return; GR.at = [+fx.toFixed(3), +fy.toFixed(3)]; gripDrawImg(); $("itSaved").textContent = "grip point changed: Save item to keep it"; };
-$("gripAtReset").onclick = (e) => { e.preventDefault(); GR.at = null; gripDrawImg(); };
-$("gripCand").onchange = () => gripDrawImg();
+  if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return; GR.at = [+fx.toFixed(3), +fy.toFixed(3)]; gripDrawImg(); gripStageDraw(); $("itSaved").textContent = "grip point changed: Save item to keep it"; };
+$("gripAtReset").onclick = (e) => { e.preventDefault(); GR.at = null; gripDrawImg(); gripStageDraw(); };
+$("gripCand").onchange = () => { gripDrawImg(); gripStageLoad(); };
+$("gripBuild").onchange = () => gripStageLoad();
+
+// the live stage: the build's rest pose below / above the held item from held/stage, the item turned here in the browser
+// exactly as held_layer does (grip point on the hand's grip point, grip axis turned by the angle, flip), so dragging is instant
+const GS = { key: null, data: null, ims: {}, drag: null };
+const rotV = (u, deg) => { const t = deg * Math.PI / 180, c = Math.cos(t), s = Math.sin(t); return [c * u[0] + s * u[1], -s * u[0] + c * u[1]]; };
+const scrAng = (v) => Math.atan2(-v[1], v[0]) * 180 / Math.PI;   // counter-clockwise on screen, as _rot turns
+function gsAxis(v, o) {   // the item's tip direction in view v
+  const sgn = v === "front" ? 1 : -1, u = rotV(o.u0, (+$("itGripAngle").value || 0) * sgn);
+  return $("itFlip").checked ? [-u[0], -u[1]] : u;
+}
+async function gripStageLoad() {
+  if (!IT.sel || !itHeld() || !$("gripBuild").value) return;
+  const cand = $("gripCand").value || null, key = [IT.sel, $("gripBuild").value, cand, $("itHand").value, $("itHeldAs").value].join("|");
+  if (GS.key === key) return gripStageDraw();
+  GS.key = key; $("gripStageMsg").textContent = "loading the stage…";
+  try {
+    const r = await itApi("held/stage", { item: IT.sel, build: $("gripBuild").value, id: cand, def: { hand: $("itHand").value, held_as: $("itHeldAs").value } });
+    if (GS.key !== key) return;
+    const ims = {};
+    for (const v of ["front", "back"]) { const o = r.views[v];
+      ims[v] = { below: await paLoadImg(o.below), above: await paLoadImg(o.above), item: o.img ? await paLoadImg(o.img) : null }; }
+    GS.data = r; GS.ims = ims;
+    $("gripStageMsg").textContent = (cand ? "drag on a view to turn the item" : "no candidate yet: the ghost shows the length and angle; drag to turn it") +
+      (r.views.front.grip_hand ? "" : " (no approved grip hand on this build: the item sits under the painted hand)");
+  } catch (e) { GS.key = null; $("gripStageMsg").textContent = e.message; return; }
+  gripStageDraw();
+}
+function gsView(v) {   // canvas transform of view v: the whole 1024 canvas, or 2x around the hand's grip point
+  const o = GS.data.views[v], cv = $("gripStage_" + v), k = cv.width / GS.data.N;
+  if (!$("gripZoom").checked) return { k, ox: 0, oy: 0 };
+  const z = 2 * k; return { k: z, ox: cv.width / 2 - o.c[0] * z, oy: cv.height / 2 - o.c[1] * z };
+}
+function gripStageDraw() {
+  if (!GS.data) return;
+  for (const v of ["front", "back"]) {
+    const o = GS.data.views[v], im = GS.ims[v], cv = $("gripStage_" + v), x = cv.getContext("2d"), N = GS.data.N, T = gsView(v);
+    x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, cv.width, cv.height);
+    x.setTransform(T.k, 0, 0, T.k, T.ox, T.oy); x.imageSmoothingQuality = "high";
+    x.drawImage(im.below, 0, 0, N, N);
+    const u = gsAxis(v, o), th = Math.atan2(u[0], -u[1]), Lpx = (+$("itLength").value || 0.48) * o.fig;   // th turns the image's up onto u
+    x.save(); x.translate(o.c[0], o.c[1]); x.rotate(th);
+    if (im.item) {
+      const s = Lpx / Math.max(1, o.span);
+      const g = GR.at ? [(v === "back" ? 1 - GR.at[0] : GR.at[0]) * o.w, GR.at[1] * o.h] : o.g_auto;
+      x.scale(s, s); x.drawImage(im.item, -g[0], -g[1]);
+    } else {   // a ghost before generation: a blade from the fist, or a kite shield on it
+      x.fillStyle = "rgba(225,40,143,.55)"; x.strokeStyle = "#e1288f"; x.lineWidth = 2 / T.k;
+      x.beginPath();
+      if ($("itHeldAs").value === "shield") {
+        const h = Lpx, w = 0.72 * Lpx;
+        x.moveTo(-w / 2, -h / 2); x.lineTo(w / 2, -h / 2); x.quadraticCurveTo(w / 2, h * 0.15, 0, h / 2); x.quadraticCurveTo(-w / 2, h * 0.15, -w / 2, -h / 2);
+      } else {
+        const w = 0.05 * Lpx; x.rect(-w / 2, -0.85 * Lpx, w, Lpx); x.rect(-2.2 * w, -0.72 * Lpx, 4.4 * w, w * 0.8);
+      }
+      x.fill(); x.stroke();
+    }
+    x.restore();
+    x.drawImage(im.above, 0, 0, N, N);
+    x.strokeStyle = "#e1288f"; x.lineWidth = 1.5 / T.k;   // the hand's grip point
+    x.beginPath(); x.arc(o.c[0], o.c[1], 5 / T.k, 0, 7); x.stroke();
+  }
+}
+function gsSetAngle(a) {
+  a = Math.round(((a + 540) % 360) - 180); $("itGripAngle").value = $("itGripAngleR").value = a;
+  $("itSaved").textContent = "grip angle changed: Save item to keep it"; gripStageDraw();
+}
+document.querySelectorAll("[data-gsv]").forEach(cv => {
+  const angAt = (e) => { const v = cv.dataset.gsv, o = GS.data.views[v], T = gsView(v), r = cv.getBoundingClientRect();
+    const px = ((e.clientX - r.left) * cv.width / r.width - T.ox) / T.k, py = ((e.clientY - r.top) * cv.height / r.height - T.oy) / T.k;
+    let w = [px - o.c[0], py - o.c[1]]; if (Math.hypot(...w) < 4) return null;
+    if ($("itFlip").checked) w = [-w[0], -w[1]];
+    return (v === "front" ? 1 : -1) * (scrAng(w) - scrAng(o.u0)); };
+  cv.onpointerdown = (e) => { if (!GS.data) return; cv.setPointerCapture(e.pointerId); GS.drag = cv; cv.style.cursor = "grabbing";
+    const a = angAt(e); if (a != null) gsSetAngle(a); };
+  cv.onpointermove = (e) => { if (GS.drag !== cv) return; const a = angAt(e); if (a != null) gsSetAngle(a); };
+  cv.onpointerup = cv.onpointercancel = () => { GS.drag = null; cv.style.cursor = "grab"; };
+});
+$("itGripAngle").oninput = () => { $("itGripAngleR").value = $("itGripAngle").value; gripStageDraw(); };
+$("itGripAngleR").oninput = () => gsSetAngle(+$("itGripAngleR").value);
+$("itLength").oninput = $("itFlip").onchange = $("gripZoom").onchange = () => gripStageDraw();
+$("itHand").onchange = $("itHeldAs").onchange = () => gripStageLoad();
 $("gripPreview").onclick = guard(async () => {
   if (!$("gripCand").value) throw new Error("Generate a candidate first.");
   $("gripOut").innerHTML = `<span class="hint">rendering…</span>`;
