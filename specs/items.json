@@ -161,9 +161,8 @@
         "metal",
         "leather"
       ],
-      "hand": "armA",
+      "hand": "armB",
       "length": 0.48,
-      "tilt": 22,
       "text": "short steel sword with a simple crossguard and a leather-wrapped grip"
     }
   }

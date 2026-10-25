@@ -425,6 +425,7 @@ Code: `hdart/puppet_items.py` (all logic; the Studio routes `/api/ws/items/<acti
 state (approvals): `sprites/ai/items/<race>/state.json`.
 An item is a set of overlay layers, one per Template part it covers. Every build of a race is painted on the one shared
 Template, so an item fitted once is reused on every build of the race.
+- **Tabs:** Items, Outfit, Layers.
 - **Items tab:** the catalogue by slot (✓ = approved, ♂/♀ per sex); item settings (slot, kind fitted/held, fit,
   description, materials, depth, bulk, clips hair, FLUX hidden pass; held: hand, length, tilt); the **zone editor**
   (brush / eraser / lasso add / lasso erase, size, view zoom, undo/redo, front/back, on the male or female puppet; keys
@@ -436,6 +437,23 @@ Template, so an item fitted once is reused on every build of the race.
 - **Gender variants:** `fit: per_sex` items are approved per sex (fit on `human.male` and on `human.female`; the female
   fit uses the female body prompt); a build wears its sex's fit, else the shared one. A zone saved with "this sex only"
   (`<item>.<sex>.<view>.png`) overrides the shared zone for that sex.
+- **Layers tab** (the Parts editor in item mode; a candidate's **Edit layers**): the puppet it was fitted on as read-only
+  context and one editable layer per Template part (`<part>@item`, gold rows, each right above its body part; parts the
+  item doesn't cover yet start empty). Brush / eraser / heal / outline / eyedropper / move as for paint parts. Save keeps
+  the originals (`parts_orig/`, `plevels_orig/`; **Revert** brings them back) and recomputes the levels: key colours by
+  material with the candidate's stored cel levels (`meta.cents`), dark = outline, any other colour = the first material
+  by brightness.
+- **Held items and grip hands:** a weapon rides its hand bone on a **grip line**. Without a grip hand: through the point
+  40% from wrist to fingertip, angled so that with the arm hanging (the walk) the tip points up and `grip.wrist`° (40)
+  forward, screen-left in the front view and screen-right in the back view (one rule can't do both: the hand is rigid).
+  **Grip hands** (Grip card, per build, job `grip`): a close-up FLUX pass per hand and view (box ≈ 4.2 hand sizes; in the
+  full figure a hand is ~40 px, too small for a fist; the forearm's end may be repainted so the fist joins the wrist)
+  paints the fist around a magenta guide rod; the rod FLUX actually drew is measured (line fit) for the grip point
+  (the fist's middle on it), axis and width; the hand splits into `under_<arm>_<view>` (palm, the rod's pixels filled
+  in) and `over_<arm>_<view>` (the fingers in front: hand pixels inside the drawn rod's strip). Worn: under-hand <
+  weapon < fingers. Settings per item: `hand` (armB = near hand reads best), `length`, `grip_angle`, `flip`, `grip_at`
+  (click on the weapon). `regrip` re-splits from the saved `after_<view>.png` without the GPU. Output:
+  `sprites/ai/items/<race>/_grip/<build>/<id>/`, approval in `state.json` → `grip`.
 - **Painted zones** replace the preset `zones` once saved. A painted zone only reaches what shows in the rest pose, so
   each part's zone also floods into that part's hidden pixels from where it was painted (a vest continues under the
   near arm; a sleeve into its shoulder cap). Areas painted past the body are allowed (pauldron or skirt silhouettes).

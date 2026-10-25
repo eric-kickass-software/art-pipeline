@@ -38,7 +38,12 @@ LEVELS = 5
 D_COMPLETE = 0.55   # the hidden-area pass starts from the smear fill (already in key colours); higher repaints them as skin
 
 
+spec_override = None   # held/preview: the spec with an item's unsaved grip settings, for one render
+
+
 def spec():
+    if spec_override is not None:
+        return spec_override
     return json.loads(SPEC.read_text(encoding="utf-8"))
 
 
@@ -58,6 +63,8 @@ def _grow(m, k):
 
 
 def _erode(m, k):
+    if k <= 0:   # MinFilter(1) crashes PIL
+        return m.copy()
     return np.asarray(Image.fromarray(np.where(m, 255, 0).astype(np.uint8)).filter(ImageFilter.MinFilter(2 * k + 1))) > 0
 
 
@@ -312,26 +319,72 @@ def split(sp, view, parts, zm, L, lev):
 
 # ----------------------------------------------------------------------------- held items
 
-def held_layer(doc, it, sp, view, parts, img, lev_img):
-    """A held item (RGBA + levels, upright) rotated onto the hand: grip = middle of its leather, else 85% down."""
-    V = sp["views"][view]; hand = f"{it.get('hand', 'armA')}.hand"
-    a = img[..., 3] > 127; ys, xs = np.nonzero(a)
-    grip_ch = doc["materials"]["leather"]["channel"]
-    g = a & (lev_img[..., 1] == grip_ch)
-    gy, gx = (np.nonzero(g)[0].mean(), np.nonzero(g)[1].mean()) if g.sum() > 50 else (ys.min() + 0.85 * (ys.max() - ys.min()), xs.mean())
+def hand_frame(sp, view, parts, arm):
+    """A hand in the rest pose: (centre of its pixels, unit direction wrist -> fingertip, size = sqrt(area))."""
+    V = sp["views"][view]; L = V["limbs"][f"{arm}.hand"]
+    a_, b_ = pt._joint(V, L["from"]) * S, pt._joint(V, L["to"]) * S; d = (b_ - a_) / (np.linalg.norm(b_ - a_) + 1e-6)
+    m = parts[f"{arm}.hand"][..., 3] > 127; ys, xs = np.nonzero(m)
+    return np.array([xs.mean(), ys.mean()]), d, float(np.sqrt(m.sum()))
+
+
+def grip_axis(d, wrist, view="front"):
+    """The grip line through a fist (unit vector toward a weapon's tip), fixed to the hand: chosen so that with the arm
+    hanging straight down (the walk) the tip points up and `wrist` degrees forward (screen left in the front view, screen
+    right in the back view). The hand is rigid, so the same angle to the hand's direction holds in every pose."""
+    for th in (180 - wrist, -(180 - wrist)):
+        hang = _rot(np.array([0.0, 1.0]), th)
+        if (hang[0] < 0) == (view == "front"):
+            return _rot(np.asarray(d, float), th)
+    return _rot(np.asarray(d, float), 180 - wrist)
+
+
+def grip_point(sp, view, arm, at=0.4):
+    """Where a fist grips: `at` of the way from the wrist to the fingertip (the open hand's centre is too far out)."""
+    V = sp["views"][view]; L = V["limbs"][f"{arm}.hand"]
+    a_, b_ = pt._joint(V, L["from"]) * S, pt._joint(V, L["to"]) * S
+    return a_ + at * (b_ - a_)
+
+
+def _rot(u, deg):
+    """Turn a screen vector (y down) by `deg` degrees counter-clockwise as seen on screen."""
+    t = np.radians(deg); c, s_ = np.cos(t), np.sin(t)
+    return np.array([c * u[0] + s_ * u[1], -s_ * u[0] + c * u[1]])
+
+
+def held_layer(doc, it, sp, view, parts, img, lev_img, grip=None):
+    """A held item (RGBA + levels, upright, tip at the top) placed on its hand: its grip point (`grip_at` = [x, y]
+    fractions of the image, else the middle of its leather, else 85% down) on the hand's grip point, its length along
+    the hand's grip axis (from the build's approved grip hand, else from the Template), turned by `grip_angle` degrees,
+    tip the other way with `flip`. Returns (hand part name, RGBA, levels) on the rest-pose canvas."""
+    V = sp["views"][view]; arm = it.get("hand", "armA"); hand = f"{arm}.hand"
+    a = img[..., 3] > 127; ys, xs = np.nonzero(a); H_, W_ = a.shape
+    if it.get("grip_at"):
+        gx, gy = it["grip_at"][0] * W_, it["grip_at"][1] * H_
+        if view == "back":   # the image is mirrored for the back view
+            gx = W_ - gx
+    else:
+        g = a & (lev_img[..., 1] == doc["materials"]["leather"]["channel"]) & (lev_img[..., 0] < 254)   # not the outline
+        gy, gx = (np.nonzero(g)[0].mean(), np.nonzero(g)[1].mean()) if g.sum() > 50 else (ys.min() + 0.85 * (ys.max() - ys.min()), xs.mean())
     fig = np.any([parts[n][..., 3] > 127 for n in V["order"]], 0); fy = np.nonzero(fig)[0]
     scale = it.get("length", 0.5) * (fy.max() - fy.min()) / max(1, ys.max() - ys.min())
-    hm = parts[hand][..., 3] > 127; hy, hx = np.nonzero(hm); cx, cy = hx.mean(), hy.mean()
-    pel = pt._joint(V, "pelvis") * S
-    ang = it.get("tilt", 20) * (1 if cx < pel[0] else -1)   # the top leans away from the body
+    if grip:
+        c, u = np.array(grip["c"], float), np.array(grip["u"], float)
+    else:
+        _, d, _ = hand_frame(sp, view, parts, arm); u = grip_axis(d, spec().get("grip", {}).get("wrist", GRIP_WRIST), view)
+        c = grip_point(sp, view, arm)
+    u = _rot(u, it.get("grip_angle", 0) * (1 if view == "front" else -1))
+    if it.get("flip"):
+        u = -u
+    ang = np.degrees(np.arctan2(-u[1], u[0])) - 90   # the image's up (0, -1) onto u
     out = []
     for src in (img, lev_img):
-        im = Image.fromarray(src).resize((int(src.shape[1] * scale), int(src.shape[0] * scale)), Image.NEAREST if src is lev_img else Image.LANCZOS)
-        big = Image.new("RGBA", (N * 2, N * 2)); ox, oy = N - int(gx * scale), N - int(gy * scale)
-        big.paste(im, (ox, oy)); big = big.rotate(ang, resample=Image.NEAREST if src is lev_img else Image.BICUBIC, center=(N, N))
-        out.append(np.asarray(big.crop((int(N - cx), int(N - cy), int(N - cx) + N, int(N - cy) + N))).copy())
+        nearest = src is lev_img
+        im = Image.fromarray(src).resize((max(1, int(src.shape[1] * scale)), max(1, int(src.shape[0] * scale))), Image.NEAREST if nearest else Image.LANCZOS)
+        big = Image.new("RGBA", (N * 2, N * 2)); big.paste(im, (N - int(gx * scale), N - int(gy * scale)))
+        big = big.rotate(ang, resample=Image.NEAREST if nearest else Image.BICUBIC, center=(N, N))
+        out.append(np.asarray(big.crop((int(N - c[0]), int(N - c[1]), int(N - c[0]) + N, int(N - c[1]) + N))).copy())
     L, lev = out; m = L[..., 3] > 127; L[..., 3] = np.where(m, 255, 0); lev[..., 3] = np.where(m, 255, 0)
-    return {hand: (L, lev)}
+    return hand, L, lev
 
 
 def _gen_held(doc, it, P, d, sd):
@@ -472,6 +525,7 @@ def generate(race, item_id, build=None, seed=1):
             flux = {"prompt": P["complete"], "seed": seed, "ref": ref, "tag": f"item_{item_id}_{cid}_c"} if it.get("complete", True) else None
             meta.setdefault("keyed", {})[v] = _extract(doc, it, sp, v, parts[v], zm, Z, body, region, before, after, d, cents, flux)
         meta["completed"] = bool(it.get("complete", True))
+        meta["cents"] = {str(k): [float(x) for x in v] for k, v in cents.items()}
     (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
     previews(race, item_id, cid)
     return cid
@@ -493,6 +547,7 @@ def rekey(race, item_id, cid, complete=False):
                 "tag": f"item_{item_id}_{cid}_c"} if complete else None
         meta.setdefault("keyed", {})[v] = _extract(doc, it, sp, v, parts[v], zm, Z, body, region, before, after, d, cents, flux)
     meta["completed"] = bool(complete)
+    meta["cents"] = {str(k): [float(x) for x in v] for k, v in cents.items()}
     (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
     previews(race, item_id, cid)
     return meta["keyed"]
@@ -512,14 +567,17 @@ def colour(lev, ramps, doc=None):
     return out
 
 
-def item_layers(race, item_id, cid, sp, view, parts, ramps=None, painted=False):
-    """{part: RGBA} of one item candidate on a build's parts (coloured by `ramps`, or as painted)."""
+def item_layers(race, item_id, cid, sp, view, parts, ramps=None, painted=False, grips=None):
+    """{part: RGBA} of one item candidate on a build's parts (coloured by `ramps`, or as painted). Held items sit on
+    their hand's grip (`grips` = grip_assets of the build, if it has an approved grip hand)."""
     doc = spec(); it = doc["items"][item_id]; d = out_dir(race, item_id) / cid
     if it.get("kind") == "held":
         img = np.asarray(Image.open(d / "held.png").convert("RGBA")); lev = np.asarray(Image.open(d / "held_levels.png").convert("RGBA"))
         if view == "back":
             img, lev = img[:, ::-1].copy(), lev[:, ::-1].copy()
-        lay = held_layer(doc, it, sp, view, parts, img, lev)
+        g = (grips or {}).get(it.get("hand", "armA"))
+        hand, L, lv = held_layer(doc, it, sp, view, parts, img, lev, g)
+        lay = {hand: (L, lv)}
     else:
         lay = {}
         for f in sorted((d / "plevels" / view).glob("*.png")):
@@ -534,7 +592,8 @@ def dressed(build, worn, view, hair=None, painted=False):
     race = build.split(".")[0]; doc = spec()
     _, sp, parts = pf.base(build); parts = {n: p.copy() for n, p in parts[view].items()}
     worn = sorted(worn, key=lambda w: doc["items"][w[0]].get("depth", 0))
-    lays = [(w[0], item_layers(race, w[0], w[1], sp, view, parts, w[2], painted)) for w in worn]
+    grips = grip_assets(race, build, view)
+    lays = [(w[0], item_layers(race, w[0], w[1], sp, view, parts, w[2], painted, grips)) for w in worn]
     if hair is not None:
         h = hair.copy()
         for iid, lay in lays:
@@ -546,8 +605,13 @@ def dressed(build, worn, view, hair=None, painted=False):
         for n, L in lay.items():
             if n not in parts:
                 continue
-            if doc["items"].get(iid, {}).get("kind") == "held":   # held: under the hand, so the fingers wrap the grip
-                base = Image.fromarray(L); base.alpha_composite(Image.fromarray(parts[n])); parts[n] = np.asarray(base).copy()
+            if doc["items"].get(iid, {}).get("kind") == "held":   # held: under-hand < weapon < fingers (grip hand), else under the hand
+                g = grips.get(n.split(".")[0])
+                if g:
+                    base = Image.fromarray(g["under"]); base.alpha_composite(Image.fromarray(L)); base.alpha_composite(Image.fromarray(g["over"]))
+                else:
+                    base = Image.fromarray(L); base.alpha_composite(Image.fromarray(parts[n]))
+                parts[n] = np.asarray(base).copy()
             else:
                 base = Image.fromarray(parts[n]); base.alpha_composite(Image.fromarray(L)); parts[n] = np.asarray(base).copy()
     return sp, parts
@@ -632,7 +696,9 @@ def candidates(race, item_id):
         m = json.loads((d / "meta.json").read_text(encoding="utf-8"))
         rel = lambda f: str((d / f).relative_to(ai_kit.AI_DIR)).replace("\\", "/") if (d / f).exists() else None
         out.append({"id": d.name, "on": m.get("on"), "seed": m.get("seed"), "made": m.get("made"), "completed": m.get("completed"),
+                    "edited": bool(m.get("edited")),
                     "paint": rel("paint_front.png") or rel("paint_held.png"), "paint_back": rel("paint_back.png"),
+                    "held": rel("held.png"),
                     "prev": {f"{sx}_{v}": rel(f"prev_{sx}_{v}.png") for sx in SEXES for v in VIEWS},
                     "stamp": int((d / "meta.json").stat().st_mtime)})
     return sorted(out, key=lambda c: -(c["made"] or 0))
@@ -646,12 +712,13 @@ def state(race):
             "masks": {i: sorted(f.name[len(i) + 1:-4] for f in ZONES.glob(f"{i}.*.png")) for i in doc["items"]} if ZONES.exists() else {},
             "ramps": {m: list(pal.get(e["group"], {})) for m, e in doc["materials"].items()},
             "hair": ws.load_state()["builds"].get(f"{race}.unisex", {}).get("face_sets", {}).get("hair", []),
-            "hair_ramps": list(pal.get("hair", {}))}
+            "hair_ramps": list(pal.get("hair", {})), "grips": grip_state(race), "grip_spec": grip_spec()}
 
 
 ITEM_KEYS = {"slot": str, "kind": str, "text": str, "materials": list, "depth": (int, float), "bulk": (int, float),
              "clips": list, "fit": str, "hand": str, "length": (int, float), "tilt": (int, float), "zones": list,
-             "denoise": (int, float), "complete": bool, "cover": bool, "guide": (int, float)}
+             "denoise": (int, float), "complete": bool, "cover": bool, "guide": (int, float),
+             "grip_angle": (int, float), "flip": bool, "grip_at": list}
 
 
 def save_item(item_id, d, old_id=None):
@@ -772,6 +839,322 @@ def outfit(race, build, items, ramps=None, hair=None, hair_ramp=None, walk=True,
     return out
 
 
+# ----------------------------------------------------------------------------- grip hands (holding a weapon)
+
+GRIP_WRIST = 40     # with the arm hanging, the weapon's tip points up and this many degrees forward
+GRIP_ROD = 0.36     # the guide rod's width as a fraction of the hand's size
+D_GRIP = 0.75
+GRIP_PROMPT = ("{style}. A close-up of the hand and forearm of one {body}: the hand is closed in a fist, tightly gripping a "
+               "plain straight rod; the fingers wrap around the rod in front of it, the thumb over the fingers, a big chunky "
+               "cartoon fist. The rod is one flat vivid pure magenta colour (a colour key). Clean dark outlines, the same skin "
+               "and shading, on a pure white background.")
+GRIP_PROMPT_BACK = ("{style}. A close-up of the same hand from the other side, seen from behind (three-quarter back view): the "
+                    "fist tightly gripping the plain straight rod as in the reference image, a big chunky cartoon fist. The rod "
+                    "is one flat vivid pure magenta colour (a colour key). Clean dark outlines, on a pure white background.")
+GRIP_ZOOM = 4.2     # the close-up box around a hand, in hand sizes (a hand is ~40 px in the full figure: too small for a fist)
+
+
+def grip_dir(race, build):
+    return ai_kit.AI_DIR / "items" / race / "_grip" / build
+
+
+def grip_spec():
+    g = spec().get("grip", {})
+    return {"prompt": g.get("prompt", GRIP_PROMPT), "prompt_back": g.get("prompt_back", GRIP_PROMPT_BACK),
+            "wrist": g.get("wrist", GRIP_WRIST), "rod": g.get("rod", GRIP_ROD), "hands": g.get("hands", ["armA", "armB"]),
+            "key": g.get("key", "accent")}
+
+
+def grip_prompts(build, g=None):
+    g = g or grip_spec(); body, _ = ppt.prompts(build); style = ppt.style_text()
+    fill = lambda t: t.replace("{style}", style).replace("{body}", body)
+    return {"front": fill(g["prompt"]), "back": fill(g["prompt_back"])}
+
+
+def _rod(c, u, length, width):
+    """The guide rod's corners: a bar along u through c."""
+    n = np.array([-u[1], u[0]]); h = length / 2; w = width / 2
+    return [tuple(c + u * h + n * w), tuple(c + u * h - n * w), tuple(c - u * h - n * w), tuple(c - u * h + n * w)]
+
+
+def _grip_setup(sp, v, pv, g, key):
+    """The guide of one view: the puppet with a key-coloured rod through each fist, the paint mask and per hand
+    (centre, axis, rod width, rod mask, hand mask, fist disc, region)."""
+    from PIL import ImageDraw
+    comp = pf.compose(sp, v, pv); ca = Image.fromarray(np.asarray(comp).copy()); dr = ImageDraw.Draw(ca)
+    body = np.any([q[..., 3] > 127 for q in pv.values()], 0); region = np.zeros((N, N), bool); rods = {}
+    yy, xx = np.mgrid[:N, :N]
+    for arm in g["hands"]:
+        c, dd, sz = hand_frame(sp, v, pv, arm); u = grip_axis(dd, g["wrist"], v); w = g["rod"] * sz
+        c = grip_point(sp, v, arm)
+        poly = _rod(c, u, 2.6 * sz, w); dr.polygon(poly, fill=key + (255,), outline=(34, 26, 24, 255), width=3)
+        rm = Image.new("L", (N, N)); ImageDraw.Draw(rm).polygon(poly, fill=255); rm = np.asarray(rm) > 0
+        hm = pv[f"{arm}.hand"][..., 3] > 127
+        lower = pv[f"{arm}.lower"][..., 3] > 127
+        wrist = lower & _grow(hm, int(0.35 * sz))   # the forearm's end: repainted so the fist joins the wrist
+        reg = (_grow(hm, int(0.3 * sz)) | _grow(rm, 6)) & ~(body & ~hm & ~wrist)
+        fist = np.hypot(xx - c[0], yy - c[1]) < 0.8 * sz   # the fist: hand pixels farther out along the rod are its outline
+        side = int(max(256, GRIP_ZOOM * sz)); bx = int(np.clip(c[0] - side / 2, 0, N - side)); by = int(np.clip(c[1] - side / 2, 0, N - side))
+        region |= reg; rods[arm] = (c, u, w, rm, hm, fist, reg, lower, (bx, by, bx + side, by + side))
+    return comp, ca, region, rods
+
+
+def _rod_fit(K, near, guide_u):
+    """The rod FLUX drew (its key pixels near the hand): centre, unit axis (same sense as the guide's) and width."""
+    m = pf._components(K & near, 80)
+    ys, xs = np.nonzero(m)
+    if len(xs) < 80:
+        return None
+    P_ = np.stack([xs, ys], 1).astype(float); c = P_.mean(0); _, _, vt = np.linalg.svd(P_ - c, full_matrices=False)
+    u = vt[0] / np.linalg.norm(vt[0])
+    if u @ guide_u < 0:
+        u = -u
+    t = (P_ - c) @ u; length = t.max() - t.min()
+    return c, u, len(xs) / max(length, 1.0), m
+
+
+def _grip_extract(after, key, rods, d, v, meta=None):
+    """Per hand: under (the hand, its palm behind the rod filled in) and over (the fingers in front of the rod), from
+    the rod FLUX actually drew (it rarely keeps the guide's angle); the measured grip point and axis go into meta."""
+    h, sat, val = pf._hsv(after); kh = float(pf._hsv(np.array([[key]], np.uint8))[0][0, 0])
+    dh = np.minimum(np.abs(h - kh), 360 - np.abs(h - kh)); K = (dh < 30) & (sat > 0.3) & (val > 0.15)
+    white = (after.min(-1) > 225) & ((after.max(-1).astype(int) - after.min(-1)) < 24)
+    yy, xx = np.mgrid[:N, :N]
+    for arm, (c, u, w, rm, hm, fist, reg, lower, box) in rods.items():
+        sz = np.sqrt(hm.sum())
+        Hm = reg & ~_grow(K, 1) & ~white & (_grow(hm, int(0.3 * sz)) | (lower & reg))
+        core = _grow(_erode(Hm, 3), 3)   # thin lines (the rod's outline) drop out; the fist's own outline stays next to it
+        Hm = pf._components(core | (Hm & _grow(core, 4)), 60)
+        fit = _rod_fit(K, reg, u)
+        if fit:   # the fingers in front = hand pixels inside the drawn rod's strip, between its two visible ends
+            rc, ru, rw, rmask = fit
+            t = (xx - rc[0]) * ru[0] + (yy - rc[1]) * ru[1]; n_ = np.abs(-(xx - rc[0]) * ru[1] + (yy - rc[1]) * ru[0])
+            strip = n_ <= rw / 2 + 1
+            hid = Hm & strip & ~(lower & ~hm)   # the fist over the rod (not the forearm crossing it): its middle is the grip point
+            gc = (np.array([xx[hid].mean(), yy[hid].mean()]) if hid.sum() > 20 else rc)
+            gt = (gc - rc) @ ru; gc = rc + gt * ru
+            over = hid
+            if meta is not None:
+                meta["grip"][arm][v] = {"c": [float(gc[0]), float(gc[1])], "u": [float(ru[0]), float(ru[1])], "w": float(rw), "measured": True}
+            rod_px = rmask
+        else:
+            over = Hm & _grow(rm, 1); rod_px = K & reg
+        under = np.zeros((N, N, 4), np.uint8); under[Hm, :3] = after[Hm]; under[Hm, 3] = 255
+        behind = rod_px & (_grow(hm, 3) | _grow(Hm, 2))   # the palm behind the rod: filled from the hand around it
+        if behind.any():
+            filled, got = _spread(Hm, under, Hm | behind, 60); add = behind & got; under[add] = filled[add]
+        ov = np.zeros((N, N, 4), np.uint8); ov[over, :3] = after[over]; ov[over, 3] = 255
+        Image.fromarray(under).save(d / f"under_{arm}_{v}.png"); Image.fromarray(ov).save(d / f"over_{arm}_{v}.png")
+
+
+def gen_grip(race, build, seed=1):
+    """Grip hands for a build: FLUX paints each hand of its painted puppet closed around a magenta guide rod (front, then
+    the back with the front as reference). Each hand splits into an under-hand (drawn behind a weapon; the palm behind the
+    rod filled in) and an over layer (the fingers in front of the grip); the rod gives the grip point and axis."""
+    g = grip_spec(); doc = spec(); P = grip_prompts(build, g)
+    pcid, sp, parts = pf.base(build)
+    gid = f"s{seed}_{int(time.time())}"; d = grip_dir(race, build) / gid; (d / "tmp").mkdir(parents=True, exist_ok=True)
+    key = _rgb(doc["materials"][g["key"]]["key"])
+    meta = {"build": build, "paint": pcid, "seed": seed, "made": int(time.time()), "prompts": P, "wrist": g["wrist"], "grip": {},
+            "zoom": GRIP_ZOOM}
+    ref = None
+    for v in VIEWS:
+        comp, ca, region, rods = _grip_setup(sp, v, parts[v], g, key)
+        al = np.asarray(ca)[..., 3:4] / 255.0; after = (np.asarray(ca)[..., :3] * al + 255 * (1 - al)).astype(np.uint8)
+        for arm, (c, u, w, rm, hm, fist, reg, lower, box) in rods.items():
+            meta["grip"].setdefault(arm, {})[v] = {"c": [float(c[0]), float(c[1])], "u": [float(u[0]), float(u[1])], "w": float(w)}
+            r_ = ref.get(arm) if ref else None
+            _, painted, _, out = pf._crop_pass(ca, reg, box, P[v], seed, D_GRIP, f"grip_{build}_{gid}_{arm}_{v}", [r_] if r_ else [])
+            out.save(d / f"paint_{arm}_{v}.png"); after[reg] = painted[reg]
+        if v == "front":
+            ref = {arm: d / f"paint_{arm}_front.png" for arm in rods}
+        Image.fromarray(after).save(d / f"after_{v}.png")
+        _grip_extract(after, key, rods, d, v, meta)
+    (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    grip_previews(race, build, gid)
+    return gid
+
+
+def regrip(race, build, gid):
+    """Re-split a grip candidate's hands from its saved paints (no GPU), after a change to the extraction."""
+    d = grip_dir(race, build) / gid; meta = _meta(d); g = grip_spec(); g["wrist"] = meta.get("wrist", g["wrist"])
+    key = _rgb(spec()["materials"][g["key"]]["key"]); _, sp, parts = pf.base(build)
+    for v in VIEWS:
+        comp, ca, region, rods = _grip_setup(sp, v, parts[v], g, key)
+        after = np.asarray(Image.open(d / f"after_{v}.png").convert("RGB")).copy()
+        _grip_extract(after, key, rods, d, v, meta)
+    (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    grip_previews(race, build, gid)
+    return gid
+
+
+def grip_previews(race, build, gid):
+    """sep_<view>.png: close-ups of both grip hands, the over layer (fingers in front) tinted red, the rest as painted."""
+    d = grip_dir(race, build) / gid; _, sp, parts = pf.base(build); meta = _meta(d)
+    for v in VIEWS:
+        crops = []
+        for arm in meta["grip"]:
+            u_ = np.asarray(Image.open(d / f"under_{arm}_{v}.png")); o_ = np.asarray(Image.open(d / f"over_{arm}_{v}.png"))
+            im = Image.new("RGBA", (N, N), (196, 198, 204, 255))
+            for n in sp["views"][v]["order"]:
+                im.alpha_composite(Image.fromarray(u_ if n == f"{arm}.hand" else parts[v][n]))
+            tint = o_.copy(); tint[..., :3] = (np.asarray(o_[..., :3], float) * 0.5 + np.array([220, 40, 40]) * 0.5).astype(np.uint8)
+            im.alpha_composite(Image.fromarray(tint))
+            c = meta["grip"][arm][v]["c"]; r = 90
+            crops.append(im.crop((int(c[0] - r), int(c[1] - r), int(c[0] + r), int(c[1] + r))).resize((256, 256), Image.LANCZOS))
+        sheet = Image.new("RGB", (256 * len(crops), 256))
+        for i, cr in enumerate(crops):
+            sheet.paste(cr.convert("RGB"), (i * 256, 0))
+        pt._save(sheet, d / f"sep_{v}.png")
+
+
+def grip_assets(race, build, view):
+    """{arm: {under, over (RGBA), c, u, w}} of a build's approved grip hand, or {}."""
+    gid = load_state(race).get("grip", {}).get(build)
+    if not gid:
+        return {}
+    d = grip_dir(race, build) / gid
+    if not (d / "meta.json").exists():
+        return {}
+    meta = _meta(d); out = {}
+    for arm, views in meta["grip"].items():
+        if view in views and (d / f"under_{arm}_{view}.png").exists():
+            out[arm] = {"under": np.asarray(Image.open(d / f"under_{arm}_{view}.png").convert("RGBA")),
+                        "over": np.asarray(Image.open(d / f"over_{arm}_{view}.png").convert("RGBA")), **views[view]}
+    return out
+
+
+def grip_state(race):
+    st = load_state(race); out = {}
+    for b in _builds(race):
+        root = grip_dir(race, b); cands = []
+        if root.exists():
+            for d in sorted(root.iterdir(), key=lambda p: p.name, reverse=True):
+                if (d / "meta.json").exists():
+                    rel = lambda f: str((d / f).relative_to(ai_kit.AI_DIR)).replace("\\", "/") if (d / f).exists() else None
+                    cands.append({"id": d.name, "sep": {v: rel(f"sep_{v}.png") for v in VIEWS},
+                                  "paint": {v: rel(f"paint_{v}.png") for v in VIEWS}, "stamp": int((d / "meta.json").stat().st_mtime)})
+        out[b] = {"candidates": cands, "approved": st.get("grip", {}).get(b)}
+    return out
+
+
+def approve_grip(race, build, gid, on=True):
+    st = load_state(race); g = st.setdefault("grip", {})
+    if on:
+        g[build] = gid
+    elif g.get(build) == gid:
+        g.pop(build)
+    save_state(race, st)
+    return grip_state(race)
+
+
+# ----------------------------------------------------------------------------- layers editor (Parts editor, item mode)
+
+LAYER_SEP = "@item"   # an item layer's name in the editor: "<part>@item", drawn right after its body part
+
+
+def _meta(d):
+    return json.loads((d / "meta.json").read_text(encoding="utf-8"))
+
+
+def _blank():
+    f = ai_kit.AI_DIR / "items" / "_blank.png"
+    if not f.exists():
+        f.parent.mkdir(parents=True, exist_ok=True); Image.new("RGBA", (N, N)).save(f)
+    return f
+
+
+def layer_doc(race, item_id, cid):
+    """What the Parts editor needs to touch up a fitted item: the puppet it was fitted on as read-only context and one
+    editable layer per Template part (drawn right after that part; parts the item doesn't cover yet start empty, so it
+    can be painted onto them)."""
+    from . import workshop as ws
+    doc = spec(); it = doc["items"][item_id]
+    if it.get("kind") == "held":
+        raise ValueError("Held items are edited in their Grip card (the weapon image), not per part.")
+    d = out_dir(race, item_id) / cid
+    if not (d / "meta.json").exists():
+        raise ValueError(f"No candidate {cid} of {item_id}.")
+    meta = _meta(d); build = meta["on"]; pcid = pf.base(build)[0]; pd = ppt.out_dir(build) / pcid; sp = ppt._spec_for(pd)
+    views = {}; editable = []
+    for v in VIEWS:
+        order = []; paths = {}
+        for n in sp["views"][v]["order"]:
+            order += [n, n + LAYER_SEP]
+            paths[n] = ws.rel(pd / "parts" / v / f"{n}.png")
+            f = d / "parts" / v / f"{n}.png"
+            paths[n + LAYER_SEP] = ws.rel(f if f.exists() else _blank())
+            editable.append(n + LAYER_SEP)
+        views[v] = {"order": order, "parts": paths, "template": {}}
+    files = sorted(f.name for f in d.glob("*.*"))
+    stamp = int(max((f.stat().st_mtime for f in d.rglob("*.png")), default=0))
+    prev = [f for f in ("prev_male_front.png", "prev_male_back.png", "prev_female_front.png", "prev_female_back.png") if f in files]
+    return {"race": race, "kind": "item", "item": item_id, "id": cid, "dir": ws.rel(d), "on": build, "views": views,
+            "editable": sorted(set(editable)), "files": files, "previews": prev, "stamp": stamp, "edited": (d / "parts_orig").exists()}
+
+
+def levels_from_edit(doc, it, L, cents):
+    """Levels of an edited item layer: key-coloured pixels by their material and the candidate's cel levels; dark pixels =
+    outline (254); any other colour painted in goes to the item's first material, levelled by brightness."""
+    a = L[..., 3] > 127; lev = np.zeros(L.shape, np.uint8)
+    if not a.any():
+        return lev
+    keyed, ch, lv = classify(doc, it["materials"], L[..., :3], cents)
+    _, _, val = pf._hsv(L[..., :3]); line = a & (val < 0.22) & ~keyed
+    rest = a & ~keyed & ~line; c0 = doc["materials"][it["materials"][0]]["channel"]
+    cent = np.asarray(cents.get(c0, np.linspace(0.3, 0.9, LEVELS)))
+    lev[..., 0][keyed & a] = lv[keyed & a]; lev[..., 1][keyed & a] = ch[keyed & a]
+    if rest.any():
+        lev[..., 0][rest] = np.abs(val[rest][:, None] - cent[None]).argmin(1); lev[..., 1][rest] = c0
+    if line.any():
+        has = keyed & a
+        near, _ = _spread(has, lev[..., 1:2].copy(), line, 12) if has.any() else (np.full(L.shape[:2] + (1,), c0, np.uint8), None)
+        lev[..., 1][line] = np.where(near[..., 0][line] > 0, near[..., 0][line], c0)
+    lev[..., 0][line] = 254; lev[..., 3][a] = 255
+    return lev
+
+
+def layer_save(race, item_id, cid, view, layers):
+    """Edited item layers from the Parts editor ({"<part>@item": PNG data URL}): the first edit keeps the originals
+    (parts_orig/, plevels_orig/); levels are recomputed from the key colours; empty layers are removed; previews redone."""
+    import base64, io, shutil
+    doc = spec(); it = doc["items"][item_id]; d = out_dir(race, item_id) / cid; meta = _meta(d)
+    cents = {int(k): np.array(v) for k, v in meta.get("cents", {}).items()}
+    if not (d / "parts_orig").exists():
+        for sub in ("parts", "plevels"):
+            if (d / sub).exists():
+                shutil.copytree(d / sub, d / f"{sub}_orig")
+            else:
+                (d / f"{sub}_orig").mkdir(parents=True)
+    for name, png in layers.items():
+        n = name[:-len(LAYER_SEP)] if name.endswith(LAYER_SEP) else name
+        if not all(c.isalnum() or c in "._" for c in n):
+            raise ValueError(f"bad layer {name}")
+        L = np.asarray(Image.open(io.BytesIO(base64.b64decode(png.split(",", 1)[-1]))).convert("RGBA")).copy()
+        if L.shape[:2] != (N, N):
+            raise ValueError(f"expected {N} px")
+        L[..., 3] = np.where(L[..., 3] > 127, 255, 0)
+        fp, fl = d / "parts" / view / f"{n}.png", d / "plevels" / view / f"{n}.png"
+        if not (L[..., 3] > 0).any():
+            fp.unlink(missing_ok=True); fl.unlink(missing_ok=True); continue
+        fp.parent.mkdir(parents=True, exist_ok=True); fl.parent.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(L).save(fp); Image.fromarray(levels_from_edit(doc, it, L, cents)).save(fl)
+    meta["edited"] = True; (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    previews(race, item_id, cid)
+    return layer_doc(race, item_id, cid)
+
+
+def layer_revert(race, item_id, cid):
+    import shutil
+    d = out_dir(race, item_id) / cid
+    if (d / "parts_orig").exists():
+        for sub in ("parts", "plevels"):
+            shutil.rmtree(d / sub, ignore_errors=True); shutil.move(str(d / f"{sub}_orig"), str(d / sub))
+    meta = _meta(d); meta.pop("edited", None); (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    previews(race, item_id, cid)
+    return layer_doc(race, item_id, cid)
+
+
 def api(action, b):
     """The Item Workshop's HTTP actions (/api/ws/items/<action>); the Studio reloads this module per request."""
     race = b.get("race", "human")
@@ -793,6 +1176,34 @@ def api(action, b):
         return {"approved": approve(race, b["item"], b["id"], b.get("key", "all"), b.get("on", True))}
     if action == "archive":
         return archive(race, b["item"], b["id"])
+    if action == "grip/approve":
+        return {"grips": approve_grip(race, b["build"], b["id"], b.get("on", True))}
+    if action == "grip/spec":   # the grip hand prompts and wrist angle (shared by every build)
+        doc = spec(); g = dict(doc.get("grip", {}))
+        for k in ("prompt", "prompt_back"):
+            if k in b and b[k].strip():
+                g[k] = b[k]
+        if "wrist" in b:
+            g["wrist"] = float(b["wrist"])
+        doc["grip"] = g; _write_spec(doc)
+        return state(race)
+    if action == "grip/prompts":
+        return grip_prompts(b["build"])
+    if action == "held/preview":   # a held item in the hand (rest + one walk frame, both views) with unsaved settings
+        doc = spec(); doc["items"][b["item"]].update(b.get("def", {}))
+        global spec_override
+        spec_override = doc
+        try:
+            r = render(b["build"], [(b["item"], b["id"], b.get("ramps", {}))], frames=8)
+        finally:
+            spec_override = None
+        return {f"{v}_{k}": _url(im) for v in VIEWS for k, im in (("rest", r[v][0]), ("walk", r[v][1][2]), ("walk2", r[v][1][6]))}
+    if action == "layer_doc":
+        return layer_doc(race, b["item"], b["id"])
+    if action == "layer_save":
+        return layer_save(race, b["item"], b["id"], b["view"], b["layers"])
+    if action == "layer_revert":
+        return layer_revert(race, b["item"], b["id"])
     if action == "outfit":
         return outfit(race, b["build"], b.get("items", []), b.get("ramps"), b.get("hair"), b.get("hair_ramp"),
                       b.get("walk", True), b.get("cids"))
@@ -805,6 +1216,10 @@ def job(a):
     if a["action"] == "generate":
         n, seed = int(a.get("n", 1)), int(a.get("seed", 1))
         return [generate(race, a["item"], a.get("build"), seed + i) for i in range(n)]
+    if a["action"] == "grip":
+        return gen_grip(race, a["build"], int(a.get("seed", 1)))
+    if a["action"] == "regrip":
+        return regrip(race, a["build"], a["id"])
     if a["action"] == "rekey":
         return rekey(race, a["item"], a["id"], bool(a.get("complete")))
     raise ValueError(f"unknown items job {a['action']}")

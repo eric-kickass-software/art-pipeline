@@ -120,6 +120,7 @@
   <button class="tab" data-t="ramps" data-app="character">Ramps</button>
   <button class="tab" data-t="items" data-app="items">Items</button>
   <button class="tab" data-t="outfit" data-app="items">Outfit</button>
+  <button class="tab" data-t="parts" data-app="items" id="itLayersTab">Layers</button>
   <button id="jobsBtn">Queue: idle</button>
 </header>
 <nav id="appMenu" class="hidden">
@@ -400,8 +401,10 @@
               <span class="hint">px (1024 canvas) FLUX may paint past the zone</span>
               <label><input type="checkbox" id="itClipHair" style="width:auto"> clips the hair</label>
               <label><input type="checkbox" id="itComplete" style="width:auto"> FLUX pass for hidden joint areas</label></div>
-            <label class="itheld">Held</label><div class="row itheld" style="margin:0"><label>hand</label><select id="itHand" style="width:90px"><option>armA</option><option>armB</option></select>
-              <label>length</label><input id="itLength" type="number" step="0.02" style="width:70px"><label>tilt°</label><input id="itTilt" type="number" style="width:70px"></div>
+            <label class="itheld">Held</label><div class="row itheld" style="margin:0"><label>hand</label><select id="itHand" style="width:150px"><option value="armB">armB (near hand)</option><option value="armA">armA (far hand)</option></select>
+              <label>length</label><input id="itLength" type="number" step="0.02" style="width:70px" title="the weapon's height as a fraction of the figure's">
+              <label>grip angle°</label><input id="itGripAngle" type="number" step="5" style="width:70px" title="turns the weapon in the fist (counter-clockwise in the front view)">
+              <label><input type="checkbox" id="itFlip" style="width:auto"> flip (tip the other way)</label></div>
           </div>
           <div class="row"><button class="primary" id="itSave">Save item</button><span class="hint" id="itSaved"></span></div>
         </div>
@@ -421,6 +424,27 @@
           <div class="row"><label><input type="checkbox" id="zeSexOnly" style="width:auto"> this sex only</label>
             <button class="primary" id="zeSave">Save zone</button><button id="zeReset">Back to the shared / preset zone</button>
             <span class="hint" id="zeStatus"></span></div>
+        </div>
+
+        <div class="card itheld" id="gripCard"><div class="row"><h2 style="margin:0">Grip</h2>
+            <span class="hint">A held item sits in a <b>grip hand</b>: per build, FLUX paints each fist closed around a magenta rod (a close-up per hand);
+              the hand splits into the palm behind the weapon and the fingers in front of it (red in the close-ups), and the rod gives the grip line.
+              Without an approved grip hand the weapon sits under the painted hand.</span></div>
+          <div id="gripBuilds"></div>
+          <div class="row"><label>Seed</label><input id="gripSeed" type="number" value="1" style="width:70px">
+            <label>Wrist</label><input id="gripWrist" type="number" step="5" style="width:70px" title="with the arm hanging (the walk), the weapon's tip points up and this many degrees forward">
+            <span class="hint">° forward when the arm hangs (all builds)</span></div>
+          <details><summary class="hint">Grip hand prompts (every build): {style} {body}</summary>
+            <div class="itform"><label>Front close-up</label><textarea id="gripPFront" rows="3"></textarea>
+              <label>Back close-up</label><textarea id="gripPBack" rows="3"></textarea></div>
+            <div class="row"><button id="gripSaveSpec">Save grip prompts + wrist</button></div></details>
+          <h2>Weapon in the hand</h2>
+          <div class="row" style="align-items:flex-start">
+            <figure style="margin:0"><canvas id="gripImg" width="160" height="320" style="background:#fff;border-radius:4px;cursor:crosshair"></canvas>
+              <figcaption class="hint">click the grip point<br><span id="gripAt"></span> <a href="#" id="gripAtReset">auto</a></figcaption></figure>
+            <div><div class="row"><label>Candidate</label><select id="gripCand" style="width:180px"></select><label>On</label><select id="gripBuild" style="width:140px"></select>
+              <button class="primary" id="gripPreview">Preview</button><span class="hint">uses the settings above, saved or not</span></div>
+              <div id="gripOut" class="row" style="align-items:flex-start"></div></div></div>
         </div>
 
         <div class="card"><div class="row"><h2 style="margin:0">Generate</h2></div>
@@ -1399,7 +1423,7 @@ function paGhost(t) {   // template shape -> a cyan edge (one-time per part)
 function paLayers() {
   const order = PA.doc.views[PA.view].order;
   $("paLayers").innerHTML = order.slice().reverse().map(n => `<div class="tpl ${n === PA.sel ? "on" : ""}" data-psel="${n}">
-    <input type="checkbox" data-ply="${n}" ${PA.hidden.has(n) ? "" : "checked"} style="width:auto;margin:0 6px 0 0">${n === "layer" && PA.layer ? `<b>${PA.layer.kind} layer</b>` : n}${paEditable(n) ? "" : ' <span class="hint">(context)</span>'}${PA.dirty[paKey(PA.view, n)] ? " •" : ""}</div>`).join("");
+    <input type="checkbox" data-ply="${n}" ${PA.hidden.has(n) ? "" : "checked"} style="width:auto;margin:0 6px 0 0">${n === "layer" && PA.layer ? `<b>${PA.layer.kind} layer</b>` : n.endsWith("@item") ? `&nbsp;&nbsp;<b style="color:var(--accent)">${PA.layer.item.replace(/^item\./, "")}</b>&nbsp;<span class="hint">on ${n.slice(0, -5)}</span>` : n}${paEditable(n) ? "" : ' <span class="hint">(context)</span>'}${PA.dirty[paKey(PA.view, n)] ? " •" : ""}</div>`).join("");
   $("paLayers").querySelectorAll("[data-ply]").forEach(c => c.onchange = () => { c.checked ? PA.hidden.delete(c.dataset.ply) : PA.hidden.add(c.dataset.ply); paDraw(); });
   $("paLayers").querySelectorAll("[data-psel]").forEach(r => r.onclick = e => { if (e.target.tagName === "INPUT") return; PA.sel = r.dataset.psel; paLayers(); paDraw(); });
 }
@@ -1525,7 +1549,7 @@ function paWire() {
   cv.onmouseleave = () => { PA.cursor = null; paDraw(); };
   window.addEventListener("mouseup", () => { PA.pan = null; PA.maskLast = null; if (PA.stroke) paEnd(); });
   window.addEventListener("keydown", e => {
-    if (!document.querySelector('.tab[data-t="parts"]').classList.contains("on") || ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
+    if (!$("parts").classList.contains("on") || ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
     const k = e.key.toLowerCase();
     if ((e.ctrlKey || e.metaKey) && k === "z") { e.preventDefault(); paUndo(PA.undo, PA.redo); return; }
     if ((e.ctrlKey || e.metaKey) && k === "y") { e.preventDefault(); paUndo(PA.redo, PA.undo); return; }
@@ -1559,6 +1583,16 @@ async function openLayer(race, kind, id) {   // edit a hair / face layer on its 
   await paLoadView(PA.view); PA.sel = "layer";
   paLayers(); paPreview(); paStatus(` editing the ${kind} layer (the puppet underneath is context)`); paDraw();
 }
+async function openItemLayers(race, item, id) {   // touch up a fitted item: one layer per part over its puppet
+  if (Object.values(PA.dirty).some(Boolean) && !confirm("Discard the unsaved edits?")) return;
+  PA.opening = true; await initParts(true);
+  PA.layer = { race, kind: "item", item, id }; PA.build = null; PA.id = id; PA.parts = {}; PA.tmpl = {}; PA.undo = []; PA.redo = []; PA.dirty = {}; PA.mask = null; PA.ghost = null;
+  PA.doc = await api("/api/ws/items/layer_doc", { race, item, id });
+  $("paBuild").innerHTML = `<option>${item}</option>`; $("paCand").innerHTML = `<option>${id} (on ${PA.doc.on})</option>`;
+  await paLoadView(PA.view); PA.sel = "torso@item";
+  $("paClamp").checked = false;   // item layers may go past the body
+  paLayers(); paPreview(); paStatus(` editing ${item}: its layer on each part (the gold rows, each right above its body part); the puppet is context. Paint in the key colours (eyedropper) or any colour: levels are redone on save`); paDraw();
+}
 async function openParts(build, id) {
   if (Object.values(PA.dirty).some(Boolean) && (build !== PA.build || id !== PA.id) && !confirm("Discard the unsaved part edits?")) return;
   PA.opening = true; await initParts(true);
@@ -1578,6 +1612,15 @@ async function paFillPickers() {
     || `<option value="">(no paint candidates)</option>`;
 }
 async function paSave() {
+  if (PA.layer && PA.layer.kind === "item") {   // an item: its edited part layers, per view
+    const L = PA.layer; let n = 0;
+    for (const v of Object.keys(PA.doc.views)) {
+      const layers = {};
+      for (const k of PA.doc.views[v].order) if (k.endsWith("@item") && PA.dirty[paKey(v, k)]) layers[k] = PA.parts[paKey(v, k)].toDataURL("image/png");
+      if (Object.keys(layers).length) { PA.doc = await api("/api/ws/items/layer_save", { race: L.race, item: L.item, id: L.id, view: v, layers }); n += Object.keys(layers).length; } }
+    PA.dirty = {}; paLayers(); paPreview(); paStatus(n ? ` saved ${n} layer${n > 1 ? "s" : ""} (levels and previews updated)` : " nothing to save");
+    if (typeof itRefresh === "function") itRefresh().catch(() => {});
+    return; }
   if (PA.layer) {   // a hair / face layer: one PNG per edited view
     const L = PA.layer; let n = 0;
     for (const v of Object.keys(PA.doc.views)) if (PA.dirty[paKey(v, "layer")]) {
@@ -1595,7 +1638,7 @@ async function paSave() {
   PA.dirty = {}; paLayers(); paStatus(" saved; the walk re-renders (queue)"); pollJobs();
 }
 async function paFix() {
-  if (PA.layer) throw new Error("The AI fix works on paint parts; for a face or hair layer, paint it or queue new candidates.");
+  if (PA.layer) throw new Error("The AI fix works on paint parts; for a face, hair or item layer, paint it or queue new candidates.");
   if (!PA.sel) throw new Error("Select the layer to fix first.");
   if (!PA.mask) throw new Error("Mark the area first (AI fix area tool, M).");
   if (PA.dirty[paKey(PA.view, PA.sel)]) await paSave();   // the server paints on the saved part
@@ -1619,6 +1662,9 @@ async function initParts(quiet) {
   $("paFrame").oninput = paPreview;
   $("paSave").onclick = guard(paSave);
   $("paRevert").onclick = guard(async () => {
+    if (PA.layer && PA.layer.kind === "item") { if (!confirm(`Throw away every edit of ${PA.layer.item} ${PA.layer.id}?`)) return;
+      await api("/api/ws/items/layer_revert", { race: PA.layer.race, item: PA.layer.item, id: PA.layer.id }); PA.dirty = {};
+      await openItemLayers(PA.layer.race, PA.layer.item, PA.layer.id); return; }
     if (PA.layer) { if (!confirm(`Throw away every edit of this ${PA.layer.kind} layer?`)) return;
       await api("/api/ws/face/layer_revert", PA.layer); PA.dirty = {}; await openLayer(PA.layer.race, PA.layer.kind, PA.layer.id); return; }
     if (!confirm("Throw away every edit of this candidate and go back to the painted parts?")) return;
@@ -1641,6 +1687,8 @@ async function initParts(quiet) {
   }
 }
 document.querySelector('.tab[data-t="parts"]').addEventListener("click", guard(() => initParts(false)));
+$("itLayersTab").addEventListener("click", guard(async () => { await initParts(true);
+  if (!PA.doc) paStatus(" pick a candidate in Items → Edit layers"); }));
 setInterval(() => {   // after a save or an AI fix: reload the previews (and the fixed part) once its job is done
   if (!PA.doc) return;
   const mine = jobs.filter(j => (j.kind === "paint_preview" || j.kind === "paint_fix") && j.label.startsWith(`${PA.build} · paint ${PA.id}`));
@@ -1798,7 +1846,8 @@ function itRenderForm() {
   $("itId").value = IT.sel; $("itSlot").value = d.slot || ""; $("itKind").value = d.kind || ""; $("itFit").value = d.fit || "shared";
   $("itText").value = d.text || ""; $("itDepth").value = d.depth ?? 3; $("itBulk").value = d.bulk ?? 6;
   $("itClipHair").checked = (d.clips || []).includes("hair"); $("itComplete").checked = d.complete !== false;
-  $("itHand").value = d.hand || "armA"; $("itLength").value = d.length ?? 0.48; $("itTilt").value = d.tilt ?? 22;
+  $("itHand").value = d.hand || "armB"; $("itLength").value = d.length ?? 0.48; $("itGripAngle").value = d.grip_angle ?? 0;
+  $("itFlip").checked = !!d.flip; GR.at = d.grip_at || null; if (itHeld()) gripRender();
   $("itMats").innerHTML = Object.entries(IT.st.spec.materials).map(([m, e]) => `<label style="display:flex;align-items:center;gap:4px">
     <input type="checkbox" data-mat="${m}" style="width:auto" ${(d.materials || []).includes(m) ? "checked" : ""}>
     <i style="width:14px;height:14px;border-radius:3px;background:${e.key};display:inline-block"></i>${m}</label>`).join("");
@@ -1809,7 +1858,7 @@ $("itSave").onclick = guard(async () => {
   const held = $("itKind").value === "held", num = (id) => $(id).value === "" ? null : +$(id).value;
   const def = { slot: $("itSlot").value.trim(), kind: held ? "held" : null, fit: $("itFit").value, text: $("itText").value.trim(),
     materials: [...document.querySelectorAll("[data-mat]")].filter(c => c.checked).map(c => c.dataset.mat), depth: num("itDepth") };
-  if (held) Object.assign(def, { hand: $("itHand").value, length: num("itLength"), tilt: num("itTilt") });
+  if (held) Object.assign(def, gripDef());
   else Object.assign(def, { bulk: num("itBulk"), clips: $("itClipHair").checked ? ["hair"] : null, complete: $("itComplete").checked });
   const id = $("itId").value.trim();
   IT.st = await itApi("item/save", { item: id, old_id: IT.sel, def }); IT.sel = id;
@@ -1857,6 +1906,7 @@ function itRenderCands() {
       <div class="itcimgs">${c.paint ? `<img class="paint" src="${img(c.paint) + t}" title="what FLUX painted">` : ""}${prev}</div>
       <div class="row" style="margin:4px 0 0">${keys.map(k => `<button data-ap="${c.id}" data-k="${k}" class="${ap[k] === c.id ? "on" : ""}">${ap[k] === c.id ? "✓ " : ""}${k === "all" ? "Approve" : "Approve for " + k}</button>`).join("")}
         <button data-walk="${c.id}">Walk</button>
+        ${itHeld() ? "" : `<button data-ed="${c.id}" title="paint and touch up this candidate's layers, part by part">Edit layers${c.edited ? " (edited)" : ""}</button>`}
         ${itHeld() ? "" : `<button data-rk="${c.id}" title="re-run the extraction from the saved paint (zone / keying changes); no GPU">Re-extract</button>
         <button data-rc="${c.id}" title="re-extract and run the FLUX pass for the hidden joint areas (GPU)">Re-extract + FLUX hidden</button>`}
         <button data-ar="${c.id}" style="margin-left:auto">Archive</button></div>
@@ -1867,6 +1917,7 @@ function itRenderCands() {
     const was = (IT.st.approved[IT.sel] || {})[b.dataset.k] === b.dataset.ap;
     await itApi("approve", { item: IT.sel, id: b.dataset.ap, key: b.dataset.k, on: !was }); await itRefresh(); }));
   q("[data-ar]").forEach(b => b.onclick = guard(async () => { await itApi("archive", { item: IT.sel, id: b.dataset.ar }); await itRefresh(); }));
+  q("[data-ed]").forEach(b => b.onclick = guard(async () => { $("itLayersTab").click(); await openItemLayers(IT.race, IT.sel, b.dataset.ed); }));
   q("[data-rk]").forEach(b => b.onclick = guard(async () => queue([{ kind: "item", action: "rekey", race: IT.race, item: IT.sel, id: b.dataset.rk, label: `${IT.sel} · ${b.dataset.rk} · re-extract` }])));
   q("[data-rc]").forEach(b => b.onclick = guard(async () => queue([{ kind: "item", action: "rekey", complete: true, race: IT.race, item: IT.sel, id: b.dataset.rc, label: `${IT.sel} · ${b.dataset.rc} · re-extract + FLUX hidden` }])));
   q("[data-walk]").forEach(b => b.onclick = guard(async () => {
@@ -1954,6 +2005,62 @@ document.addEventListener("keydown", (e) => {
   else if (e.ctrlKey && k === "z") { e.preventDefault(); e.shiftKey ? $("zeRedo").click() : $("zeUndo").click(); }
   else if (e.ctrlKey && k === "y") { e.preventDefault(); $("zeRedo").click(); }
 });
+
+// ---- grip (held items)
+const GR = { at: null, imgEl: null, imgKey: null };
+const gripDef = () => ({ hand: $("itHand").value, length: +$("itLength").value || 0.48, grip_angle: +$("itGripAngle").value || 0,
+  flip: $("itFlip").checked, grip_at: GR.at });
+function gripRender() {
+  const st = IT.st, gs = st.grip_spec;
+  if (document.activeElement?.closest?.("#gripCard details") == null) { $("gripPFront").value = gs.prompt; $("gripPBack").value = gs.prompt_back; }
+  if (document.activeElement !== $("gripWrist")) $("gripWrist").value = gs.wrist;
+  $("gripBuilds").innerHTML = st.builds.map(b => { const g = st.grips[b] || { candidates: [] };
+    return `<div class="row" style="align-items:flex-start"><b style="width:110px">${b}</b>
+      <button data-ggen="${b}">Generate grip hands</button>
+      <div class="row" style="margin:0">${g.candidates.map(c => `<div class="itc ${g.approved === c.id ? "on" : ""}" style="padding:4px">
+        <div class="itcimgs">${["front", "back"].map(v => c.sep[v] ? `<img src="${img(c.sep[v])}&t=${c.stamp}" style="width:256px;height:128px" title="${v}">` : "").join("")}</div>
+        <div class="row" style="margin:2px 0 0"><span class="hint">${c.id}</span>
+          <button data-gap="${b}|${c.id}" class="${g.approved === c.id ? "on" : ""}">${g.approved === c.id ? "✓ approved" : "Approve"}</button>
+          <button data-greg="${b}|${c.id}" title="re-split the hands from the saved paint (no GPU)">Re-split</button></div></div>`).join("") || `<span class="hint">no grip hands yet</span>`}</div></div>`; }).join("");
+  $("gripBuilds").querySelectorAll("[data-ggen]").forEach(x => x.onclick = guard(async () => {
+    await queue([{ kind: "item", action: "grip", race: IT.race, build: x.dataset.ggen, seed: +$("gripSeed").value, label: `grip hands · ${x.dataset.ggen} (s${$("gripSeed").value})` }]);
+    $("gripSeed").value = +$("gripSeed").value + 1; }));
+  $("gripBuilds").querySelectorAll("[data-gap]").forEach(x => x.onclick = guard(async () => { const [b, id] = x.dataset.gap.split("|");
+    const on = (IT.st.grips[b] || {}).approved !== id; await itApi("grip/approve", { build: b, id, on }); await itRefresh(); }));
+  $("gripBuilds").querySelectorAll("[data-greg]").forEach(x => x.onclick = guard(async () => { const [b, id] = x.dataset.greg.split("|");
+    await queue([{ kind: "item", action: "regrip", race: IT.race, build: b, id, label: `grip hands · ${b} · re-split ${id}` }]); }));
+  const cands = st.candidates[IT.sel] || [], cur = $("gripCand").value;
+  $("gripCand").innerHTML = cands.map(c => `<option>${c.id}</option>`).join("");
+  if (cands.some(c => c.id === cur)) $("gripCand").value = cur;
+  const bcur = $("gripBuild").value; $("gripBuild").innerHTML = st.builds.map(b => `<option>${b}</option>`).join(""); if (st.builds.includes(bcur)) $("gripBuild").value = bcur;
+  gripDrawImg();
+}
+async function gripDrawImg() {
+  const c = (IT.st.candidates[IT.sel] || []).find(x => x.id === $("gripCand").value);
+  const cv = $("gripImg"), x = cv.getContext("2d"); x.clearRect(0, 0, cv.width, cv.height);
+  if (!c || !c.held) { $("gripAt").textContent = ""; return; }
+  const key = c.held + c.stamp; if (GR.imgKey !== key) { GR.imgEl = await paLoadImg(img(c.held) + `&t=${c.stamp}`); GR.imgKey = key; }
+  const im = GR.imgEl, k = Math.min(cv.width / im.width, cv.height / im.height), w = im.width * k, h = im.height * k;
+  GR.box = [(cv.width - w) / 2, (cv.height - h) / 2, w, h]; x.drawImage(im, GR.box[0], GR.box[1], w, h);
+  $("gripAt").textContent = GR.at ? `at ${GR.at.map(v => v.toFixed(2)).join(", ")}` : "auto (the leather's middle)";
+  if (GR.at) { const px = GR.box[0] + GR.at[0] * w, py = GR.box[1] + GR.at[1] * h;
+    x.strokeStyle = "#e1288f"; x.lineWidth = 2; x.beginPath(); x.arc(px, py, 6, 0, 7); x.stroke(); x.beginPath(); x.moveTo(px - 12, py); x.lineTo(px + 12, py); x.stroke(); }
+}
+$("gripImg").onclick = (e) => { if (!GR.box) return; const r = $("gripImg").getBoundingClientRect();
+  const fx = ((e.clientX - r.left) * $("gripImg").width / r.width - GR.box[0]) / GR.box[2], fy = ((e.clientY - r.top) * $("gripImg").height / r.height - GR.box[1]) / GR.box[3];
+  if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return; GR.at = [+fx.toFixed(3), +fy.toFixed(3)]; gripDrawImg(); $("itSaved").textContent = "grip point changed: Save item to keep it"; };
+$("gripAtReset").onclick = (e) => { e.preventDefault(); GR.at = null; gripDrawImg(); };
+$("gripCand").onchange = () => gripDrawImg();
+$("gripPreview").onclick = guard(async () => {
+  if (!$("gripCand").value) throw new Error("Generate a candidate first.");
+  $("gripOut").innerHTML = `<span class="hint">rendering…</span>`;
+  const r = await itApi("held/preview", { item: IT.sel, id: $("gripCand").value, build: $("gripBuild").value, def: gripDef() });
+  $("gripOut").innerHTML = ["front_rest", "front_walk", "front_walk2", "back_rest", "back_walk", "back_walk2"].map(k =>
+    `<figure style="margin:0"><img src="${r[k]}" style="width:190px;background:#c4c6cc;border-radius:3px"><figcaption class="hint">${k.replace("_", " ")}</figcaption></figure>`).join("");
+});
+$("gripSaveSpec").onclick = guard(async () => {
+  await itApi("grip/spec", { prompt: $("gripPFront").value, prompt_back: $("gripPBack").value, wrist: +$("gripWrist").value }); await itRefresh(); });
+$("gripWrist").onchange = guard(async () => { await itApi("grip/spec", { wrist: +$("gripWrist").value }); await itRefresh(); });
 
 // ---- outfit
 function ofRender() {
