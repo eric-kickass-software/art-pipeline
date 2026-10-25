@@ -206,6 +206,11 @@ class Jobs:
                     # `what` = hair / face (`kind` is the job's own kind, face_gen)
                     job["result"] = puppet_face.generate(a["race"], a["what"], a.get("sex", "male"), int(a.get("n", 1)),
                                                          int(a.get("seed", 1)))
+                elif job["kind"] == "item":   # Item Workshop: every item job goes through puppet_items.job (reloaded here)
+                    from . import puppet, puppet_template, puppet_paint, puppet_face, puppet_items
+                    for mod in (puppet, puppet_template, puppet_paint, puppet_face, puppet_items):
+                        importlib.reload(mod)
+                    job["result"] = puppet_items.job(a)
                 elif job["kind"] in ("tpl", "tpl_measure"):   # clean puppet template: re-measure (from the art) and/or preview
                     from . import puppet, puppet_template
                     importlib.reload(puppet); importlib.reload(puppet_template)
@@ -276,6 +281,11 @@ def workshop_post(st, action, b):
         if action == "face/preview":   # previews with another hair / eye ramp (data URLs)
             return pf.previews(b["race"], b["kind"], b["id"], b.get("ramp"), save=False)
         raise ValueError(f"unknown action {action}")
+    if action.startswith("items/"):   # Item Workshop: every action goes through puppet_items.api (reloaded per request)
+        from . import puppet, puppet_template, puppet_paint, puppet_face, puppet_items
+        for mod in (puppet, puppet_template, puppet_paint, puppet_face, puppet_items):
+            importlib.reload(mod)
+        return puppet_items.api(action[6:], b)
     if action.startswith("paint/"):   # puppet Paint step (Races) and Parts editor
         from . import puppet, puppet_template, puppet_paint as ppt
         for mod in (puppet, puppet_template, ppt):

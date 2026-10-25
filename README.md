@@ -32,6 +32,7 @@ ComfyUI (FLUX.2-klein 4B + pixel LoRA, TRELLIS.2, BiRefNet)      Blender 5.2 (he
 |---|---|---|---|
 | http://127.0.0.1:4321 | **Studio**: assemble a hero from kit parts and colours, play animations, front+back panes, double-sided voxel card (thickness/relief), save characters, switch part sets | `studio/index.html`, `hdart/studio.py` | `sprites/characters/*.json`, `sprites/sets/*.json`, baked kit in `work/sprite_render/` |
 | /workshop | **Workshop**: curated AI character parts. Coverage board (parts × male/female/slim mannequins), generation queue, approve raw images, then the cut editor (brush/wand), native-grid QA, fix-region reprompts, card backs | `studio/workshop.html`, `hdart/workshop.py`, `hdart/ai_kit.py` | `sprites/ai/workshop.json` (board state), `sprites/ai/candidates/`, `sprites/ai/masks/`, `specs/ai_style.json` (descriptors, builds), `specs/ai_parts.json` (part library) |
+| /items | **Item Workshop**: equipment as overlay layers on the painted puppets. Items (zone editor, generate, candidates, per-sex fits), Outfit (dress-up with ramps + walk) | `studio/workshop.html`, `hdart/puppet_items.py` | `specs/items.json`, `specs/item_zones/`, `sprites/ai/items/<race>/` |
 | /dungeon | **Dungeon Forge**: dungeon sets. Pieces (walls, floors, doors, archways, wall decor, props, traps) → candidates → approve → room preview → export to Unity → Prototype V capture | `studio/dungeon.html`, `hdart/dungeon.py`, `hdart/iso.py`, `blender/mesh_template.py` | `specs/dungeon_sets/<set>.json` (pieces), `specs/dungeon_style.json` (descriptors + catalog), `sprites/dungeon/<set>/state.json` + `candidates/`, Blender mesh cache `sprites/dungeon/_meshes/` |
 
 3. The generation **queue** (top right in Workshop/Dungeon) runs one job at a time, because ComfyUI is single-GPU anyway. Jobs live in memory, so a restart
@@ -417,10 +418,27 @@ tab is gone: its descriptor groups are there, its mannequin clothing / builds / 
    - Raw Monk values are photographic and muted: game ramps need more saturation (~×1.4), and very dark tones a lifted
      shadow end so the cel bands stay readable against the outline (skin-tone test, 2026-10-22).
 
-## Item Workshop: equipment layers (v1 test, 2026-10-25)
-Code: `hdart/puppet_items.py`, spec: `specs/items.json`. No UI yet (the old Board/Sets are from the retired mannequins).
+## Item Workshop: equipment layers (`/items`, 2026-10-25)
+Code: `hdart/puppet_items.py` (all logic; the Studio routes `/api/ws/items/<action>` to `api()` and job kind `item` to
+`job()`, both reloaded per request/job, so item changes need no Studio restart), page: the Items and Outfit tabs of
+`studio/workshop.html`, spec: `specs/items.json`, painted zones: `specs/item_zones/<item>[.<sex>].<view>.png`,
+state (approvals): `sprites/ai/items/<race>/state.json`.
 An item is a set of overlay layers, one per Template part it covers. Every build of a race is painted on the one shared
-Template, so an item fitted once (on `<race>.male`) is reused on every build of the race.
+Template, so an item fitted once is reused on every build of the race.
+- **Items tab:** the catalogue by slot (✓ = approved, ♂/♀ per sex); item settings (slot, kind fitted/held, fit,
+  description, materials, depth, bulk, clips hair, FLUX hidden pass; held: hand, length, tilt); the **zone editor**
+  (brush / eraser / lasso add / lasso erase, size, view zoom, undo/redo, front/back, on the male or female puppet; keys
+  B E L K, Ctrl+Z/Y); Generate (fit on a build, n, seed) with the composed prompts shown and the shared prompt templates
+  editable underneath; candidates (FLUX's paint + the candidate on male/female front/back, Approve, Walk, Re-extract,
+  Re-extract + FLUX hidden, Archive).
+- **Outfit tab:** a build wearing every approved item (its fit for that build), a ramp per material, a hair from the
+  race's hair set with a hair ramp; rest + walk, front and back.
+- **Gender variants:** `fit: per_sex` items are approved per sex (fit on `human.male` and on `human.female`; the female
+  fit uses the female body prompt); a build wears its sex's fit, else the shared one. A zone saved with "this sex only"
+  (`<item>.<sex>.<view>.png`) overrides the shared zone for that sex.
+- **Painted zones** replace the preset `zones` once saved. A painted zone only reaches what shows in the rest pose, so
+  each part's zone also floods into that part's hidden pixels from where it was painted (a vest continues under the
+  near arm; a sleeve into its shoulder cap). Areas painted past the body are allowed (pauldron or skirt silhouettes).
 - **Zones** (data, so an editor can draw them later): `part` (fnmatch, `arm*.upper`), `t` = range along the part's bone,
   `rows` / `ellipse` = fractions of the part's box, `seam` = above/below the waist, `view` = one view only. `bulk` = px
   the item may paint past its zones.
@@ -428,8 +446,10 @@ Template, so an item fitted once (on `<race>.male`) is reused on every build of 
   item) → one masked FLUX pass on the whole puppet at denoise 0.85 (the mask = the zones grown by `bulk`, on the zone
   parts only) → the item = key-coloured pixels + the dark line next to them, touching the zones, small holes filled
   (glints) → **cover**: zone pixels it left bare are filled from its own levels → one even outline → split per part
-  (topmost zone part; past the body = nearest zone part; each part's hidden zone pixels filled so joints can turn) →
-  the back view with the painted front as reference.
+  (topmost zone part; past the body = nearest zone part; each part's hidden zone pixels smear-filled from its own
+  layer) → **FLUX hidden pass** (`complete_hidden`): the item's own pieces only (no body: with bare limbs around them
+  FLUX paints the hidden ends as skin) laid out on one sheet, only the hidden areas masked, denoise 0.55; key-coloured
+  results replace the smear → the back view with the painted front as reference.
 - **Materials = colour keys** (`materials` in the spec: cloth green, leather blue, metal cyan, accent magenta). The
   levels map is R = cel level 0..4 / 254 outline, G = material channel (4..7), A, like the puppet export; any ramp of the
   material's palette group colours it (iron / bronze / gold plate from one generation).

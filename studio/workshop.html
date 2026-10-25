@@ -95,6 +95,18 @@
   .pv { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; } .pv figure { margin:0; } .pv canvas { image-rendering:pixelated; background:#c4c6cc; border-radius:4px; display:block; }
   .pv figcaption { color:var(--muted); font-size:11px; }
   .prompt { font-family: ui-monospace, Consolas, monospace; font-size:12px; color:#c9c0d6; background:#1b1722; padding:8px; border-radius:4px; white-space:pre-wrap; }
+  /* Item Workshop */
+  .itgrid { display:grid; grid-template-columns: 250px 1fr; gap:12px; align-items:start; }
+  .itlist { position:sticky; top:58px; max-height:calc(100vh - 80px); overflow:auto; }
+  .itform { display:grid; grid-template-columns: 110px 1fr; gap:6px 10px; align-items:center; margin-top:6px; }
+  .itform > label { color:var(--muted); }
+  .itcands { display:flex; flex-direction:column; gap:10px; }
+  .itc { background:var(--card); border:2px solid transparent; border-radius:6px; padding:6px 8px; }
+  .itc.on { border-color:var(--ok); }
+  .itcimgs { display:flex; gap:6px; flex-wrap:wrap; } .itcimgs img { width:150px; height:150px; border-radius:4px; background:#c4c6cc; }
+  .itcimgs img.paint { background:#fff; }
+  .itwalk { display:flex; gap:8px; flex-wrap:wrap; } .itwalk figure, #ofOut figure { margin:4px 0 0; } .itwalk img { width:200px; }
+  .itwalk figcaption, #ofOut figcaption { color:var(--muted); font-size:11px; }
 </style>
 </head>
 <body>
@@ -106,10 +118,9 @@
   <button class="tab" data-t="parts" data-app="character">Parts</button>
   <button class="tab" data-t="face" data-app="character">Face</button>
   <button class="tab" data-t="ramps" data-app="character">Ramps</button>
-  <button class="tab" data-t="board" data-app="items">Board</button>
-  <button class="tab" data-t="sets" data-app="items">Sets</button>
+  <button class="tab" data-t="items" data-app="items">Items</button>
+  <button class="tab" data-t="outfit" data-app="items">Outfit</button>
   <button id="jobsBtn">Queue: idle</button>
-  <a href="/" data-app="items" id="studioLink">Sprite Studio →</a>
 </header>
 <nav id="appMenu" class="hidden">
   <a href="/workshop" data-app="character">Character Workshop</a>
@@ -360,6 +371,89 @@
         <label><input type="checkbox" id="setUnrev" style="width:auto"> include unreviewed</label>
         <button class="primary" id="setSave">Save set</button></div></div>
     <div id="setList"></div>
+  </section>
+  <!-- ITEM WORKSHOP: ITEMS -->
+  <section id="items">
+    <p class="hint">Equipment as overlay layers on the race's painted puppet, one layer per Template part it covers. Every build is painted on the
+      same Template, so one fit serves every build; items with <b>fit: per sex</b> get their own fit on the male and the female (gender variants).
+      Paint each item's <b>zone</b> (where it sits) on the puppet, then generate. Spec: <code>specs/items.json</code>, painted zones:
+      <code>specs/item_zones/</code>, code: <code>hdart/puppet_items.py</code>.</p>
+    <div class="itgrid">
+      <div class="card itlist">
+        <div class="row"><label>Race</label><select id="itRace" style="flex:1"><option>human</option></select></div>
+        <div id="itList"></div>
+        <div class="row"><input id="itNewId" placeholder="item.new_thing"><button id="itNew">New item</button></div>
+      </div>
+      <div id="itMain">
+        <div class="card"><div class="row"><h2 style="margin:0">Item</h2><b id="itTitle" style="color:var(--accent)"></b>
+            <span class="hint" id="itFits"></span></div>
+          <div class="itform">
+            <label>Id</label><input id="itId">
+            <label>Slot</label><input id="itSlot" placeholder="torso, legs, feet, head, shoulders, hands, mainhand…">
+            <label>Kind</label><select id="itKind"><option value="">fitted (painted on the body)</option><option value="held">held (attached to a hand)</option></select>
+            <label>Fit</label><select id="itFit"><option value="shared">shared: one fit for every build</option><option value="per_sex">per sex: a male and a female fit (gender variant)</option></select>
+            <label>Description</label><textarea id="itText" rows="2" placeholder="what FLUX paints, e.g. a simple cloth tunic with sleeves to the mid forearm"></textarea>
+            <label>Materials</label><div id="itMats" class="row" style="margin:0"></div>
+            <label>Depth</label><div class="row" style="margin:0"><input id="itDepth" type="number" style="width:70px">
+              <span class="hint">stacking: higher draws over lower (trousers 1, boots 2, shirt 3, armour 4, shoulders 5, head 7)</span></div>
+            <label class="itfit">Bulk</label><div class="row itfit" style="margin:0"><input id="itBulk" type="number" style="width:70px">
+              <span class="hint">px (1024 canvas) FLUX may paint past the zone</span>
+              <label><input type="checkbox" id="itClipHair" style="width:auto"> clips the hair</label>
+              <label><input type="checkbox" id="itComplete" style="width:auto"> FLUX pass for hidden joint areas</label></div>
+            <label class="itheld">Held</label><div class="row itheld" style="margin:0"><label>hand</label><select id="itHand" style="width:90px"><option>armA</option><option>armB</option></select>
+              <label>length</label><input id="itLength" type="number" step="0.02" style="width:70px"><label>tilt°</label><input id="itTilt" type="number" style="width:70px"></div>
+          </div>
+          <div class="row"><button class="primary" id="itSave">Save item</button><span class="hint" id="itSaved"></span></div>
+        </div>
+
+        <div class="card itfit" id="zeCard"><div class="row"><h2 style="margin:0">Zone</h2>
+            <span class="hint">Paint where the item sits (cyan). It's shared by every build of the race; tick "this sex only" to paint a gender variant's own zone.
+              Hidden areas (under the near arm, a limb's round end) follow from what you paint.</span></div>
+          <div class="row"><label>On</label><select id="zeBuild" style="width:140px"></select>
+            <button data-zv="front" class="on">Front</button><button data-zv="back">Back</button>
+            <span class="hint" id="zeSource"></span></div>
+          <div class="row" id="zeTools"><button data-zt="brush" class="on">Brush (B)</button><button data-zt="erase">Eraser (E)</button>
+            <button data-zt="lasso">Lasso add (L)</button><button data-zt="lassox">Lasso erase (K)</button>
+            <label>Size</label><input id="zeSize" type="range" min="4" max="160" value="40" style="width:120px">
+            <label>View</label><input id="zeZoom" type="range" min="400" max="1100" value="640" style="width:120px">
+            <button id="zeUndo">Undo</button><button id="zeRedo">Redo</button><button id="zeClear">Clear</button></div>
+          <canvas id="zeCv" width="1024" height="1024" style="width:640px;cursor:crosshair;border-radius:4px;background:#c4c6cc;touch-action:none"></canvas>
+          <div class="row"><label><input type="checkbox" id="zeSexOnly" style="width:auto"> this sex only</label>
+            <button class="primary" id="zeSave">Save zone</button><button id="zeReset">Back to the shared / preset zone</button>
+            <span class="hint" id="zeStatus"></span></div>
+        </div>
+
+        <div class="card"><div class="row"><h2 style="margin:0">Generate</h2></div>
+          <div class="row"><label>Fit on</label><select id="itBuild" style="width:140px"></select>
+            <label>Candidates</label><input id="itN" type="number" value="2" min="1" max="6" style="width:60px">
+            <label>Seed</label><input id="itSeed" type="number" value="1" style="width:80px">
+            <button class="primary" id="itGen">Generate</button><span class="hint">~1–3 min each; the queue (top right) shows progress.</span></div>
+          <div class="prompt" id="itPrompt"></div>
+          <details style="margin-top:6px"><summary class="hint">Prompt templates (shared by every item): {style} {body} {item} {materials}</summary>
+            <div class="itform">
+              <label>Front</label><textarea id="ipFront" rows="3"></textarea>
+              <label>Back</label><textarea id="ipBack" rows="3"></textarea>
+              <label>Hidden areas</label><textarea id="ipComplete" rows="3"></textarea>
+              <label>Held</label><textarea id="ipHeld" rows="2"></textarea>
+              <label>Material text</label><input id="ipMat">
+            </div>
+            <div class="row"><button id="ipSave">Save templates</button></div></details>
+        </div>
+
+        <div class="card"><div class="row"><h2 style="margin:0">Candidates</h2>
+            <span class="hint">Each candidate on the male and the female (front, back). Approve picks what a build wears.</span></div>
+          <div id="itCands" class="itcands"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ITEM WORKSHOP: OUTFIT -->
+  <section id="outfit">
+    <div class="card"><div class="row"><label>Build</label><select id="ofBuild" style="width:140px"></select>
+        <label>Hair</label><select id="ofHair" style="width:220px"></select><select id="ofHairRamp" style="width:120px"></select>
+        <button class="primary" id="ofGo">Preview</button><span class="hint" id="ofStatus">Each item's approved fit for this build.</span></div>
+      <div id="ofItems"></div></div>
+    <div class="card"><div id="ofOut" class="row" style="align-items:flex-start"></div></div>
   </section>
 </main>
 
@@ -1661,8 +1755,8 @@ setInterval(() => {   // when a face job finishes: reload the candidates
 
 function renderAll() { renderBoard(); renderBase(); renderStyle(); renderSets(); renderDrawer(false); }
 refresh().then(pollJobs).catch(e => err(e.message));
-// one page, two tools: the Character Workshop (/workshop) and the Item Workshop (/items: player items: armour, weapons,
-// other equipment; for now the Board and Sets of the older part workflow, and the Sprite Studio link)
+// one page, two tools: the Character Workshop (/workshop) and the Item Workshop (/items: armour, weapons and other
+// equipment as overlay layers on the painted puppets; its own script below)
 const APP = location.pathname.startsWith("/items") ? "items" : "character";
 document.querySelectorAll("header [data-app]").forEach(el => el.style.display = el.dataset.app === APP ? "" : "none");
 $("appTitle").textContent = document.title = APP === "items" ? "Item Workshop" : "Character Workshop";
@@ -1670,6 +1764,227 @@ $("appTitle").textContent = document.title = APP === "items" ? "Item Workshop" :
   const first = tabs.find(t => t.dataset.t === want) || tabs[0];
   if (APP === "character" && first.dataset.t === "template") guard(initTemplate)();   // Template is the first step
   first.click(); }
+</script>
+<script>   // Item Workshop (/items): Items (catalogue, settings, zone editor, generate, candidates) and Outfit
+const IT = { st: null, sel: null, race: "human" };
+const itApi = (a, b = {}) => api(`/api/ws/items/${a}`, { race: IT.race, ...b });
+const itDef = () => IT.st.spec.items[IT.sel] || {};
+const itHeld = () => itDef().kind === "held";
+const SEXSYM = { male: "♂", female: "♀", all: "✓" };
+
+async function itRefresh() {
+  IT.st = await itApi("state");
+  const ids = Object.keys(IT.st.spec.items);
+  if (!IT.sel || !ids.includes(IT.sel)) IT.sel = ids[0] || null;
+  const opts = IT.st.builds.map(b => `<option>${b}</option>`).join("");
+  for (const id of ["zeBuild", "itBuild", "ofBuild"]) { const el = $(id), v = el.value; el.innerHTML = opts; if (IT.st.builds.includes(v)) el.value = v; }
+  itRenderList(); itRenderForm(); itRenderCands(); itRenderPrompts(); ofRender();
+}
+function itFitsText(id) {
+  const ap = IT.st.approved[id] || {}, keys = Object.keys(ap);
+  return keys.length ? keys.map(k => SEXSYM[k] || k).join(" ") : "";
+}
+function itRenderList() {
+  const items = IT.st.spec.items, slots = {};
+  for (const [id, d] of Object.entries(items)) (slots[d.slot || "other"] ??= []).push(id);
+  $("itList").innerHTML = Object.entries(slots).map(([s, ids]) => `<div class="hint" style="margin-top:8px;text-transform:uppercase;letter-spacing:1px">${s}</div>` +
+    ids.map(id => `<div class="tpl ${id === IT.sel ? "on" : ""}" data-it="${id}"><span style="flex:1">${id.replace(/^item\./, "")}${items[id].kind === "held" ? ' <span class="hint">held</span>' : ""}${items[id].fit === "per_sex" ? ' <span class="hint">♂♀</span>' : ""}</span>
+      <span style="color:var(--ok)">${itFitsText(id)}</span> <span class="hint">${(IT.st.candidates[id] || []).length}</span></div>`).join("")).join("");
+  $("itList").querySelectorAll("[data-it]").forEach(r => r.onclick = () => { IT.sel = r.dataset.it; ZE.loaded = null; itRenderList(); itRenderForm(); itRenderCands(); itRenderPrompts(); zeLoad(); });
+}
+function itRenderForm() {
+  const d = itDef(); if (!IT.sel) return;
+  $("itTitle").textContent = IT.sel; $("itFits").textContent = itFitsText(IT.sel) ? `approved: ${itFitsText(IT.sel)}` : "nothing approved yet";
+  $("itId").value = IT.sel; $("itSlot").value = d.slot || ""; $("itKind").value = d.kind || ""; $("itFit").value = d.fit || "shared";
+  $("itText").value = d.text || ""; $("itDepth").value = d.depth ?? 3; $("itBulk").value = d.bulk ?? 6;
+  $("itClipHair").checked = (d.clips || []).includes("hair"); $("itComplete").checked = d.complete !== false;
+  $("itHand").value = d.hand || "armA"; $("itLength").value = d.length ?? 0.48; $("itTilt").value = d.tilt ?? 22;
+  $("itMats").innerHTML = Object.entries(IT.st.spec.materials).map(([m, e]) => `<label style="display:flex;align-items:center;gap:4px">
+    <input type="checkbox" data-mat="${m}" style="width:auto" ${(d.materials || []).includes(m) ? "checked" : ""}>
+    <i style="width:14px;height:14px;border-radius:3px;background:${e.key};display:inline-block"></i>${m}</label>`).join("");
+  document.querySelectorAll(".itfit").forEach(el => el.style.display = itHeld() ? "none" : "");
+  document.querySelectorAll(".itheld").forEach(el => el.style.display = itHeld() ? "" : "none");
+}
+$("itSave").onclick = guard(async () => {
+  const held = $("itKind").value === "held", num = (id) => $(id).value === "" ? null : +$(id).value;
+  const def = { slot: $("itSlot").value.trim(), kind: held ? "held" : null, fit: $("itFit").value, text: $("itText").value.trim(),
+    materials: [...document.querySelectorAll("[data-mat]")].filter(c => c.checked).map(c => c.dataset.mat), depth: num("itDepth") };
+  if (held) Object.assign(def, { hand: $("itHand").value, length: num("itLength"), tilt: num("itTilt") });
+  else Object.assign(def, { bulk: num("itBulk"), clips: $("itClipHair").checked ? ["hair"] : null, complete: $("itComplete").checked });
+  const id = $("itId").value.trim();
+  IT.st = await itApi("item/save", { item: id, old_id: IT.sel, def }); IT.sel = id;
+  $("itSaved").textContent = "saved"; setTimeout(() => $("itSaved").textContent = "", 1500); await itRefresh();
+});
+$("itNew").onclick = guard(async () => {
+  let id = $("itNewId").value.trim(); if (!id) throw new Error("Type an id first, e.g. item.leather_vest");
+  if (!id.startsWith("item.")) id = "item." + id;
+  if (IT.st.spec.items[id]) throw new Error(`${id} already exists`);
+  await itApi("item/save", { item: id, def: { slot: "torso", text: "", materials: ["cloth"], depth: 3, bulk: 6 } });
+  IT.sel = id; $("itNewId").value = ""; ZE.loaded = null; await itRefresh(); zeLoad();
+});
+
+// ---- prompts next to Generate
+async function itRenderPrompts() {
+  const sp = IT.st.spec;
+  if (document.activeElement?.closest?.("details") == null) {
+    $("ipFront").value = sp.prompt || ""; $("ipBack").value = sp.prompt_back || ""; $("ipComplete").value = sp.prompt_complete || "";
+    $("ipHeld").value = sp.prompt_held || ""; $("ipMat").value = sp.material_text || ""; }
+  if (!IT.sel || !$("itBuild").value) return;
+  try { const P = await itApi("prompts", { item: IT.sel, build: $("itBuild").value });
+    $("itPrompt").textContent = itHeld() ? `Held: ${P.held}` : `Front: ${P.front}\n\nBack (front as reference): ${P.back}` +
+      (itDef().complete !== false ? `\n\nHidden areas: ${P.complete}` : ""); } catch (e) { $("itPrompt").textContent = e.message; }
+}
+$("itBuild").onchange = () => itRenderPrompts();
+$("ipSave").onclick = guard(async () => {
+  await itApi("spec/save", { prompts: { prompt: $("ipFront").value, prompt_back: $("ipBack").value, prompt_complete: $("ipComplete").value,
+    prompt_held: $("ipHeld").value, material_text: $("ipMat").value } }); await itRefresh(); });
+$("itGen").onclick = guard(async () => {
+  if (!itHeld() && ZE.dirty) throw new Error("Save the zone first (or undo your strokes).");
+  const n = +$("itN").value, seed = +$("itSeed").value, build = $("itBuild").value;
+  await queue([{ kind: "item", action: "generate", race: IT.race, item: IT.sel, build, n, seed, label: `${IT.sel} · ${build} ×${n} (s${seed})` }]);
+  $("itSeed").value = seed + n;
+});
+
+// ---- candidates
+function itRenderCands() {
+  const cands = IT.st.candidates[IT.sel] || [], ap = IT.st.approved[IT.sel] || {}, perSex = itDef().fit === "per_sex";
+  const keys = perSex ? ["male", "female"] : ["all"];
+  $("itCands").innerHTML = cands.map(c => {
+    const t = `&t=${c.stamp}`, on = keys.filter(k => ap[k] === c.id);
+    const prev = ["male_front", "male_back", "female_front", "female_back"].map(k => c.prev[k] ? `<img src="${img(c.prev[k]) + t}" title="${k.replace("_", " ")}">` : "").join("");
+    return `<div class="itc ${on.length ? "on" : ""}">
+      <div class="row" style="margin:0 0 4px"><b>${c.id}</b><span class="hint">on ${c.on || "?"}${c.completed ? " · FLUX hidden areas" : ""}</span></div>
+      <div class="itcimgs">${c.paint ? `<img class="paint" src="${img(c.paint) + t}" title="what FLUX painted">` : ""}${prev}</div>
+      <div class="row" style="margin:4px 0 0">${keys.map(k => `<button data-ap="${c.id}" data-k="${k}" class="${ap[k] === c.id ? "on" : ""}">${ap[k] === c.id ? "✓ " : ""}${k === "all" ? "Approve" : "Approve for " + k}</button>`).join("")}
+        <button data-walk="${c.id}">Walk</button>
+        ${itHeld() ? "" : `<button data-rk="${c.id}" title="re-run the extraction from the saved paint (zone / keying changes); no GPU">Re-extract</button>
+        <button data-rc="${c.id}" title="re-extract and run the FLUX pass for the hidden joint areas (GPU)">Re-extract + FLUX hidden</button>`}
+        <button data-ar="${c.id}" style="margin-left:auto">Archive</button></div>
+      <div class="itwalk" id="walk_${c.id}"></div></div>`;
+  }).join("") || `<p class="hint">No candidates yet: paint the zone, then Generate.</p>`;
+  const q = (s) => $("itCands").querySelectorAll(s);
+  q("[data-ap]").forEach(b => b.onclick = guard(async () => {
+    const was = (IT.st.approved[IT.sel] || {})[b.dataset.k] === b.dataset.ap;
+    await itApi("approve", { item: IT.sel, id: b.dataset.ap, key: b.dataset.k, on: !was }); await itRefresh(); }));
+  q("[data-ar]").forEach(b => b.onclick = guard(async () => { await itApi("archive", { item: IT.sel, id: b.dataset.ar }); await itRefresh(); }));
+  q("[data-rk]").forEach(b => b.onclick = guard(async () => queue([{ kind: "item", action: "rekey", race: IT.race, item: IT.sel, id: b.dataset.rk, label: `${IT.sel} · ${b.dataset.rk} · re-extract` }])));
+  q("[data-rc]").forEach(b => b.onclick = guard(async () => queue([{ kind: "item", action: "rekey", complete: true, race: IT.race, item: IT.sel, id: b.dataset.rc, label: `${IT.sel} · ${b.dataset.rc} · re-extract + FLUX hidden` }])));
+  q("[data-walk]").forEach(b => b.onclick = guard(async () => {
+    const box = $(`walk_${b.dataset.walk}`); box.innerHTML = `<span class="hint">rendering…</span>`;
+    const out = [];
+    for (const build of IT.st.builds) {
+      const r = await itApi("outfit", { build, items: [IT.sel], cids: { [IT.sel]: b.dataset.walk } });
+      out.push(`<figure><img src="${r.walk_front}"><figcaption>${build} front</figcaption></figure><figure><img src="${r.walk_back}"><figcaption>${build} back</figcaption></figure>`);
+    }
+    box.innerHTML = out.join("");
+  }));
+}
+
+// ---- zone editor
+const ZE = { view: "front", tool: "brush", mask: null, puppet: null, undo: [], redo: [], lasso: null, down: false, last: null, cursor: null, dirty: false, loaded: null };
+const zeCanvas = () => { const c = document.createElement("canvas"); c.width = 1024; c.height = 1024; return c; };
+async function zeLoad() {
+  if (!IT.sel || itHeld() || !$("zeBuild").value) return;
+  const key = `${IT.sel}|${$("zeBuild").value}|${ZE.view}`; if (ZE.loaded === key) return;
+  $("zeStatus").textContent = "loading…";
+  const d = await itApi("zone/get", { item: IT.sel, build: $("zeBuild").value, view: ZE.view });
+  const [pi, mi] = await Promise.all([paLoadImg(d.puppet), paLoadImg(d.mask)]);
+  ZE.puppet = pi; ZE.mask = zeCanvas(); const mx = ZE.mask.getContext("2d"); mx.drawImage(mi, 0, 0);
+  const id = mx.getImageData(0, 0, 1024, 1024), p = id.data;
+  for (let i = 0; i < p.length; i += 4) { const on = p[i] > 127; p[i] = p[i + 1] = p[i + 2] = 255; p[i + 3] = on ? 255 : 0; }
+  mx.putImageData(id, 0, 0);
+  ZE.undo = []; ZE.redo = []; ZE.dirty = false; ZE.loaded = key;
+  $("zeSource").textContent = `zone from: ${d.source}`; $("zeStatus").textContent = ""; zeDraw();
+}
+function zeDraw() {
+  const cv = $("zeCv"), x = cv.getContext("2d"); x.clearRect(0, 0, 1024, 1024);
+  if (ZE.puppet) x.drawImage(ZE.puppet, 0, 0);
+  if (ZE.mask) { const t = zeCanvas(), tx = t.getContext("2d"); tx.drawImage(ZE.mask, 0, 0);
+    tx.globalCompositeOperation = "source-in"; tx.fillStyle = "#18c4d4"; tx.fillRect(0, 0, 1024, 1024);
+    x.globalAlpha = 0.5; x.drawImage(t, 0, 0); x.globalAlpha = 1; }
+  if (ZE.lasso && ZE.lasso.length > 1) { x.strokeStyle = ZE.tool === "lasso" ? "#18c4d4" : "#e8786a"; x.lineWidth = 2; x.beginPath();
+    ZE.lasso.forEach((p, i) => i ? x.lineTo(p[0], p[1]) : x.moveTo(p[0], p[1])); x.stroke(); }
+  if (ZE.cursor && (ZE.tool === "brush" || ZE.tool === "erase")) { x.strokeStyle = "#000"; x.lineWidth = 1.5; x.beginPath();
+    x.arc(ZE.cursor[0], ZE.cursor[1], +$("zeSize").value / 2, 0, 7); x.stroke(); }
+}
+function zePos(e) { const r = $("zeCv").getBoundingClientRect(); return [(e.clientX - r.left) * 1024 / r.width, (e.clientY - r.top) * 1024 / r.height]; }
+function zePush() { ZE.undo.push(ZE.mask.getContext("2d").getImageData(0, 0, 1024, 1024)); if (ZE.undo.length > 25) ZE.undo.shift(); ZE.redo = []; }
+function zeSetDirty() { ZE.dirty = true; $("zeStatus").textContent = "unsaved changes"; }
+function zeStamp(a, b) {
+  const m = ZE.mask.getContext("2d"), r = +$("zeSize").value / 2;
+  m.globalCompositeOperation = ZE.tool === "erase" ? "destination-out" : "source-over"; m.fillStyle = "#fff";
+  paStamp(m, a, b, r); m.globalCompositeOperation = "source-over";
+}
+$("zeCv").onpointerdown = (e) => { if (!ZE.mask) return; $("zeCv").setPointerCapture(e.pointerId); const p = zePos(e); ZE.down = true; zePush();
+  if (ZE.tool.startsWith("lasso")) ZE.lasso = [p]; else { zeStamp(p, p); ZE.last = p; } zeSetDirty(); zeDraw(); };
+$("zeCv").onpointermove = (e) => { const p = zePos(e); ZE.cursor = p;
+  if (ZE.down) { if (ZE.lasso) ZE.lasso.push(p); else { zeStamp(ZE.last, p); ZE.last = p; } } zeDraw(); };
+$("zeCv").onpointerup = () => { if (!ZE.down) return; ZE.down = false;
+  if (ZE.lasso && ZE.lasso.length > 2) { const m = ZE.mask.getContext("2d");
+    m.globalCompositeOperation = ZE.tool === "lassox" ? "destination-out" : "source-over"; m.fillStyle = "#fff"; m.beginPath();
+    ZE.lasso.forEach((p, i) => i ? m.lineTo(p[0], p[1]) : m.moveTo(p[0], p[1])); m.closePath(); m.fill(); m.globalCompositeOperation = "source-over"; }
+  ZE.lasso = null; zeDraw(); };
+$("zeCv").onpointerleave = () => { ZE.cursor = null; zeDraw(); };
+function zeTool(t) { ZE.tool = t; document.querySelectorAll("[data-zt]").forEach(b => b.classList.toggle("on", b.dataset.zt === t)); }
+document.querySelectorAll("[data-zt]").forEach(b => b.onclick = () => zeTool(b.dataset.zt));
+document.querySelectorAll("[data-zv]").forEach(b => b.onclick = guard(async () => {
+  if (ZE.dirty && !confirmLeave()) return;
+  ZE.view = b.dataset.zv; document.querySelectorAll("[data-zv]").forEach(x => x.classList.toggle("on", x === b)); await zeLoad(); }));
+function confirmLeave() { $("zeStatus").textContent = "unsaved changes: save or undo them first"; return false; }
+$("zeBuild").onchange = guard(async () => { ZE.loaded = null; await zeLoad(); });
+$("zeZoom").oninput = () => $("zeCv").style.width = $("zeZoom").value + "px";
+$("zeUndo").onclick = () => { if (!ZE.undo.length) return; const m = ZE.mask.getContext("2d"); ZE.redo.push(m.getImageData(0, 0, 1024, 1024)); m.putImageData(ZE.undo.pop(), 0, 0);
+  if (ZE.undo.length) zeSetDirty(); else { ZE.dirty = false; $("zeStatus").textContent = ""; } zeDraw(); };   // back to what was loaded
+$("zeRedo").onclick = () => { if (!ZE.redo.length) return; const m = ZE.mask.getContext("2d"); ZE.undo.push(m.getImageData(0, 0, 1024, 1024)); m.putImageData(ZE.redo.pop(), 0, 0); zeSetDirty(); zeDraw(); };
+$("zeClear").onclick = () => { if (!ZE.mask) return; zePush(); ZE.mask.getContext("2d").clearRect(0, 0, 1024, 1024); zeSetDirty(); zeDraw(); };
+$("zeSave").onclick = guard(async () => {
+  const out = zeCanvas(), x = out.getContext("2d"); x.fillStyle = "#000"; x.fillRect(0, 0, 1024, 1024); x.drawImage(ZE.mask, 0, 0);
+  const sex = $("zeSexOnly").checked ? $("zeBuild").value.split(".")[1] : null;
+  const r = await itApi("zone/save", { item: IT.sel, view: ZE.view, png: out.toDataURL("image/png"), sex });
+  ZE.dirty = false; ZE.loaded = null; $("zeStatus").textContent = `saved (${r.px} px)${sex ? " for " + sex : ""}`; await zeLoad();
+  $("zeStatus").textContent = `saved (${r.px} px)${sex ? " for " + sex : ""}: re-extract candidates or generate`;
+});
+$("zeReset").onclick = guard(async () => {
+  const sex = $("zeSexOnly").checked ? $("zeBuild").value.split(".")[1] : null;
+  await itApi("zone/reset", { item: IT.sel, view: ZE.view, sex }); ZE.dirty = false; ZE.loaded = null; await zeLoad(); });
+document.addEventListener("keydown", (e) => {
+  if (!$("items").classList.contains("on") || e.target.closest("input, textarea, select")) return;
+  const k = e.key.toLowerCase();
+  if (k === "b") zeTool("brush"); else if (k === "e") zeTool("erase"); else if (k === "l") zeTool("lasso"); else if (k === "k") zeTool("lassox");
+  else if (e.ctrlKey && k === "z") { e.preventDefault(); e.shiftKey ? $("zeRedo").click() : $("zeUndo").click(); }
+  else if (e.ctrlKey && k === "y") { e.preventDefault(); $("zeRedo").click(); }
+});
+
+// ---- outfit
+function ofRender() {
+  const st = IT.st, cur = {}; document.querySelectorAll("[data-of]").forEach(c => cur[c.dataset.of] = c.checked);
+  $("ofHair").innerHTML = `<option value="">no hair</option>` + st.hair.map(h => `<option>${h}</option>`).join("");
+  if (!$("ofHairRamp").options.length) $("ofHairRamp").innerHTML = st.hair_ramps.map(h => `<option>${h}</option>`).join("");
+  const build = $("ofBuild").value;
+  $("ofItems").innerHTML = Object.entries(st.spec.items).map(([id, d]) => {
+    const ap = st.approved[id] || {}, k = d.fit === "per_sex" ? (build || "").split(".")[1] : "all", has = ap[k] || ap.all;
+    return `<div class="row" style="margin:3px 0"><label style="width:200px;display:flex;gap:6px;align-items:center">
+      <input type="checkbox" data-of="${id}" style="width:auto" ${has ? "" : "disabled"} ${has && cur[id] !== false ? "checked" : ""}>${id.replace(/^item\./, "")}</label>
+      ${has ? (d.materials || []).map(m => `<label>${m}</label><select data-ofr="${id}|${m}" style="width:110px">${st.ramps[m].map(r => `<option>${r}</option>`).join("")}</select>`).join("")
+            : `<span class="hint">nothing approved${d.fit === "per_sex" ? " for this sex" : ""}</span>`}</div>`;
+  }).join("");
+}
+$("ofBuild").onchange = () => ofRender();
+$("ofGo").onclick = guard(async () => {
+  const items = [...document.querySelectorAll("[data-of]")].filter(c => c.checked).map(c => c.dataset.of), ramps = {};
+  document.querySelectorAll("[data-ofr]").forEach(s => { const [i, m] = s.dataset.ofr.split("|"); (ramps[i] ??= {})[m] = s.value; });
+  $("ofStatus").textContent = "rendering…";
+  const r = await itApi("outfit", { build: $("ofBuild").value, items, ramps, hair: $("ofHair").value || null, hair_ramp: $("ofHairRamp").value });
+  $("ofOut").innerHTML = ["front", "back"].map(v => `<figure><img src="${r[v]}" style="width:320px;background:#c4c6cc"><figcaption>${v}</figcaption></figure>
+    <figure><img src="${r["walk_" + v]}" style="width:320px"><figcaption>${v} walk</figcaption></figure>`).join("");
+  $("ofStatus").textContent = `wearing: ${r.worn.map(w => w[0].replace(/^item\./, "") + " " + w[1]).join(", ") || "nothing"}`;
+});
+
+if (APP === "items") {
+  const r0 = refresh; refresh = async () => { await r0(); await itRefresh(); };   // a finished job refreshes the item lists too
+  guard(async () => { await itRefresh(); await zeLoad(); })();
+  document.querySelector('.tab[data-t="items"]').addEventListener("click", () => guard(zeLoad)());
+}
 </script>
 </body>
 </html>

@@ -35,6 +35,7 @@ GUIDE = 1.0      # the zones tinted in the key colour (weaker tints let FLUX shr
 GUIDE_IN = 2     # px the tint stays inside the zone edge, feathered
 LINE_W = 3       # the even outline drawn around every item silhouette (rims, sleeve ends and boot tops get no line from FLUX)
 LEVELS = 5
+D_COMPLETE = 0.55   # the hidden-area pass starts from the smear fill (already in key colours); higher repaints them as skin
 
 
 def spec():
@@ -100,7 +101,13 @@ def prompts(race, build, item_id, doc=None):
     mats = " ".join(doc["material_text"].replace("{name}", "metal" if m == "metal" else m).replace("{word}", doc["materials"][m]["word"])
                     for m in it["materials"])
     fill = lambda t: t.replace("{style}", style).replace("{body}", body).replace("{item}", it["text"]).replace("{materials}", mats)
-    return {"front": fill(doc["prompt"]), "back": fill(doc["prompt_back"]), "held": fill(doc["prompt_held"])}
+    return {"front": fill(doc["prompt"]), "back": fill(doc["prompt_back"]), "held": fill(doc["prompt_held"]),
+            "complete": fill(doc.get("prompt_complete", PROMPT_COMPLETE))}
+
+
+PROMPT_COMPLETE = ("{style}. A parts sheet for 2D cutout animation: {item}, cut into its separate pieces (body, sleeves, "
+                   "legs), laid out apart on a pure white background, each piece drawn whole with rounded ends, only the "
+                   "garment, no body, no skin. {materials}")
 
 
 # ----------------------------------------------------------------------------- zones
@@ -134,6 +141,64 @@ def zone_masks(sp, view, parts, zones):
                 m &= (yy >= wy) if z["seam"] == "below_waist" else (yy < wy)
             out[n] = out.get(n, np.zeros((N, N), bool)) | m
     return out
+
+
+ZONES = ai_kit.ROOT / "specs" / "item_zones"   # painted zones (Item Workshop zone editor), one 1024 px mask per item and view
+
+
+def mask_path(item_id, view, sex=None):
+    """The painted zone of an item and view; with `sex`, that sex's own zone (a gender variant), if painted."""
+    return ZONES / (f"{item_id}.{sex}.{view}.png" if sex else f"{item_id}.{view}.png")
+
+
+def _mask_file(item_id, view, sex=None):
+    f = mask_path(item_id, view, sex) if sex else None
+    return f if f is not None and f.exists() else mask_path(item_id, view)
+
+
+def _flood(seed, allowed):
+    """Pixels of `allowed` connected to `seed` (4 neighbours), worked on the bounding box of `allowed`."""
+    if not seed.any() or not allowed.any():
+        return np.zeros_like(seed)
+    ys, xs = np.nonzero(allowed | seed); y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
+    a, r = allowed[y0:y1, x0:x1], seed[y0:y1, x0:x1].copy()
+    for _ in range(4000):
+        g = r.copy(); g[1:] |= r[:-1]; g[:-1] |= r[1:]; g[:, 1:] |= r[:, :-1]; g[:, :-1] |= r[:, 1:]
+        g &= a | seed[y0:y1, x0:x1]
+        if (g == r).all():
+            break
+        r = g
+    out = np.zeros_like(seed); out[y0:y1, x0:x1] = r
+    return out
+
+
+def zones_for(sp, view, parts, item_id, it, sex=None):
+    """(zone per part, the whole zone incl. any painted area past the body): the painted mask if there is one, else
+    the item's preset zones. A painted zone only reaches what shows in the rest pose, so each part's zone also floods
+    into that part's hidden pixels (under its parent / the near arm) from where it was painted: a vest painted on the
+    chest continues under the arm, a sleeve into its shoulder cap."""
+    f = _mask_file(item_id, view, sex)
+    if not f.exists():
+        zm = zone_masks(sp, view, parts, it.get("zones", []))
+        return zm, (np.any(list(zm.values()), 0) if zm else np.zeros((N, N), bool))
+    M = np.asarray(Image.open(f).convert("L").resize((N, N), Image.NEAREST)) > 127
+    order = sp["views"][view]["order"]
+    vis = ppt.owners({n: (parts[n],) for n in order}, order)
+    zm = {}
+    for n in order:
+        a = parts[n][..., 3] > 127; m = M & a & vis[n]
+        if m.sum() < 30:
+            continue
+        zm[n] = m | _flood(m, a & ~vis[n])
+    return zm, M
+
+
+
+
+def _url(im):
+    import base64, io
+    b = io.BytesIO(); im.save(b, "PNG")
+    return "data:image/png;base64," + base64.b64encode(b.getvalue()).decode()
 
 
 # ----------------------------------------------------------------------------- keying
@@ -295,10 +360,11 @@ def _gen_held(doc, it, P, d, sd):
 
 # ----------------------------------------------------------------------------- generate
 
-def _setup(doc, it, sp, v, parts):
+def _setup(doc, it, sp, v, parts, item_id, sex=None):
     """Zones, the paint mask, the guide-tinted composite and the bare composite (on white) of one view."""
-    zm = zone_masks(sp, v, parts, it["zones"])
-    Z = np.any(list(zm.values()), 0)
+    zm, Z = zones_for(sp, v, parts, item_id, it, sex)
+    if not Z.any():
+        raise ValueError(f"{item_id} has no zone in the {v} view: paint one (Item Workshop → zone editor).")
     body = np.any([p[..., 3] > 127 for p in parts.values()], 0)
     own = np.any([parts[n][..., 3] > 127 for n in zm], 0)   # the zone parts: FLUX may end the item anywhere on them
     region = _grow(Z, it.get("bulk", 6)) & ~(body & ~own)
@@ -314,18 +380,75 @@ def _setup(doc, it, sp, v, parts):
     return zm, Z, body, region, comp, Image.fromarray(ca), before
 
 
-def _extract(doc, it, sp, v, parts, zm, Z, body, region, before, after, d, cents):
-    """The item layer of one view from FLUX's paint (`after`, full canvas): keyed, covered, outlined, split; saved."""
+def _extract(doc, it, sp, v, parts, zm, Z, body, region, before, after, d, cents, flux=None):
+    """The item layer of one view from FLUX's paint (`after`, full canvas): keyed, covered, outlined, split, the hidden
+    joint areas filled (smear, then a FLUX completion pass when `flux` = {prompt, seed, ref, tag}); saved."""
     L, lev = key_item(doc, it["materials"], before, after, region, Z, cents=cents)
     L, lev = outline_item(*cover(L, lev, Z & body if it.get("cover", True) else np.zeros_like(Z)))
     Image.fromarray(L).save(d / f"layer_{v}.png"); Image.fromarray(lev).save(d / f"levels_{v}.png")
+    layers = split(sp, v, parts, zm, L, lev)
+    if flux:
+        layers = complete_hidden(doc, it, sp, v, parts, zm, layers, cents, d, **flux)
+    save_layers(d, v, layers)
+    return int((lev[..., 3] > 0).sum())
+
+
+def save_layers(d, v, layers):
     for sub in ("parts", "plevels"):
         for f in (d / sub / v).glob("*.png"):
             f.unlink()
-    for n, (Ln, Vn) in split(sp, v, parts, zm, L, lev).items():
+    for n, (Ln, Vn) in layers.items():
         for sub, im in (("parts", Ln), ("plevels", Vn)):
             (d / sub / v).mkdir(parents=True, exist_ok=True); Image.fromarray(im).save(d / sub / v / f"{n}.png")
-    return int((lev[..., 3] > 0).sum())
+
+
+def classify(doc, mats, rgb, cents):
+    """Per pixel of `rgb`: (keyed mask, material channel, cel level) by the material keys and the shared levels."""
+    h, sat, val = pf._hsv(rgb); keyed = np.zeros(rgb.shape[:2], bool)
+    ch = np.zeros(rgb.shape[:2], np.uint8); lv = np.zeros(rgb.shape[:2], np.uint8)
+    for m, kh in _key_hues(doc, mats):
+        c = doc["materials"][m]["channel"]; dh = np.minimum(np.abs(h - kh), 360 - np.abs(h - kh))
+        k = (dh < 30) & (sat > 0.25) & (val > 0.1) & ~keyed
+        cent = cents.get(c, np.linspace(0.3, 0.9, LEVELS))
+        lv[k] = np.abs(val[k][:, None] - np.asarray(cent)[None]).argmin(1); ch[k] = c; keyed |= k
+    return keyed, ch, lv
+
+
+def complete_hidden(doc, it, sp, v, parts, zm, layers, cents, d, prompt, seed, ref=None, tag="item"):
+    """FLUX completion of each part's hidden zone pixels (round ends under the parent, the torso under the near arm):
+    the parts wearing their item layers (hidden areas smear-filled, so already a key-coloured guide) laid out apart on
+    one sheet, only the hidden areas masked, repainted in one pass; the key-coloured result replaces the smear there."""
+    V = sp["views"][v]; order = V["order"]
+    vis = ppt.owners({n: (parts[n],) for n in order}, order)
+    hidden = {n: zm[n] & ~vis[n] & (parts[n][..., 3] > 127) for n in layers if n in zm}
+    if sum(int(h.sum()) for h in hidden.values()) < 200:
+        return layers
+    # the item's own pieces only, on white: with the bare body around them FLUX paints the hidden ends as skin
+    order = [n for n in order if n in layers]
+    dressed = {n: layers[n][0] for n in order}
+    lay = ppt.layout({n: (dressed[n],) for n in order}, order, V)
+    sheet, _ = ppt.build_sheet(order, lay, dressed)
+    hm = np.zeros((ppt.SHEET, ppt.SHEET), bool)
+    for n, h in hidden.items():
+        (x0, y0, x1, y1), px, py, w, hh = ppt._placed(lay, n)
+        cut = Image.fromarray(np.where(h, 255, 0).astype(np.uint8)[y0:y1, x0:x1]).resize((w, hh), Image.NEAREST)
+        hm[py:py + hh, px:px + w] |= np.asarray(cut) > 0
+    hm = _grow(hm, 3)
+    sheet.save(d / f"complete_{v}_in.png")
+    painted = ppt._run(sheet, hm, prompt, seed, it.get("complete_denoise", D_COMPLETE), f"{tag}_{v}", [ref] if ref else [])
+    painted.save(d / f"complete_{v}.png")
+    out = {}
+    for n, (Ln, Vn) in layers.items():
+        if n not in hidden or not hidden[n].any():
+            out[n] = (Ln, Vn); continue
+        un = ppt.unsheet_one(painted, dressed[n], lay, n)[..., :3]
+        keyed, ch, lv = classify(doc, it["materials"], un, cents)
+        take = hidden[n] & keyed
+        Ln, Vn = Ln.copy(), Vn.copy()
+        Ln[take, :3] = un[take]; Ln[take, 3] = 255
+        Vn[take, 0] = lv[take]; Vn[take, 1] = ch[take]; Vn[take, 3] = 255
+        out[n] = (Ln, Vn)
+    return out
 
 
 def generate(race, item_id, build=None, seed=1):
@@ -340,30 +463,38 @@ def generate(race, item_id, build=None, seed=1):
     else:
         ref, cents = None, {}
         for v in VIEWS:
-            zm, Z, body, region, comp, guide, before = _setup(doc, it, sp, v, parts[v])
+            zm, Z, body, region, comp, guide, before = _setup(doc, it, sp, v, parts[v], item_id, build.split(".")[1])
             _, after, _, out = pf._crop_pass(guide, region, pf._figure_box(comp), P[v], seed, it.get("denoise", D_ITEM),
                                              f"item_{item_id}_{cid}_{v}", [ref] if ref else [])
             out.save(d / f"paint_{v}.png")
             if v == "front":
                 ref = d / "paint_front.png"
-            meta.setdefault("keyed", {})[v] = _extract(doc, it, sp, v, parts[v], zm, Z, body, region, before, after, d, cents)
+            flux = {"prompt": P["complete"], "seed": seed, "ref": ref, "tag": f"item_{item_id}_{cid}_c"} if it.get("complete", True) else None
+            meta.setdefault("keyed", {})[v] = _extract(doc, it, sp, v, parts[v], zm, Z, body, region, before, after, d, cents, flux)
+        meta["completed"] = bool(it.get("complete", True))
     (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    previews(race, item_id, cid)
     return cid
 
 
-def rekey(race, item_id, cid):
-    """Re-run the extraction of a fitted candidate from its saved paints (no GPU): after a change to keying,
-    cover, outline or split, or to the item's zones."""
+def rekey(race, item_id, cid, complete=False):
+    """Re-run the extraction of a fitted candidate from its saved paints: after a change to keying, cover, outline or
+    split, or to the item's zones. complete=True also runs the FLUX completion pass (GPU); else the smear fill."""
     doc = spec(); it = doc["items"][item_id]; d = out_dir(race, item_id) / cid
     meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
     _, sp, parts = pf.base(meta["on"]); cents = {}
+    P = prompts(race, meta["on"], item_id, doc)
     for v in VIEWS:
-        zm, Z, body, region, comp, guide, before = _setup(doc, it, sp, v, parts[v])
+        zm, Z, body, region, comp, guide, before = _setup(doc, it, sp, v, parts[v], item_id, meta["on"].split(".")[1])
         box = pf._figure_box(comp); side = box[2] - box[0]
         after = before.copy()
         after[box[1]:box[3], box[0]:box[2]] = np.asarray(Image.open(d / f"paint_{v}.png").convert("RGB").resize((side, side), Image.LANCZOS))
-        meta.setdefault("keyed", {})[v] = _extract(doc, it, sp, v, parts[v], zm, Z, body, region, before, after, d, cents)
+        flux = {"prompt": P["complete"], "seed": meta["seed"], "ref": d / "paint_front.png" if v == "back" else None,
+                "tag": f"item_{item_id}_{cid}_c"} if complete else None
+        meta.setdefault("keyed", {})[v] = _extract(doc, it, sp, v, parts[v], zm, Z, body, region, before, after, d, cents, flux)
+    meta["completed"] = bool(complete)
     (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    previews(race, item_id, cid)
     return meta["keyed"]
 
 
@@ -436,3 +567,244 @@ def render(build, worn, hair_fn=None, frames=8, painted=False):
             walk = [pp.on_bg(pp.render(B2, v, i / frames)) for i in range(frames)]
         out[v] = (rest, walk)
     return out
+
+
+# ----------------------------------------------------------------------------- Item Workshop (state, API, jobs)
+
+SEXES = ("male", "female")
+
+
+def _builds(race):
+    """The race's builds that have a painted puppet (male / female)."""
+    out = []
+    for sx in SEXES:
+        try:
+            pf.base(f"{race}.{sx}"); out.append(f"{race}.{sx}")
+        except Exception:
+            pass
+    return out
+
+
+def _state_path(race):
+    return ai_kit.AI_DIR / "items" / race / "state.json"
+
+
+def load_state(race):
+    f = _state_path(race)
+    return json.loads(f.read_text(encoding="utf-8")) if f.exists() else {"approved": {}}
+
+
+def save_state(race, st):
+    _state_path(race).parent.mkdir(parents=True, exist_ok=True)
+    _state_path(race).write_text(json.dumps(st, indent=1), encoding="utf-8")
+
+
+def fit_key(it, build):
+    """Which approval a build wears: its sex for a per-sex item (gender variants), else the shared one ("all")."""
+    return build.split(".")[1] if it.get("fit") == "per_sex" else "all"
+
+
+def resolve(race, item_id, build, st=None, doc=None):
+    """The approved candidate a build wears for an item (per-sex fit falls back to the shared one), or None."""
+    doc = doc or spec(); st = st or load_state(race); ap = st["approved"].get(item_id, {})
+    return ap.get(fit_key(doc["items"][item_id], build)) or ap.get("all")
+
+
+def previews(race, item_id, cid, ramps=None):
+    """prev_<build>_<view>.png (512 px): the candidate alone on each of the race's builds."""
+    d = out_dir(race, item_id) / cid
+    for b in _builds(race):
+        try:
+            r = render(b, [(item_id, cid, ramps or {})], frames=0)
+        except Exception:
+            continue
+        for v in VIEWS:
+            pt._save(r[v][0], d / f"prev_{b.split('.')[1]}_{v}.png")
+
+
+def candidates(race, item_id):
+    root = out_dir(race, item_id); out = []
+    if not root.exists():
+        return out
+    for d in sorted(root.iterdir(), key=lambda p: p.name):
+        if not d.is_dir() or d.name.startswith("_") or not (d / "meta.json").exists():
+            continue
+        m = json.loads((d / "meta.json").read_text(encoding="utf-8"))
+        rel = lambda f: str((d / f).relative_to(ai_kit.AI_DIR)).replace("\\", "/") if (d / f).exists() else None
+        out.append({"id": d.name, "on": m.get("on"), "seed": m.get("seed"), "made": m.get("made"), "completed": m.get("completed"),
+                    "paint": rel("paint_front.png") or rel("paint_held.png"), "paint_back": rel("paint_back.png"),
+                    "prev": {f"{sx}_{v}": rel(f"prev_{sx}_{v}.png") for sx in SEXES for v in VIEWS},
+                    "stamp": int((d / "meta.json").stat().st_mtime)})
+    return sorted(out, key=lambda c: -(c["made"] or 0))
+
+
+def state(race):
+    from . import workshop as ws
+    doc = spec(); st = load_state(race); pal = ws.palettes_doc()["groups"]
+    return {"spec": doc, "approved": st["approved"], "builds": _builds(race),
+            "candidates": {i: candidates(race, i) for i in doc["items"]},
+            "masks": {i: sorted(f.name[len(i) + 1:-4] for f in ZONES.glob(f"{i}.*.png")) for i in doc["items"]} if ZONES.exists() else {},
+            "ramps": {m: list(pal.get(e["group"], {})) for m, e in doc["materials"].items()},
+            "hair": ws.load_state()["builds"].get(f"{race}.unisex", {}).get("face_sets", {}).get("hair", []),
+            "hair_ramps": list(pal.get("hair", {}))}
+
+
+ITEM_KEYS = {"slot": str, "kind": str, "text": str, "materials": list, "depth": (int, float), "bulk": (int, float),
+             "clips": list, "fit": str, "hand": str, "length": (int, float), "tilt": (int, float), "zones": list,
+             "denoise": (int, float), "complete": bool, "cover": bool, "guide": (int, float)}
+
+
+def save_item(item_id, d, old_id=None):
+    """Create / update an item definition in specs/items.json (Item Workshop: item settings)."""
+    doc = spec()
+    if not item_id.startswith("item.") or not all(c.isalnum() or c in "._-" for c in item_id):
+        raise ValueError("an item id looks like item.name (letters, digits, . _ -)")
+    if old_id and old_id != item_id:
+        if item_id in doc["items"]:
+            raise ValueError(f"{item_id} already exists")
+        doc["items"][item_id] = doc["items"].pop(old_id)
+    it = dict(doc["items"].get(item_id, {"slot": "torso", "depth": 3, "materials": ["cloth"], "bulk": 6, "zones": []}))
+    for k, v in d.items():
+        if k not in ITEM_KEYS:
+            continue
+        if v in (None, "") and k not in ("text",):
+            it.pop(k, None); continue
+        if not isinstance(v, ITEM_KEYS[k]):
+            raise ValueError(f"{k} has the wrong type")
+        it[k] = v
+    bad = [m for m in it.get("materials", []) if m not in doc["materials"]]
+    if bad or not it.get("materials"):
+        raise ValueError(f"materials must be some of {list(doc['materials'])}")
+    if it.get("fit", "shared") not in ("shared", "per_sex"):
+        raise ValueError("fit is shared or per_sex")
+    doc["items"][item_id] = it
+    _write_spec(doc)
+    return doc
+
+
+def save_prompts(d):
+    doc = spec()
+    for k in ("prompt", "prompt_back", "prompt_held", "prompt_complete", "material_text"):
+        if k in d:
+            if not isinstance(d[k], str) or not d[k].strip():
+                raise ValueError(f"{k} can't be empty")
+            doc[k] = d[k]
+    for k in ("prompt", "prompt_back", "prompt_held", "prompt_complete"):
+        if k in doc and "{item}" not in doc[k]:
+            raise ValueError(f"{k} must contain {{item}}")
+    _write_spec(doc)
+    return doc
+
+
+def _write_spec(doc):
+    SPEC.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
+
+
+def zone_doc(race, item_id, build, view):
+    """For the zone editor: the bare puppet of one view (rest pose, 1024 px) and the zone mask it edits (the build's
+    sex's own zone when painted, else the shared one, else the preset zones)."""
+    doc = spec(); it = doc["items"][item_id]; _, sp, parts = pf.base(build); sex = build.split(".")[1]
+    _, Z = zones_for(sp, view, parts[view], item_id, it, sex)
+    own = mask_path(item_id, view, sex).exists()
+    return {"puppet": _url(pf.compose(sp, view, parts[view])), "mask": _url(Image.fromarray(np.where(Z, 255, 0).astype(np.uint8))),
+            "source": "this sex" if own else ("painted" if mask_path(item_id, view).exists() else "preset")}
+
+
+def save_zone(item_id, view, png, sex=None):
+    import base64, io
+    ZONES.mkdir(parents=True, exist_ok=True)
+    im = Image.open(io.BytesIO(base64.b64decode(png.split(",", 1)[1]))).convert("L").resize((N, N), Image.NEAREST)
+    m = np.asarray(im) > 127
+    Image.fromarray(np.where(m, 255, 0).astype(np.uint8)).convert("1").save(mask_path(item_id, view, sex))
+    return {"ok": True, "px": int(m.sum())}
+
+
+def reset_zone(item_id, view, sex=None):
+    mask_path(item_id, view, sex).unlink(missing_ok=True)
+    return {"ok": True}
+
+
+def approve(race, item_id, cid, key="all", on=True):
+    st = load_state(race); ap = st["approved"].setdefault(item_id, {})
+    if on:
+        ap[key] = cid
+    elif ap.get(key) == cid:
+        ap.pop(key)
+    save_state(race, st)
+    return st["approved"]
+
+
+def archive(race, item_id, cid):
+    import shutil
+    src = out_dir(race, item_id) / cid; dst = ai_kit.AI_DIR / "items" / race / "_archive" / item_id / cid
+    dst.parent.mkdir(parents=True, exist_ok=True); shutil.move(str(src), str(dst))
+    st = load_state(race)
+    for k, v in list(st["approved"].get(item_id, {}).items()):
+        if v == cid:
+            st["approved"][item_id].pop(k)
+    save_state(race, st)
+    return {"ok": True}
+
+
+def outfit(race, build, items, ramps=None, hair=None, hair_ramp=None, walk=True, cids=None):
+    """Previews of a build wearing `items` (each item's approved fit for that build, or `cids[item]`): rest PNGs and
+    walk GIFs per view as data URLs. hair = a hair candidate id of the race's hair set (clipped by items that clip it)."""
+    import base64, io
+    doc = spec(); st = load_state(race); worn = []
+    for i in items:
+        c = (cids or {}).get(i) or resolve(race, i, build, st, doc)
+        if c:
+            worn.append((i, c, (ramps or {}).get(i, {})))
+    hfn = None
+    if hair:
+        hd = pf.out_dir(race, "hair") / hair
+        def hfn(v):
+            f = hd / f"levels_{v}.png"
+            return pf.colour_levels(np.asarray(Image.open(f).convert("RGBA")), pf.hair_ramp(hair_ramp)) if f.exists() else None
+    r = render(build, worn, hair_fn=hfn, frames=8 if walk else 0)
+    out = {"worn": [[i, c] for i, c, _ in worn]}
+    for v in VIEWS:
+        out[v] = _url(r[v][0])
+        if walk:
+            b = io.BytesIO(); fr = [f.convert("RGB").resize((320, 320), Image.LANCZOS) for f in r[v][1]]
+            fr[0].save(b, "GIF", save_all=True, append_images=fr[1:], duration=120, loop=0)
+            out[f"walk_{v}"] = "data:image/gif;base64," + base64.b64encode(b.getvalue()).decode()
+    return out
+
+
+def api(action, b):
+    """The Item Workshop's HTTP actions (/api/ws/items/<action>); the Studio reloads this module per request."""
+    race = b.get("race", "human")
+    if action == "state":
+        return state(race)
+    if action == "prompts":   # the composed prompts of an item on a build (shown next to Generate)
+        return prompts(race, b["build"], b["item"])
+    if action == "item/save":
+        save_item(b["item"], b.get("def", {}), b.get("old_id")); return state(race)
+    if action == "spec/save":
+        save_prompts(b.get("prompts", {})); return state(race)
+    if action == "zone/get":
+        return zone_doc(race, b["item"], b["build"], b["view"])
+    if action == "zone/save":
+        return save_zone(b["item"], b["view"], b["png"], b.get("sex"))
+    if action == "zone/reset":
+        return reset_zone(b["item"], b["view"], b.get("sex"))
+    if action == "approve":
+        return {"approved": approve(race, b["item"], b["id"], b.get("key", "all"), b.get("on", True))}
+    if action == "archive":
+        return archive(race, b["item"], b["id"])
+    if action == "outfit":
+        return outfit(race, b["build"], b.get("items", []), b.get("ramps"), b.get("hair"), b.get("hair_ramp"),
+                      b.get("walk", True), b.get("cids"))
+    raise ValueError(f"unknown items action {action}")
+
+
+def job(a):
+    """The Item Workshop's queue jobs (job kind "item", `action` in the args); reloaded per job."""
+    race = a.get("race", "human")
+    if a["action"] == "generate":
+        n, seed = int(a.get("n", 1)), int(a.get("seed", 1))
+        return [generate(race, a["item"], a.get("build"), seed + i) for i in range(n)]
+    if a["action"] == "rekey":
+        return rekey(race, a["item"], a["id"], bool(a.get("complete")))
+    raise ValueError(f"unknown items job {a['action']}")
