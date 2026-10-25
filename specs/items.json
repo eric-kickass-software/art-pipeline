@@ -158,12 +158,74 @@
       "slot": "mainhand",
       "kind": "held",
       "materials": [
-        "metal",
-        "leather"
+        "leather",
+        "metal"
       ],
+      "hand": "armA",
+      "length": 0.48,
+      "text": "short steel sword with a simple crossguard and a leather-wrapped grip",
+      "fit": "shared",
+      "depth": 3,
+      "grip_angle": -45,
+      "flip": false
+    },
+    "item.greaves": {
+      "slot": "legs",
+      "depth": 1,
+      "materials": [
+        "metal"
+      ],
+      "bulk": 5,
+      "zones": [],
+      "text": "Rounded steel plate leg armor, reaching from the top of the hips down to the mid shin, shiny polished metal, fantasy, anime",
+      "fit": "shared",
+      "complete": true
+    },
+    "item.breastplate": {
+      "slot": "shirt",
+      "depth": 3,
+      "materials": [
+        "cloth"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "text": "Shiny steel breastplate, fantasy, medieval,",
+      "fit": "shared",
+      "complete": true
+    },
+    "item.cape": {
+      "slot": "back",
+      "depth": 3,
+      "materials": [
+        "cloth"
+      ],
+      "bulk": 0,
+      "zones": [],
+      "text": "A flowing cloth cloak wrapped around the neck.",
+      "fit": "shared",
+      "complete": true
+    },
+    "item.shield": {
+      "slot": "offhand",
+      "depth": 8,
+      "materials": [
+        "leather",
+        "metal"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "text": "A large metal kite-shield, flat on top, curved sides come to point at bottom. Line down the middle",
+      "fit": "shared",
+      "complete": true,
+      "kind": "held",
       "hand": "armB",
       "length": 0.48,
-      "text": "short steel sword with a simple crossguard and a leather-wrapped grip"
+      "grip_angle": 0,
+      "flip": false,
+      "grip_at": [
+        0.565,
+        0.439
+      ]
     }
   }
 }
