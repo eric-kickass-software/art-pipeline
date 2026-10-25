@@ -1,0 +1,32 @@
+{
+  "_doc": "Item Workshop (hdart/puppet_items.py): equipment as overlay layers on the race's painted puppet, one layer per Template part it covers. zones: where an item may sit, as data (an editor comes later): part (fnmatch, e.g. arm*.upper), t = [from, to] along the part's bone (0 = start joint, 1 = end joint; <= 0 / >= 1 include the round ends), rows = [from, to] as fractions of the part's height (head, torso), ellipse = [cx, cy, rx, ry] as fractions of the part's box (curved edges), view = front / back (a zone for one view only), seam = above_waist / below_waist (+ seam_px to move the line down). bulk = px (1024 canvas) the item may paint beyond those zones. depth = stacking order (higher draws over lower). materials = colour keys the item is painted in; each becomes a channel (G of the levels map) coloured by a ramp of that material's palette group. clips = layers this item cuts away where it covers them (hair). kind held = generated alone on white and attached to a hand (grip), not painted on the body.",
+  "materials": {
+    "cloth":   {"key": "#22c822", "word": "green",   "channel": 4, "group": "cloth"},
+    "leather": {"key": "#2850e0", "word": "blue",    "channel": 5, "group": "leather"},
+    "metal":   {"key": "#18c4d4", "word": "cyan",    "channel": 6, "group": "metal"},
+    "accent":  {"key": "#d020d0", "word": "magenta", "channel": 7, "group": "cloth"}
+  },
+  "prompt": "{style}. One {body}, full body, three-quarter view facing left, seen slightly from above, standing in an A-pose, now wearing {item}. {materials} Clean dark outlines; the same face, head, skin and body, nothing else added. On a pure white background.",
+  "prompt_back": "{style}. The same {body} seen from behind, three-quarter back view facing away to the right, seen slightly from above, standing in an A-pose, wearing {item}: the same item as in the reference image, now from behind. {materials} Clean dark outlines, on a pure white background.",
+  "prompt_held": "{style}. A single {item} on its own, upright and vertical, pointing straight up, the handle at the bottom, seen from the side, centred, game item art. {materials} Clean dark outlines, on a pure white background.",
+  "material_text": "The {name} parts are one flat vivid pure {word} colour (a colour key), shaded only with darker and lighter {word}.",
+  "items": {
+    "item.trousers": {"slot": "legs", "depth": 1, "materials": ["cloth"], "bulk": 5,
+      "text": "simple loose cloth trousers reaching down to the mid shin",
+      "zones": [{"part": "torso", "seam": "below_waist"}, {"part": "leg*.upper"}, {"part": "leg*.lower", "t": [0, 0.6]}]},
+    "item.boots": {"slot": "feet", "depth": 2, "materials": ["leather"], "bulk": 7,
+      "text": "sturdy leather boots up to the mid shin",
+      "zones": [{"part": "leg*.lower", "t": [0.5, 1]}, {"part": "leg*.hand"}]},
+    "item.tunic": {"slot": "shirt", "depth": 3, "materials": ["cloth"], "bulk": 6,
+      "text": "a simple cloth tunic with sleeves to the mid forearm and a hem at the hips",
+      "zones": [{"part": "torso"}, {"part": "arm*.upper"}, {"part": "arm*.lower", "t": [0, 0.5]}]},
+    "item.pauldrons": {"slot": "shoulders", "depth": 5, "materials": ["metal"], "bulk": 24,
+      "text": "rounded steel plate pauldrons on both shoulders",
+      "zones": [{"part": "arm*.upper", "t": [0, 0.45]}]},
+    "item.helm": {"slot": "head", "depth": 7, "materials": ["metal"], "bulk": 20, "clips": ["hair"],
+      "text": "an open-faced round steel helmet covering the top of the head and the forehead",
+      "zones": [{"part": "head", "view": "front", "ellipse": [0.56, 0.12, 0.62, 0.44]}, {"part": "head", "view": "back", "ellipse": [0.5, 0.15, 0.72, 0.62]}]},
+    "item.sword": {"slot": "mainhand", "kind": "held", "materials": ["metal", "leather"], "hand": "armA", "length": 0.48, "tilt": 22,
+      "text": "short steel sword with a simple crossguard and a leather-wrapped grip"}
+  }
+}

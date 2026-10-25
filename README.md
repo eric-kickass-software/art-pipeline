@@ -417,6 +417,30 @@ tab is gone: its descriptor groups are there, its mannequin clothing / builds / 
    - Raw Monk values are photographic and muted: game ramps need more saturation (~×1.4), and very dark tones a lifted
      shadow end so the cel bands stay readable against the outline (skin-tone test, 2026-10-22).
 
+## Item Workshop: equipment layers (v1 test, 2026-10-25)
+Code: `hdart/puppet_items.py`, spec: `specs/items.json`. No UI yet (the old Board/Sets are from the retired mannequins).
+An item is a set of overlay layers, one per Template part it covers. Every build of a race is painted on the one shared
+Template, so an item fitted once (on `<race>.male`) is reused on every build of the race.
+- **Zones** (data, so an editor can draw them later): `part` (fnmatch, `arm*.upper`), `t` = range along the part's bone,
+  `rows` / `ellipse` = fractions of the part's box, `seam` = above/below the waist, `view` = one view only. `bulk` = px
+  the item may paint past its zones.
+- **Fitted item:** the zones tinted in the item's first material key (full strength; weaker tints let FLUX shrink the
+  item) → one masked FLUX pass on the whole puppet at denoise 0.85 (the mask = the zones grown by `bulk`, on the zone
+  parts only) → the item = key-coloured pixels + the dark line next to them, touching the zones, small holes filled
+  (glints) → **cover**: zone pixels it left bare are filled from its own levels → one even outline → split per part
+  (topmost zone part; past the body = nearest zone part; each part's hidden zone pixels filled so joints can turn) →
+  the back view with the painted front as reference.
+- **Materials = colour keys** (`materials` in the spec: cloth green, leather blue, metal cyan, accent magenta). The
+  levels map is R = cel level 0..4 / 254 outline, G = material channel (4..7), A, like the puppet export; any ramp of the
+  material's palette group colours it (iron / bronze / gold plate from one generation).
+- **Held item** (`kind: held`): txt2img on white + BiRefNet, keyed the same way, rotated onto the hand bone at its grip
+  (the leather's middle) and drawn under the hand so the fingers wrap it; mirrored for the back view.
+- Output: `sprites/ai/items/<race>/<item>/<cid>/` (`paint_<view>.png`, `layer_/levels_<view>.png`,
+  `parts/<view>/<part>.png`, `plevels/<view>/<part>.png`, `meta.json`). `dressed(build, worn, view, hair)` /
+  `render(...)` stack items by `depth` for previews; `clips: ["hair"]` cuts the hair layer under the item.
+- Learned on the helm: a straight zone edge becomes a straight item edge (use curved zones); a soft guide or a high
+  denoise lets FLUX draw the item smaller than the chibi head, so the bald skull shows around it.
+
 ## Status and next steps (2026-10-11, for whoever picks this up)
 - **Dungeon:** crypt v2 approved and exported. Not done:
   - 2D shadow casters on thin walls;
