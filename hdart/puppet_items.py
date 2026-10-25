@@ -82,6 +82,122 @@ def _holes(m, max_frac):
     return pf._components(holes, 1) & ~(pf._components(holes, int(max_frac * m.sum()) + 1))
 
 
+ISLAND = 400   # level patches smaller than this (px, 1024 canvas) merge into their surroundings: no splotchy highlights
+VAL_BLUR = 3   # px: the brightness is blurred (inside the item, outline excluded) before it's cut into cel levels
+
+
+def _components_of(cls):
+    """Connected regions of equal class (4 neighbours) by min-label propagation, on the bounding box of cls >= 0.
+    Returns (labels, sizes): labels -1 where cls < 0."""
+    valid = cls >= 0; lab = np.full(cls.shape, -1, np.int64)
+    if not valid.any():
+        return lab, np.zeros(0, np.int64)
+    ys, xs = np.nonzero(valid); y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
+    c = cls[y0:y1, x0:x1]; v = valid[y0:y1, x0:x1]; big = c.size + 1
+    L = np.where(v, np.arange(c.size).reshape(c.shape), big)
+    for _ in range(5000):
+        old = L
+        L = L.copy()
+        for sl_a, sl_b in (((slice(1, None), slice(None)), (slice(None, -1), slice(None))), ((slice(None, -1), slice(None)), (slice(1, None), slice(None))),
+                           ((slice(None), slice(1, None)), (slice(None), slice(None, -1))), ((slice(None), slice(None, -1)), (slice(None), slice(1, None)))):
+            same = v[sl_a] & v[sl_b] & (c[sl_a] == c[sl_b])
+            L[sl_a] = np.where(same, np.minimum(L[sl_a], L[sl_b]), L[sl_a])
+        if (L == old).all():
+            break
+    _, inv, sizes = np.unique(np.where(v, L, big), return_inverse=True, return_counts=True)
+    inv = inv.reshape(c.shape); lab[y0:y1, x0:x1] = np.where(v, inv, -1)
+    return lab, sizes
+
+
+def smooth_val(val, m, r=VAL_BLUR):
+    """Brightness blurred inside mask m only (normalized: the dark outline and the background don't bleed in)."""
+    def box(x, k):   # a box blur of width 2k+1 along both axes (cumulative sums)
+        for ax in (0, 1):
+            x = np.swapaxes(x, 0, ax); c = np.cumsum(np.pad(x, ((k + 1, k), (0, 0)), mode="edge"), 0)
+            x = np.swapaxes((c[2 * k + 1:] - c[:-2 * k - 1]) / (2 * k + 1), 0, ax)
+        return x
+    f = lambda x: box(box(box(x.astype(float), r), r), r)   # three boxes ~ a Gaussian
+    w = f(m.astype(np.float32)); v = f(np.where(m, val, 0).astype(np.float32))
+    return np.where(w > 1e-3, v / np.maximum(w, 1e-3), val)
+
+
+def _mode(lev, a, r=2):
+    """A majority filter on the levels (per material) inside a: ragged band edges become smooth."""
+    cls = np.where(a, lev[..., 1].astype(np.int64) * 16 + lev[..., 0], -1); vals = np.unique(cls[a])
+    if len(vals) < 2:
+        return lev
+    best = np.zeros(a.shape); arg = cls.copy()
+    for c in vals:
+        cnt = np.asarray(Image.fromarray(np.where(cls == c, 255, 0).astype(np.uint8)).filter(ImageFilter.BoxBlur(r)), float)
+        win = a & (cnt > best); best = np.where(win, cnt, best); arg = np.where(win, c, arg)
+    out = lev.copy(); out[..., 1][a] = (arg[a] // 16).astype(np.uint8); out[..., 0][a] = (arg[a] % 16).astype(np.uint8)
+    return out
+
+
+def levels_from_colour(L, lev, cents):
+    """Cel levels of key-coloured item pixels from their (smoothed) brightness and the candidate's level brightnesses,
+    keeping each pixel's material and the outline (254) of `lev`; then smoothed (islands, ragged edges)."""
+    a = (lev[..., 3] > 127) & (lev[..., 0] < 254)
+    if not a.any():
+        return lev
+    _, _, val = pf._hsv(L[..., :3]); vs = smooth_val(val, a); out = lev.copy()
+    for ch in np.unique(lev[..., 1][a]):
+        sel = a & (lev[..., 1] == ch); cent = cents.get(int(ch))
+        if cent is None:
+            continue
+        out[..., 0][sel] = np.abs(vs[sel][:, None] - np.asarray(cent)[None]).argmin(1)
+    return smooth_levels(out)
+
+
+def smooth_levels(lev, island=ISLAND):
+    """Merge small patches of one cel level (per material) into the levels around them: FLUX's soft gradients between
+    its flat tones otherwise quantize into mottled islands, which look splotchy once a ramp colours them. Big bands and
+    long thin highlights (large connected regions) stay; outline pixels (254) are left alone."""
+    a = (lev[..., 3] > 127) & (lev[..., 0] < 254)
+    if not a.any():
+        return lev
+    cls = np.where(a, lev[..., 1].astype(np.int64) * 16 + lev[..., 0], -1)
+    lab, sizes = _components_of(cls)
+    small = a & (sizes[np.clip(lab, 0, None)] < island)
+    if not small.any():
+        return _mode(lev, a)
+    keep = a & ~small
+    out = lev.copy()
+    filled, got = _spread(keep, lev[..., :2].copy(), keep | small, 200)
+    take = small & got
+    out[..., 0][take] = filled[..., 0][take]; out[..., 1][take] = filled[..., 1][take]
+    return _mode(out, a)
+
+
+def relevel(race, item_id, cid):
+    """Smooth the levels of an existing candidate in place (its per-part level maps), keeping everything else."""
+    d = out_dir(race, item_id) / cid; meta = _meta(d)
+    cents = {int(k): np.array(v) for k, v in meta.get("cents", {}).items()}
+    if not cents and (d / "layer_front.png").exists():   # older candidates: the front layer's levels by k-means, shared by both views
+        L = np.asarray(Image.open(d / "layer_front.png").convert("RGBA")); lev = np.asarray(Image.open(d / "levels_front.png").convert("RGBA"))
+        a = (lev[..., 3] > 127) & (lev[..., 0] < 254); _, _, val = pf._hsv(L[..., :3]); vs = smooth_val(val, a)
+        for ch in np.unique(lev[..., 1][a]):
+            v_ = vs[a & (lev[..., 1] == ch)]; cent = np.percentile(v_, np.linspace(10, 90, LEVELS))
+            for _ in range(20):
+                lab = np.abs(v_[:, None] - cent[None]).argmin(1)
+                cent = np.array([v_[lab == i].mean() if (lab == i).any() else cent[i] for i in range(LEVELS)])
+            cents[int(ch)] = np.sort(cent)
+        meta["cents"] = {str(k): [float(x) for x in v] for k, v in cents.items()}
+        (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    for f in sorted((d / "plevels").rglob("*.png")):
+        lev = np.asarray(Image.open(f).convert("RGBA")).copy(); fp = d / "parts" / f.parent.name / f.name
+        L = np.asarray(Image.open(fp).convert("RGBA")) if fp.exists() else None
+        Image.fromarray(levels_from_colour(L, lev, cents) if (L is not None and cents) else smooth_levels(lev)).save(f)
+    for f in sorted(d.glob("levels_*.png")):
+        lev = np.asarray(Image.open(f).convert("RGBA")).copy(); fl = d / f.name.replace("levels_", "layer_")
+        L = np.asarray(Image.open(fl).convert("RGBA")) if fl.exists() else None
+        Image.fromarray(levels_from_colour(L, lev, cents) if (L is not None and cents) else smooth_levels(lev)).save(f)
+    if (d / "held_levels.png").exists():
+        f = d / "held_levels.png"; Image.fromarray(smooth_levels(np.asarray(Image.open(f).convert("RGBA")).copy(), 60)).save(f)
+    previews(race, item_id, cid)
+    return {"ok": True}
+
+
 def _spread(mask_from, values, into, steps=120):
     """Copy each pixel of `values` (H, W, C) outward from `mask_from` into `into`, nearest first (8 neighbours)."""
     known = mask_from.copy(); out = values.copy()
@@ -109,7 +225,14 @@ def prompts(race, build, item_id, doc=None):
                     for m in it["materials"])
     fill = lambda t: t.replace("{style}", style).replace("{body}", body).replace("{item}", it["text"]).replace("{materials}", mats)
     return {"front": fill(doc["prompt"]), "back": fill(doc["prompt_back"]), "held": fill(doc["prompt_held"]),
-            "complete": fill(doc.get("prompt_complete", PROMPT_COMPLETE))}
+            "complete": fill(doc.get("prompt_complete", PROMPT_COMPLETE)), "back_edit": fill(doc.get("back_edit", BACK_EDIT))}
+
+
+BACK_EDIT = ("Show this exact character from behind: a three-quarter back view facing away to the right, seen slightly from "
+             "above, the same A-pose, wearing the same item ({item}) in the same flat vivid colour keys, now its back side: the back "
+             "of the garment over the shoulder blades and the spine, its back seams; nothing from the front of the body or "
+             "the garment (no chest, no front opening or buttons), the same size and position in the frame, plain white "
+             "background. {materials}")
 
 
 PROMPT_COMPLETE = ("{style}. A parts sheet for 2D cutout animation: {item}, cut into its separate pieces (body, sleeves, "
@@ -242,7 +365,7 @@ def key_item(doc, mats, before, after, region, touch, min_px=60, cents=None):
     hole = keep & ~found & ~line
     L = np.zeros((N, N, 4), np.uint8); L[keep, :3] = after[keep]; L[keep, 3] = 255
     lev = np.zeros((N, N, 4), np.uint8)
-    vs = np.asarray(Image.fromarray((val * 255).astype(np.uint8)).filter(ImageFilter.MedianFilter(5)), float) / 255
+    vs = smooth_val(val, found)   # blurred inside the keyed pixels: band edges follow smooth contours, not pixel noise
     for ch in np.unique(mat[found]):
         sel = found & (mat == ch); v_ = vs[sel]
         cent = cents.get(int(ch))
@@ -261,7 +384,7 @@ def key_item(doc, mats, before, after, region, touch, min_px=60, cents=None):
         lev[..., 1][hole] = near[..., 1][hole]
         lev[..., 0][hole] = np.where(val[hole] > 0.75, LEVELS - 1, near[..., 0][hole])
     lev[..., 0][line] = 254; lev[..., 3][keep] = 255
-    return L, lev
+    return L, smooth_levels(lev, ISLAND if min_px >= 60 else 60)
 
 
 # ----------------------------------------------------------------------------- split per part
@@ -504,6 +627,23 @@ def complete_hidden(doc, it, sp, v, parts, zm, layers, cents, d, prompt, seed, r
     return out
 
 
+def _back_guide(doc, it, P, d, seed, comp, guide, before, region, Z):
+    """The back view's guide, the way the back hair does it (AB2): a FLUX edit turns the painted front around ("the same
+    garment from behind": FLUX thinks about the 3D garment instead of copying the front onto the back: no chest on the
+    back of a tunic), its key-coloured item pixels are mapped onto the back puppet over the zone tint, and the edit (not
+    the front) is the back pass's reference image. Returns (guide image, reference path)."""
+    name = comfy.upload(d / "paint_front.png")
+    p_ = comfy.run(comfy.build_edit(name, P["back_edit"], seed=seed, lora_strength=0.6, prefix="hdart/itemback"), d / "tmp")[0]
+    ed = Image.open(p_).convert("RGB").resize((ppt.SHEET, ppt.SHEET), Image.LANCZOS); ed.save(d / "edit_back.png")
+    box = pf._figure_box(comp); side = box[2] - box[0]
+    mapped = before.copy(); mapped[box[1]:box[3], box[0]:box[2]] = np.asarray(ed.resize((side, side), Image.LANCZOS))
+    Le, _ = key_item(doc, it["materials"], before, mapped, region, Z, cents={})
+    ga = np.asarray(guide).copy(); m = (Le[..., 3] > 0) & region
+    ga[m, :3] = Le[m, :3]; ga[m, 3] = 255
+    Image.fromarray(ga).save(d / "guide_back.png")
+    return Image.fromarray(ga), d / "edit_back.png"
+
+
 def generate(race, item_id, build=None, seed=1):
     """One candidate of an item, fitted on `build` (default <race>.male)."""
     doc = spec(); it = doc["items"][item_id]; build = build or f"{race}.male"
@@ -517,6 +657,8 @@ def generate(race, item_id, build=None, seed=1):
         ref, cents = None, {}
         for v in VIEWS:
             zm, Z, body, region, comp, guide, before = _setup(doc, it, sp, v, parts[v], item_id, build.split(".")[1])
+            if v == "back":   # like the back hair (AB2): the painted front turned around by a FLUX edit guides the back
+                guide, ref = _back_guide(doc, it, P, d, seed, comp, guide, before, region, Z)
             _, after, _, out = pf._crop_pass(guide, region, pf._figure_box(comp), P[v], seed, it.get("denoise", D_ITEM),
                                              f"item_{item_id}_{cid}_{v}", [ref] if ref else [])
             out.save(d / f"paint_{v}.png")
@@ -543,7 +685,8 @@ def rekey(race, item_id, cid, complete=False):
         box = pf._figure_box(comp); side = box[2] - box[0]
         after = before.copy()
         after[box[1]:box[3], box[0]:box[2]] = np.asarray(Image.open(d / f"paint_{v}.png").convert("RGB").resize((side, side), Image.LANCZOS))
-        flux = {"prompt": P["complete"], "seed": meta["seed"], "ref": d / "paint_front.png" if v == "back" else None,
+        bref = d / "edit_back.png" if (d / "edit_back.png").exists() else d / "paint_front.png"
+        flux = {"prompt": P["complete"], "seed": meta["seed"], "ref": bref if v == "back" else None,
                 "tag": f"item_{item_id}_{cid}_c"} if complete else None
         meta.setdefault("keyed", {})[v] = _extract(doc, it, sp, v, parts[v], zm, Z, body, region, before, after, d, cents, flux)
     meta["completed"] = bool(complete)
@@ -1220,6 +1363,8 @@ def job(a):
         return gen_grip(race, a["build"], int(a.get("seed", 1)))
     if a["action"] == "regrip":
         return regrip(race, a["build"], a["id"])
+    if a["action"] == "relevel":
+        return relevel(race, a["item"], a["id"])
     if a["action"] == "rekey":
         return rekey(race, a["item"], a["id"], bool(a.get("complete")))
     raise ValueError(f"unknown items job {a['action']}")

@@ -454,6 +454,15 @@ Template, so an item fitted once is reused on every build of the race.
   weapon < fingers. Settings per item: `hand` (armB = near hand reads best), `length`, `grip_angle`, `flip`, `grip_at`
   (click on the weapon). `regrip` re-splits from the saved `after_<view>.png` without the GPU. Output:
   `sprites/ai/items/<race>/_grip/<build>/<id>/`, approval in `state.json` → `grip`.
+- **Back view (like the back hair, AB2):** the back pass used to take the painted front as its reference, so FLUX copied
+  front anatomy onto the back (a chest on the back of a tunic). Now a FLUX edit (`back_edit`) turns the painted front
+  around ("the same garment from behind: shoulder blades, spine, back seams; nothing from the front"), its key-coloured
+  item pixels are mapped onto the back puppet over the zone tint (`guide_back.png`), and that edit (`edit_back.png`) is
+  the reference of the masked back pass and of the back's hidden-area pass.
+- **Smooth cel levels:** FLUX's soft gradients between its flat tones used to quantize into mottled islands (splotchy
+  once a ramp colours them). The brightness is now blurred inside the item before it's cut into levels (`smooth_val`,
+  outline excluded), patches smaller than `ISLAND` (400 px) merge into their surroundings and a small majority filter
+  smooths band edges (`smooth_levels`). `relevel` (job) redoes an existing candidate's levels from its painted colours.
 - **Painted zones** replace the preset `zones` once saved. A painted zone only reaches what shows in the rest pose, so
   each part's zone also floods into that part's hidden pixels from where it was painted (a vest continues under the
   near arm; a sleeve into its shoulder cap). Areas painted past the body are allowed (pauldron or skirt silhouettes).
