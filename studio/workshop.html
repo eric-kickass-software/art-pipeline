@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sprite Workshop</title>
+<title>Character Workshop</title>
 <style>
   :root { --bg:#16131c; --panel:#211c29; --card:#2a2333; --line:#3a3146; --text:#e8e2ef; --muted:#9a90a8; --accent:#e0b874;
           --ok:#6fcf8a; --warn:#e8b04a; --bad:#e8786a; --info:#9cc4ff; }
@@ -14,6 +14,13 @@
   header button.tab { background:none; border:none; color:var(--muted); padding:6px 10px; cursor:pointer; border-radius:4px; font-size:13px; }
   header button.tab.on { color:var(--text); background:var(--card); }
   #jobsBtn { margin-left:auto; } header a { color:var(--accent); margin-left:10px; }
+  #appMenuBtn { background:none; border:1px solid var(--line); color:var(--text); border-radius:4px; padding:3px 9px; font-size:16px; cursor:pointer; margin-right:8px; }
+  #appMenuBtn:hover { border-color:var(--accent); }
+  #appMenu { position:fixed; top:46px; left:10px; z-index:40; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:6px; min-width:210px; box-shadow:0 6px 24px #0008; }
+  #appMenu.hidden { display:none; } #appMenu a { display:block; padding:7px 10px; border-radius:4px; color:var(--text); text-decoration:none; margin:0; }
+  #appMenu a:hover { background:var(--card); } #appMenu a.on { color:var(--accent); background:var(--card); }
+  #appMenu .hint { padding:4px 10px 2px; color:var(--muted); font-size:11px; }
+
   main { padding:14px; }
   section { display:none; } section.on { display:block; }
   h2 { font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin:14px 0 8px; }
@@ -92,17 +99,32 @@
 </head>
 <body>
 <header>
-  <h1>Sprite Workshop</h1>
-  <button class="tab on" data-t="template">Template</button>
-  <button class="tab" data-t="races">Race</button>
-  <button class="tab" data-t="parts">Parts</button>
-  <button class="tab" data-t="face">Face</button>
-  <button class="tab" data-t="ramps">Ramps</button>
-  <button class="tab" data-t="sets">Sets</button>
-  <button class="tab" data-t="board">Board</button>
+  <button id="appMenuBtn" title="Switch tool">&#9776;</button>
+  <h1 id="appTitle">Character Workshop</h1>
+  <button class="tab on" data-t="template" data-app="character">Template</button>
+  <button class="tab" data-t="races" data-app="character">Race</button>
+  <button class="tab" data-t="parts" data-app="character">Parts</button>
+  <button class="tab" data-t="face" data-app="character">Face</button>
+  <button class="tab" data-t="ramps" data-app="character">Ramps</button>
+  <button class="tab" data-t="board" data-app="items">Board</button>
+  <button class="tab" data-t="sets" data-app="items">Sets</button>
   <button id="jobsBtn">Queue: idle</button>
-  <a href="/">Sprite Studio →</a>
+  <a href="/" data-app="items" id="studioLink">Sprite Studio →</a>
 </header>
+<nav id="appMenu" class="hidden">
+  <a href="/workshop" data-app="character">Character Workshop</a>
+  <a href="/items" data-app="items">Item Workshop</a>
+  <a href="/dungeon" data-app="dungeon">Dungeon Forge</a>
+</nav>
+<script>   // the tool switcher (Character Workshop / Item Workshop / Dungeon Forge)
+(() => { const btn = document.getElementById("appMenuBtn"), menu = document.getElementById("appMenu");
+  const here = location.pathname.startsWith("/items") ? "items" : location.pathname.startsWith("/dungeon") ? "dungeon" : "character";
+  menu.querySelectorAll("a").forEach(a => a.classList.toggle("on", a.dataset.app === here));
+  btn.onclick = (e) => { e.stopPropagation(); menu.classList.toggle("hidden"); };
+  document.addEventListener("click", (e) => { if (!menu.contains(e.target)) menu.classList.add("hidden"); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") menu.classList.add("hidden"); }); })();
+</script>
+
 <div id="jobsPanel"><div class="row"><b>Generation queue</b><button id="jobsClear" style="margin-left:auto">Clear finished</button></div><div id="jobsList"></div></div>
 <main>
   <div id="err" class="err"></div>
@@ -455,7 +477,7 @@ function renderBoard() {
     cell.onclick = () => openDrawer(cell.dataset.part, cell.dataset.build);
   });
   document.querySelectorAll("[data-gobase]").forEach(a => a.onclick = (ev) => { ev.preventDefault();   // mannequins now live in Races
-    document.querySelector('[data-t="races"]').click(); });
+    location.href = "/workshop#races"; });   // the Race tab is in the Character Workshop
   $("qPick").innerHTML = B.builds.map(b => `<option value="missing|${b}">all missing for ${b}</option>`).join("") +
     `<option value="redo-back|*">all "redo back"</option>` +
     `<option value="missing|*">all missing (every build)</option><option value="pick|*">everything waiting for a pick</option>`;
@@ -1639,7 +1661,15 @@ setInterval(() => {   // when a face job finishes: reload the candidates
 
 function renderAll() { renderBoard(); renderBase(); renderStyle(); renderSets(); renderDrawer(false); }
 refresh().then(pollJobs).catch(e => err(e.message));
-guard(initTemplate)();   // Template is the first step and the tab open on load
+// one page, two tools: the Character Workshop (/workshop) and the Item Workshop (/items: player items: armour, weapons,
+// other equipment; for now the Board and Sets of the older part workflow, and the Sprite Studio link)
+const APP = location.pathname.startsWith("/items") ? "items" : "character";
+document.querySelectorAll("header [data-app]").forEach(el => el.style.display = el.dataset.app === APP ? "" : "none");
+$("appTitle").textContent = document.title = APP === "items" ? "Item Workshop" : "Character Workshop";
+{ const want = location.hash.slice(1), tabs = [...document.querySelectorAll(`.tab[data-app="${APP}"]`)];
+  const first = tabs.find(t => t.dataset.t === want) || tabs[0];
+  if (APP === "character" && first.dataset.t === "template") guard(initTemplate)();   // Template is the first step
+  first.click(); }
 </script>
 </body>
 </html>
