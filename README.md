@@ -236,7 +236,10 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
   - Wall-run join edges and white outline bleed are cleaned up automatically when pieces are cut.
 
 ## Workshop (curated AI character parts)
-Tabs in process order (2026-10-24): **Template** (open on load) > **Race** > **Parts** > **Face** > **Ramps** > **Sets** > **Board**. Every
+**Three tools** (2026-10-25), switched with the ☰ menu top left: the **Character Workshop** (`/workshop`, tabs in process
+order: **Template** (open on load) > **Race** > **Parts** > **Face** > **Ramps**; `#<tab>` in the URL opens a tab), the **Item
+Workshop** (`/items`: player items: armour, weapons, other equipment; for now the **Board** and **Sets** of the older part
+workflow and the Sprite Studio link; same page as the Character Workshop in "items" mode) and the **Dungeon Forge** (`/dungeon`). Every
 prompt is editable next to the button that generates with it; wording shared by all races is in Race → Shared prompts (the Style
 tab is gone: its descriptor groups are there, its mannequin clothing / builds / prompt preview are in Board → Board prompts).
 

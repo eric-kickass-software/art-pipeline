@@ -13,6 +13,13 @@
   header h1 { font-size:15px; margin:0 10px 0 0; color:var(--accent); }
   header select { width:auto; }
   header a { color:var(--accent); } #jobsBtn { margin-left:auto; }
+  #appMenuBtn { background:none; border:1px solid var(--line); color:var(--text); border-radius:4px; padding:3px 9px; font-size:16px; cursor:pointer; margin-right:8px; }
+  #appMenuBtn:hover { border-color:var(--accent); }
+  #appMenu { position:fixed; top:46px; left:10px; z-index:40; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:6px; min-width:210px; box-shadow:0 6px 24px #0008; }
+  #appMenu.hidden { display:none; } #appMenu a { display:block; padding:7px 10px; border-radius:4px; color:var(--text); text-decoration:none; margin:0; }
+  #appMenu a:hover { background:var(--card); } #appMenu a.on { color:var(--accent); background:var(--card); }
+  #appMenu .hint { padding:4px 10px 2px; color:var(--muted); font-size:11px; }
+
   textarea, input, select { width:100%; background:#2c2536; color:var(--text); border:1px solid var(--line); border-radius:4px; padding:5px 6px; font:inherit; }
   textarea { resize:vertical; }
   button { background:#352c41; color:var(--text); border:1px solid var(--line); border-radius:4px; padding:5px 10px; cursor:pointer; font:inherit; }
@@ -167,13 +174,27 @@
 </head>
 <body>
 <header>
+  <button id="appMenuBtn" title="Switch tool">&#9776;</button>
   <h1>Dungeon Forge</h1>
   <select id="setSel"></select>
   <button id="newSetBtn">+ New set</button>
   <button id="archiveSetBtn" class="danger" title="Move this set (spec, generated images, state) to archive/sets/">Archive set</button>
-  <a href="/">Studio</a> <a href="/workshop">Workshop</a>
   <button id="jobsBtn">Queue: idle</button>
 </header>
+<nav id="appMenu" class="hidden">
+  <a href="/workshop" data-app="character">Character Workshop</a>
+  <a href="/items" data-app="items">Item Workshop</a>
+  <a href="/dungeon" data-app="dungeon">Dungeon Forge</a>
+</nav>
+<script>   // the tool switcher (Character Workshop / Item Workshop / Dungeon Forge)
+(() => { const btn = document.getElementById("appMenuBtn"), menu = document.getElementById("appMenu");
+  const here = location.pathname.startsWith("/items") ? "items" : location.pathname.startsWith("/dungeon") ? "dungeon" : "character";
+  menu.querySelectorAll("a").forEach(a => a.classList.toggle("on", a.dataset.app === here));
+  btn.onclick = (e) => { e.stopPropagation(); menu.classList.toggle("hidden"); };
+  document.addEventListener("click", (e) => { if (!menu.contains(e.target)) menu.classList.add("hidden"); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") menu.classList.add("hidden"); }); })();
+</script>
+
 <div id="notice" class="hidden"><span></span><button onclick="this.parentElement.classList.add('hidden')">✕</button></div>
 <div id="jobsPanel"><div class="row"><b>Queue</b><button id="clearJobs" style="margin-left:auto">Clear finished</button></div><div id="jobs"></div></div>
 <div id="zoom"><img alt=""></div>

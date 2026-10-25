@@ -619,8 +619,8 @@ def serve(renders, spec, palettes, port=4321, open_browser=True):
             u = urlparse(self.path)
             q = parse_qs(u.query)
             try:
-                if u.path in ("/", "/index.html", "/workshop", "/dungeon"):
-                    page = {"/workshop": "workshop.html", "/dungeon": "dungeon.html"}.get(u.path, PAGE.name)
+                if u.path in ("/", "/index.html", "/workshop", "/items", "/dungeon"):   # /items = the Item Workshop
+                    page = {"/workshop": "workshop.html", "/items": "workshop.html", "/dungeon": "dungeon.html"}.get(u.path, PAGE.name)
                     body = PAGE.with_name(page).read_bytes()
                     self.send_response(200)
                     self.send_header("Content-Type", "text/html; charset=utf-8")
