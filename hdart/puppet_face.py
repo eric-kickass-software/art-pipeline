@@ -30,6 +30,12 @@ N = pp.PX * S
 D_HAIR, D_FACE = 0.85, 0.7
 
 
+HAIR_BACK_EDIT = ("Show this exact character from behind: a three-quarter back view facing away to the right, seen slightly "
+                  "from above, the back of the head with no face visible, the same {hair} in the same flat vivid green colour "
+                  "key, shaded with darker and lighter green, clean dark outlines, the same size and position in the frame, "
+                  "plain white background.")
+
+
 def spec():
     return json.loads(SPEC.read_text(encoding="utf-8"))
 
@@ -51,7 +57,8 @@ def save_spec(doc):
         if v and not (len(v) == 7 and v.startswith("#") and all(c in "0123456789abcdefABCDEF" for c in v[1:])):
             raise ValueError(f"{k} must be a #rrggbb colour")
     out = {"_doc": old.get("_doc", ""), "hair_key": key("hair_key", "#22c822"), "eye_key": key("eye_key", "#d020d0"),
-           "hair": doc["hair"], "face": doc["face"], "races": races}
+           "hair": doc["hair"], "hair_back_edit": str(doc.get("hair_back_edit") or old.get("hair_back_edit") or HAIR_BACK_EDIT),
+           "face": doc["face"], "races": races}
     SPEC.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8", newline="\n")
     return out
 
@@ -66,7 +73,8 @@ def composed(race, sex, doc=None):
     body, clothes = ppt.prompts(f"{race}.{sex}"); style = ppt.style_text()
     fill = lambda t: (t.replace("{style}", style).replace("{body}", body).replace("{hair}", r.get("hair", "").strip() or "hair")
                       .replace("{face}", r.get("face", "").strip() or "a face"))
-    return {"hair": {v: fill(doc["hair"][v]) for v in ("front", "back")}, "face": fill(doc["face"])}
+    return {"hair": {v: fill(doc["hair"][v]) for v in ("front", "back")}, "hair_back_edit": fill(doc.get("hair_back_edit", HAIR_BACK_EDIT)),
+            "face": fill(doc["face"])}
 
 
 # ----------------------------------------------------------------------------- the painted puppet to work on
@@ -259,7 +267,8 @@ def key_layer(before, after, region, head, levels=5):
     L = np.zeros((N, N, 4), np.uint8); L[m, :3] = after[m]; L[m, 3] = 255
     lev = np.zeros((N, N, 4), np.uint8)
     if hair.any():
-        v_ = val[hair]; cent = np.percentile(v_, np.linspace(10, 90, levels))
+        vs = np.asarray(Image.fromarray((val * 255).astype(np.uint8)).filter(ImageFilter.MedianFilter(5)), float) / 255
+        v_ = vs[hair]; cent = np.percentile(v_, np.linspace(10, 90, levels))   # smoothed: no speckled levels
         for _ in range(20):   # 1D k-means on brightness, dark -> light
             lab = np.abs(v_[:, None] - cent[None]).argmin(1)
             cent = np.array([v_[lab == i].mean() if (lab == i).any() else cent[i] for i in range(levels)])
@@ -403,6 +412,65 @@ def _crop_pass(comp, region, box, prompt, seed, denoise, tag, refs=()):
     return np.asarray(full), painted, init, out
 
 
+def _draw_back_guide(comp, head):
+    """Key-green cap over the back of the skull (shaded like the head), crown, strands, darker underside, outline."""
+    key = np.array(key_rgb(), float); ys, xs = np.nonzero(head)
+    hy0, hy1, hx0, hx1 = ys.min(), ys.max(), xs.min(), xs.max(); hh, hw = hy1 - hy0, hx1 - hx0
+    grow_ = lambda m, k: np.asarray(Image.fromarray(np.where(m, 255, 0).astype(np.uint8)).filter(ImageFilter.MaxFilter(2 * k + 1))) > 0
+    a = np.asarray(comp).copy(); yy = np.arange(N)[:, None]
+    cap = grow_(head, 4) & (yy < hy0 + 0.86 * hh)
+    lum = a[..., :3].astype(float).mean(-1, keepdims=True) / 200.0
+    a[cap, :3] = np.clip(key * (0.72 + 0.35 * lum[cap]), 0, 255).astype(np.uint8); a[cap, 3] = 255
+    a[cap & (yy > hy0 + 0.7 * hh), :3] = np.clip(key * 0.62, 0, 255).astype(np.uint8)
+    im = Image.fromarray(a); dr = ImageDraw.Draw(im)
+    crown = (hx0 + 0.62 * hw, hy0 + 0.14 * hh); dark = tuple(int(c) for c in key * 0.5) + (255,)
+    for t in np.linspace(0.05, 0.95, 11):
+        tx = hx0 + t * hw; ty = hy0 + 0.86 * hh - 0.25 * hh * abs(t - 0.5)
+        dr.line([crown, ((crown[0] + tx) / 2 + 0.04 * hw, (crown[1] + ty) / 2), (tx, ty)], fill=dark, width=3)
+    dr.ellipse([crown[0] - 6, crown[1] - 6, crown[0] + 6, crown[1] + 6], fill=dark)
+    out = np.asarray(im).copy()
+    rim = cap & ~(np.asarray(Image.fromarray(np.where(cap, 255, 0).astype(np.uint8)).filter(ImageFilter.MinFilter(7))) > 0)
+    out[rim, :3] = (34, 26, 24)
+    return out
+
+
+def _hair_back(race, fid, sp, vparts, P, sd, d):
+    """The back hair (AB2): a FLUX edit of the just-painted front head into a back view (keeps the hairstyle, e.g. a
+    braid), mapped onto the back head and cut by the key; the guide = the drawn back cap underneath + that hair on top;
+    one masked pass on the whole puppet (figure framing, mask = around the head + the upper back for long hair, never
+    the arms) with the front as reference; cut by the key."""
+    grow_ = lambda m, k: np.asarray(Image.fromarray(np.where(m, 255, 0).astype(np.uint8)).filter(ImageFilter.MaxFilter(2 * k + 1))) > 0
+    head = vparts["head"][..., 3] > 127; ys, xs = np.nonzero(head)
+    hy0, hy1, hx0, hx1 = ys.min(), ys.max(), xs.min(), xs.max(); hh, hw = hy1 - hy0, hx1 - hx0; cx = (hx0 + hx1) // 2
+    hbox, _ = _head_box(vparts)
+    comp0 = compose(sp, "back", vparts)
+    a0 = np.asarray(comp0); al = a0[..., 3:4] / 255.0; bald = (a0[..., :3] * al + 255 * (1 - al)).astype(np.uint8)
+    around = grow_(head, int(0.16 * (hbox[2] - hbox[0])))
+    body = np.zeros_like(head); arms = np.zeros_like(head)
+    for n_, p_ in vparts.items():
+        if n_ != "head":
+            body |= p_[..., 3] > 127
+        if n_.startswith("arm"):
+            arms |= p_[..., 3] > 127
+    lane = np.zeros_like(head); lane[max(0, hy1 - int(0.1 * hh)): hy1 + int(0.9 * hh), cx - int(0.38 * hw): cx + int(0.38 * hw)] = True
+    region = ((around & ~(body & ~around)) | lane) & ~arms
+    # 1. the hairstyle from behind: an edit of the painted front
+    name = comfy.upload(d / "paint_front.png"); (d / "tmp").mkdir(exist_ok=True)
+    p = comfy.run(comfy.build_edit(name, P["hair_back_edit"], seed=sd, lora_strength=0.6, prefix="hdart/hairback"), d / "tmp")[0]
+    ed = Image.open(p).convert("RGB").resize((ppt.SHEET, ppt.SHEET), Image.LANCZOS); ed.save(d / "edit_back.png")
+    side = hbox[2] - hbox[0]; mapped = bald.copy()
+    mapped[hbox[1]:hbox[3], hbox[0]:hbox[2]] = np.asarray(ed.resize((side, side), Image.LANCZOS))
+    Lb, _ = key_layer(bald, mapped, region | grow_(head, 30), head)
+    # 2. the guide: the drawn cap (coverage) + the edited hair (style)
+    g = _draw_back_guide(comp0, head); m = Lb[..., 3] > 0; g[m] = Lb[m]
+    # 3. one masked pass on the whole puppet
+    box = _figure_box(comp0)
+    _, after, _, out = _crop_pass(Image.fromarray(g), region, box, P["hair"]["back"], sd, 0.7, f"{race}_{fid}_hair_back",
+                                  [d / "paint_front.png"])
+    out.save(d / "paint_back.png")
+    return key_layer(bald, after, region, head)
+
+
 def generate(race, kind, sex="male", n=1, seed=1):
     """Queue job: n hair or face candidates for a race, painted on <race>.<sex>'s puppet; previews on male and female."""
     if kind not in KINDS:
@@ -430,6 +498,9 @@ def _make_one(race, kind, sex, build, cid, sp, parts, P, d, fid, sd):
             ref = None
             for v in ("front", "back"):
                 ppt._progress(d, 1 if v == "front" else 2, of, f"hair ({v})", sd)
+                if v == "back":   # AB2 (2026-10-25 test): edit of the front -> cap + that hair as the guide -> framed pass
+                    layers[v], levels[v] = _hair_back(race, fid, sp, parts[v], P, sd, d)
+                    continue
                 box, head = _head_box(parts[v])
                 region = np.zeros((N, N), bool); region[box[1]:box[3], box[0]:box[2]] = True
                 g = int(0.16 * (box[2] - box[0]))   # hair volume: a band around the head (no free-floating shapes above it)

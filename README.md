@@ -364,6 +364,12 @@ tab is gone: its descriptor groups are there, its mannequin clothing / builds / 
      puppet beat the separate face pass, whose guide was too strong and not detailed enough.
    - **Faceless heads (2026-10-24):** the Paint step's `face_guide` (`specs/paint.json`, Race → Shared prompts) can be `faint`: thin guide lines a little darker than the skin + a "blank face" prompt, so the painted head stays faceless and
      every face comes from here (`marks` = the old solid eye/mouth marks, the head gets its own face).
+   - **Back hair = AB2 (2026-10-25 test, `work/ui_tests/hair_back_test.py`):** (1) a FLUX *edit* of the just-painted front
+     head into a back view (`hair_back_edit` prompt; keeps the hairstyle, e.g. braids), mapped onto the back head and cut
+     by the key; (2) the guide = a drawn back cap (key green, crown, strands, darker underside, outline: coverage) with
+     that hair on top (style); (3) one masked pass on the whole puppet (figure framing; mask = around the head + the upper
+     back, never the arms; front as reference; denoise 0.7); (4) key cut. Hair levels come from a median-smoothed
+     brightness (no speckles). About +20 s per candidate. Touch-ups: Edit opens front and back.
    - **Face** (front): the head's own painted face is removed first (`blank_face`: non-skin pixels in the face area filled
      from the skin around them, kept off the outline), then FLUX repaints the face area starting from **guide marks**
      (`key_marks`: eye ovals with a magenta-key iris, a mouth line, where the face guides say) inside the head shrunk by

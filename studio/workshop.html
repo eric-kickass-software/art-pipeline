@@ -281,6 +281,7 @@
     <div id="fcKinds"></div>
     <details class="card"><summary><b>Shared prompts</b> <span class="hint">(every race: the hair and face wording; {hair} / {face} = the race's text in its card)</span></summary>
       <div class="row"><label style="min-width:110px">Hair, front</label><textarea id="fcHairFront" rows="3" style="flex:1"></textarea></div>
+      <div class="row"><label style="min-width:110px">Hair, back edit</label><textarea id="fcHairBackEdit" rows="3" style="flex:1"></textarea></div>
       <div class="row"><label style="min-width:110px">Hair, back</label><textarea id="fcHairBack" rows="3" style="flex:1"></textarea></div>
       <div class="row"><label style="min-width:110px">Face</label><textarea id="fcFace" rows="3" style="flex:1"></textarea></div>
       <div class="row"><label style="min-width:110px">Hair key</label><input id="fcHairKey" type="color" style="width:48px;padding:0">
@@ -1567,7 +1568,7 @@ function fcCard(kind) {
       <label>${kind === "hair" ? "Hair" : "Eye"} colour</label><select data-fcramp="${kind}" style="max-width:150px">${Object.keys(pal).map(n => `<option ${n === FC.ramp[kind] ? "selected" : ""}>${n}</option>`).join("")}</select>
       <span class="hint">recolours the previews (Ramps edits the ramps)</span></div>
     <details><summary class="hint">the prompt${kind === "hair" ? "s" : ""} this sends (painted on the ${sex})</summary>${kind === "hair"
-      ? `<div class="hint">front</div><div class="prompt">${esc(comp.hair.front)}</div><div class="hint">back</div><div class="prompt">${esc(comp.hair.back)}</div>`
+      ? `<div class="hint">front</div><div class="prompt">${esc(comp.hair.front)}</div><div class="hint">back: edit of the front</div><div class="prompt">${esc(comp.hair_back_edit)}</div><div class="hint">back: guided pass</div><div class="prompt">${esc(comp.hair.back)}</div>`
       : `<div class="prompt">${esc(comp.face)}</div>`}</details>
     <div class="cands pcands">${cands || `<p class="hint">No ${kind} candidates yet.</p>`}</div></div>`;
 }
@@ -1580,6 +1581,7 @@ function fcRender() {
   const keep = id => document.activeElement === $(id);
   if (!keep("fcHairFront")) $("fcHairFront").value = st.spec.hair.front; if (!keep("fcHairBack")) $("fcHairBack").value = st.spec.hair.back;
   if (!keep("fcFace")) $("fcFace").value = st.spec.face;
+  if (!keep("fcHairBackEdit")) $("fcHairBackEdit").value = st.spec.hair_back_edit || "";
   $("fcHairKey").value = st.spec.hair_key || "#22c822"; $("fcEyeKey").value = st.spec.eye_key || "#d020d0";
   document.querySelectorAll("[data-fcdraft]").forEach(t => t.oninput = () => { FC.drafts[t.dataset.fcdraft] = t.value; });
   document.querySelectorAll("[data-fcsave]").forEach(b_ => b_.onclick = guard(async () => {
@@ -1619,6 +1621,7 @@ async function initFace() {
     $("fcSharedSave").onclick = guard(async () => {
       const sp = JSON.parse(JSON.stringify(FC.st.spec));
       sp.hair = { front: $("fcHairFront").value.trim(), back: $("fcHairBack").value.trim() }; sp.face = $("fcFace").value.trim();
+      sp.hair_back_edit = $("fcHairBackEdit").value.trim();
       sp.hair_key = $("fcHairKey").value; sp.eye_key = $("fcEyeKey").value;
       FC.st = await api("/api/ws/face/spec", { race: FC.race, spec: sp }); $("fcSharedStatus").textContent = " saved"; fcRender(); });
   }

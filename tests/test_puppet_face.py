@@ -23,6 +23,9 @@ class FakeComfy:
     def build_img2img(name, prompt, **kw):
         calls.append(prompt); return {"init": name, "mask": kw.get("mask_name"), "prompt": prompt}
     @staticmethod
+    def build_edit(name, prompt, **kw):   # the back-hair edit: returns its input (the painted front head, green hair)
+        calls.append(prompt); return {"init": name, "mask": None, "prompt": prompt}
+    @staticmethod
     def run(nodes, out_dir):
         im = Image.open(uploads[nodes["init"]]).convert("RGB"); a = np.asarray(im).copy()
         m = np.asarray(Image.open(uploads[nodes["mask"]]).convert("L")) > 127 if nodes["mask"] else None
@@ -39,7 +42,7 @@ class FakeComfy:
         p = Path(out_dir) / f"out_{len(calls)}.png"; Image.fromarray(a).save(p); return [p]
 
 
-ppt.comfy = FakeComfy; pf.ppt = ppt
+ppt.comfy = FakeComfy; pf.ppt = ppt; pf.comfy = FakeComfy
 for sex in ("male", "female"):
     c = ppt.paint(f"human.{sex}", n=1, seed=1); ppt.approve(f"human.{sex}", c[0])
 
@@ -52,7 +55,8 @@ d = pf.out_dir("human", "hair") / h; meta = json.loads((d / "meta.json").read_te
 for v in ("front", "back"):
     lev = np.asarray(Image.open(d / f"levels_{v}.png")); assert (lev[..., 3] > 0).sum() > 500, v   # the key found hair
     assert set(np.unique(lev[..., 0][lev[..., 3] > 0])) <= set(range(5)) | {254}
-assert meta["keyed"]["front"] > 500 and "Three-quarter" in calls[-2] and "reference image" in calls[-1]
+assert meta["keyed"]["front"] > 500 and "Three-quarter" in calls[-3] and "from behind" in calls[-2] and "reference image" in calls[-1]
+assert (d / "edit_back.png").exists() and meta["keyed"]["back"] > 500   # AB2: the edit, then the guided back pass
 for f in ("prev_male_front.png", "prev_female_back.png", "head_female.png"):
     assert (d / f).exists(), f
 # the hair is cut by colour: no skin in it (the head under it stays the paint's)
