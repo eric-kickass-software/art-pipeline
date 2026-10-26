@@ -182,4 +182,6 @@ def export(race="human", size=512):
     if not doc["sexes"]:
         raise ValueError(f"{race} has no painted puppet yet (Workshop → Race → Paint).")
     (d / "puppet.json").write_text(json.dumps(doc, indent=1), encoding="utf-8")
+    from . import item_export
+    item_export.write_shared(); item_export.write_index()
     return d
