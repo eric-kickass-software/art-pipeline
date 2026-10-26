@@ -1,8 +1,10 @@
 # Hearthdelve art pipeline (`hdart`)
 
-Local, scriptable generation of the game's art: modular characters, environment tiles, monsters/props,
-item and spell icons, and spell VFX. Everything runs on this PC (RTX 4080); nothing goes to a cloud service.
-Design notes and decisions live in the vault: `Game Dev/Hearthdelve/Hearthdelve - Art Pipeline.md`.
+Local, scriptable generation of the game's art: painted 2D cutout puppets (Character Workshop), equipment
+layers for them (Item Workshop) and dungeon art sets (Dungeon Forge). Everything runs on this PC (RTX 4080); nothing goes to a cloud service.
+This README is **how to use** the tools. What they are, their status, open items and decisions live in the vault:
+`Game Dev/Hearthdelve/Hearthdelve - Art Pipeline.md` (hub) and `Game Dev/Hearthdelve/Art/` (one note per tool,
+plus the Unity handoff contract, the pipeline architecture and the asset plan).
 
 **Location:** `P:\Tools\art-pipeline`, its own git repo (moved out of the Hearthdelve repo's `Tools/ArtPipeline` on
 2026-10-12; history before that is in the Hearthdelve repo). Output goes into the Unity project at `HD_PROJECT`,
@@ -11,13 +13,6 @@ at a worktree instead. Paths like `Assets/...` below are in that project.
 Git holds only the tool and its workflow (code, specs, docs). Generated art (`sprites/`, `textures/`, `kit/`, `work/`,
 `archive/`) stays local: approved art is exported into the game project, and the rest can be thrown away or regenerated.
 
-```
-ComfyUI (FLUX.2-klein 4B + pixel LoRA, TRELLIS.2, BiRefNet)      Blender 5.2 (headless, Cycles)
-   textures ──────────────┐                                         character kit (.blend) ─► layer sheets
-   icons ─► pixelize      ├─► textures/<set>/*.png ──────────────►  tiles  ─► iso tiles + normals
-   concept ─► TRELLIS.2 ─► GLB ─────────────────────────────────►  mesh-render ─► monster/prop sprites
-                                                   numpy: vfx flipbooks, compositor, previews
-```
 
 ## Start here (picking this up in a new session)
 1. `start-art-tools.cmd` (this folder) starts **ComfyUI** (:8188) and the **Studio** (:4321), each in its own minimized
@@ -488,103 +483,15 @@ Template, so an item fitted once is reused on every build of the race.
 - Learned on the helm: a straight zone edge becomes a straight item edge (use curved zones); a soft guide or a high
   denoise lets FLUX draw the item smaller than the chibi head, so the bald skull shows around it.
 
-## Status and next steps (2026-10-11, for whoever picks this up)
-- **Dungeon:** crypt v2 approved and exported. Not done:
-  - 2D shadow casters on thin walls;
-  - archways split front/back so characters walk *through* them;
-  - P2's real board (`Presentation/Board/BoardView.cs`) doesn't use the art yet (only Prototype V does);
-  - rubble reads as plain floor;
-  - more biomes (**+ New set** copies the crypt pieces with a `board` id so Prototype V can show them).
-- **Characters:**
-  - regenerate the female front (it has a ground shadow) and redo the backs flagged `redo-back`;
-  - a relief/normal map so eyes sink and held items stand out;
-  - true-3D weapons and shields;
-  - a Unity composer for the AI kit / voxel cards (the witch test is a one-off: `Assets/Art/VisualTests/Witch/`).
-- **Open decision:** 2D vs 3D renderer before P6. Normal-mapped 2D lights work now; the voxel card test uses a 3D renderer.
-- Vault: `Game Dev/Hearthdelve/Hearthdelve - Art Pipeline.md` has the decision history and screenshots.
-
-## Target look (pixel art, low native resolution)
-Matches the reference art in Architecture §9.1 (Octopath/HD-2D sprites, GB-style characters, low-res iso rooms):
-everything is rendered at **low native resolution** and shown at an integer upscale (×3–×6).
-
-| Asset | Native size | Colour |
-|---|---|---|
-| Iso tiles | 32×16 diamond (canvas 32×64) | biome ramps (8 colours per material), gradient-mapped, inner outlines + top rims |
-| Board tokens | 32×32 cell, hero ≈ 25 px tall | palette ramps per channel (5 colours), outline |
-| Battle sprites | 48×48 cell, hero ≈ 36 px tall | same |
-| Monsters / props | 48×48 | ~14 colours |
-| Icons | 32×32 | 14 colours + outline |
-| Spell VFX | 48×48 | element ramp |
-
-Knobs: `views.*.cell` and `render.detailRange/coverage` in `character_kit.json`; `texturePixels`, `texColors`,
-`ramps` in `tiles_crypt.json`; `hdart tiles --tile 64 --smooth` brings back the higher-res look for comparison.
-
-## AI sprite kit (v3, current): FLUX draws the parts, the kit keeps them modular
-1. `uv run hdart ai-base [--bodies slim]` generates the base mannequin (front 3/4 + back 3/4) with
-   FLUX.2-klein + pixel LoRA (`sprites/ai/base/`).
-2. Every part is an **edit** of that base (`specs/ai_parts.json`: what to add). The changed pixels (tolerant
-   diff, slot area, speck cleanup) become the part, kept at 512 px in `sprites/ai/layers/`, then
-   converted to index-palette templates for **every grid resolution** (`sprites/parts/r32 … r256/`).
-   Colours are mapped to recolourable channels (hair, skin, eyes, cloth1/2, leather, metal, accent, wood,
-   magic, dark) with 5 shade steps, so palettes still apply.
-   - `uv run hdart ai-kit [--only hair.long,torso.robe]` (re)generates parts from the library
-   - `uv run hdart ai-part torso.coat --prompt "a long green coat with brass buttons"` adds one
-   - `uv run python -c "from hdart.ai_kit import reextract; reextract('slim')"` re-cuts from saved raw edits
-3. Studio: grid dropdown (32/64/128/256) and a **Generate part** panel (slot, name, prompt, seed).
-   `uv run hdart sprite-kit --res 128` bakes a resolution for Unity.
-`specs/sprite_kit.json` → `templatesOnly: true` keeps the code-drawn parts out (they're 64 px only).
-
-## Working on the sprites yourself (2D JRPG kit + Sprite Studio)
-The current character direction (2026-10-11) is **2D pixel-art sprites** in an Octopath-like JRPG style
-(64×64 cells, chibi, stubby 2 px legs that hobble), shown as a **voxel sheet**: every pixel is a voxel with a
-1×1 front and 0.25 depth. References: vault `Game Dev/Hearthdelve/References/`.
-
-1. **Studio**: `start-art-tools.cmd` (or `uv run hdart studio`) → http://127.0.0.1:4321. Pick build, parts and colours (or Randomize),
-   choose view/row to play animations, orbit the live voxel sheet, tune thickness/relief/lights, Save PNG.
-2. **Paint parts**: every part is a set of PNG layers in `sprites/parts/<body>/<part>/`, named
-   `<facing>.<mainArm>-<offArm>.<layer>.png` (facing = front/back; arm poses = down/raise/forward).
-   - Open one in Aseprite/Photoshop/GIMP, load the palette `sprites/index_palette.gpl` (or `.png`), and paint
-     **only with palette colours**: each colour means "colour channel + shade step" (e.g. `hair 3`), so the
-     hero can still be recoloured.
-   - Keep the anchors: feet on row 61, head centred near x 31; parts must line up with `body.base`.
-   - Click **Rebuild kit** in the Studio. Painted files override the code drawing; delete a file to fall back.
-   - A pose file you don't paint falls back to the `down-down` one. Legs hobble automatically (left half / right half of the canvas).
-3. `uv run hdart sprite-export [--bodies slim,broad] [--parts hair.long] [--overwrite]` regenerates templates
-   from the code drawings (`hdart/sprite_kit.py`); it never overwrites painted files unless `--overwrite`.
-4. `uv run hdart sprite-kit` bakes everything into `Assets/Art/Characters` for Unity.
-
-## Modular characters
-Every hero is a stack of **parts**, one per slot: body, face, hair, facial, head, torso, legs, feet, hands,
-back, mainhand, offhand. All parts share one rig per body type (slim, broad, short), so any combination
-works and animates together.
-
-1. `blender/build_character_kit.py` builds bodies (skin-modifier tubes), clothing shells (the same skeleton,
-   inflated), rigid parts (hair, hats, weapons bone-parented to head/hands) and procedural clips
-   (token: idle, walk × 4 directions; battle: idle, attack, cast, hurt, dead).
-2. `blender/render_character.py` renders each part **alone** with an emission-only "data" material:
-   - `*.data.png`: R = shade (form light × material texture detail), G = colour channel id, B = depth, A = coverage
-   - `*.normal.png`: camera-space normal for URP 2D lights
-3. The compositor (`hdart/compose.py`, and `CharacterComposer.cs` in Unity) picks the nearest layer per pixel
-   (depth test), maps shade onto the chosen **palette ramp** for that channel (skin, hair, eyes, cloth1,
-   cloth2, leather, metal, accent, magic…), and adds outlines and inner depth lines.
-
-So hair, faces, outfits and colours are all independent choices, and changing one is a recomposite
-(milliseconds), not a re-render. `hides` in the spec handles conflicts (a hood hides hair, a robe hides legs).
-
-**Adding a part by hand**: open `kit/character_kit.blend`, model on top of a `rig.<body>` (skin with an
-Armature modifier, or bone-parent rigid pieces), set custom properties `hd_part` and `hd_body`, assign
-materials named `hd.<channel>`, add the part to `specs/character_kit.json`, run `kit-render --parts <id>`.
-Once the kit has hand edits, never run `kit-build --force` again on it.
-
-**Adding colours**: edit `specs/palettes.json` (a `base` colour is auto-ramped; or give 5 explicit colours).
-
-## Unity side
-- `Assets/_Project/Editor/CharacterArtImport.cs`: import rules for `Assets/Art/**` (point filter, uncompressed;
-  character sheets readable and linear) and **Hearthdelve → Art → Build Character Kit Asset**.
-- `Presentation/Characters/CharacterKit.cs` + `CharacterComposer.cs`: compose a `HeroAppearance`
-  (Rules/Content) into sprites with the normal map attached as `_NormalMap`.
-- Prototype: **Hearthdelve → Prototype C → Set Up Character Creator Scene**, then Play.
-  Batch screenshots: `Unity.exe -batchmode -projectPath <proj> -executeMethod Hearthdelve.Editor.CharacterCreatorSetup.Capture -reviewOut <dir> -quit`.
+## Legacy (retired 2026-10-25)
+The first character directions are retired: the Blender modular character kit, the AI sprite kit v3, the hand-drawn
+2D JRPG kit with voxel sheets, and their Unity side (`CharacterComposer`, `CharacterKit`, `CharacterArtImport`,
+Prototype C, removed in Hearthdelve `3ca39de`). Their CLI commands (`kit-build`, `kit-render`, `sprite-kit`,
+`sprite-export`, `ai-base`, `ai-part`, `ai-kit`, `compose`) still exist, but they write into `Assets/Art/...`, which no
+Unity code reads any more. Don't run them for the game. The same goes for `tiles`, `icons`, `mesh-render` and `vfx`
+(`Assets/Art/Tiles|Icons|Monsters|VFX`), until they're moved onto the art packs (vault: `Art - Unity Handoff`).
+Their old documentation is in this file's git history (before this change) and in the vault's
+`Logs/Archive/Hearthdelve - Art Pipeline v1 (2026-10-25).md`.
 
 ## Known limits / next steps
 - Texture prompts sometimes produce a 2×2 repeat (visible cross); re-roll with `--seed` or reword.
