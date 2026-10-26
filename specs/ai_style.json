@@ -2,11 +2,11 @@
   "_doc": "Prompt descriptors for the AI sprite Workshop. Every generation = the groups below joined in order (medium, style, proportions, view, rendering, framing, world) + the build or part text. Edit them in the Workshop's Style tab. FLUX.2-klein distilled runs at CFG 1, so there are NO negative prompts: say what you want ('hard edges', 'clean outlines'), not what you don't. Research notes: vault 'Hearthdelve - Sprite Prompting'.",
   "groups": {
     "medium": {
-      "text": "Adventurer, warrior, young adult, mature, grown, sword and sorcery, cloak and daggers",
+      "text": "Adventurer, Dark Fantasy, Dungeons and Dragons, Dungeon Crawler, quasi pixel art",
       "hint": "What it is. 'pixel art sprite' is the pixel LoRA's trigger. '16-bit' = SNES-era richness; 'modern pixel art' = cleaner, more colours; '8-bit' = blocky, few colours."
     },
     "style": {
-      "text": "in the style of Octopath Traveler HD-2D sprites and Final Fantasy VI, hand-pixelled",
+      "text": "chibi, anime, hyper detailed, stylized",
       "hint": "Style references. Game names steer strongly; swap for e.g. 'Sea of Stars', 'Triangle Strategy', 'Chrono Trigger'."
     },
     "proportions": {

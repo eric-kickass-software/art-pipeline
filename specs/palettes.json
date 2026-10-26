@@ -58,7 +58,26 @@
         ]
       },
       "olive": {
-        "base": "#b38a5c"
+        "base": "#b38a5c",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.07,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0
+        },
+        "colors": [
+          "#a65639",
+          "#ad714a",
+          "#b38a5c",
+          "#bd9a6f",
+          "#c7a984"
+        ]
       },
       "brown": {
         "base": "#8d5a3b"
@@ -71,18 +90,18 @@
           "shadowHue": 0.72,
           "shadowShift": 0.12,
           "shadowSat": 0.25,
-          "shadowDark": 0.55,
+          "shadowDark": 0.12,
           "lightHue": 0.15,
           "lightShift": 0.08,
           "lightDesat": 0.3,
-          "lightLift": 0.55
+          "lightLift": 0.07
         },
         "colors": [
-          "#2a0d0b",
-          "#442018",
+          "#531a15",
+          "#582a1f",
           "#5e3a2a",
-          "#94664f",
-          "#cb987c"
+          "#6e4b3a",
+          "#7e5e4d"
         ],
         "races": [
           "human"
