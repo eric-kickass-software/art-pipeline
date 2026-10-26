@@ -99,7 +99,7 @@ Git holds only the tool and its workflow (code, specs, docs). Generated art (`sp
 | `hdart vfx` | Procedural spell flipbooks (`specs/spells.json`) | `Assets/Art/VFX/` |
 
 | `hdart studio [--no-browser]` | The web tools above (or use `start-art-tools.cmd`) | http://127.0.0.1:4321 |
-| `hdart backup [--dry-run] [--dest dir]` | Copies state, approved art and specs to a dated folder (see Config, tests, backups) | `P:Archivert-pipeline-backups<date_time>` |
+| `hdart backup [--dry-run] [--dest dir]` | Copies state, approved art and specs to a dated folder (see Config, tests, backups) | `P:\Archive\art-pipeline-backups\<date_time>\` |
 | `hdart ai-base` / `ai-part` / `ai-kit` | AI character kit from the CLI (the Workshop is the curated way) | `sprites/ai/` |
 | `hdart dungeon-export [set]` | Approved dungeon pieces → Unity (format 2, with normal maps) | `Assets/StreamingAssets/Art/Dungeon/<set>/` |
 | `hdart puppet-export [race] [--size 512]` | A race's painted puppet (approved Paint per sex, else the newest), its hair and face sets and its skin/hair/eye ramps → Unity, each image with an index map (R = cel level, G = channel 1 skin / 2 hair / 3 eyes, A = mask) for recolouring (`hdart/unity_export.py`) | `Assets/StreamingAssets/Art/Puppets/<race>/` |
