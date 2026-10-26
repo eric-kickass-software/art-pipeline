@@ -30,8 +30,10 @@ default = "hearthdelve"
 path = 'P:\Projects\Unity\Hearthdelve'
 unity = 'C:\Program Files\Unity\Hub\Editor\6000.3.26f1\Editor\Unity.exe'
 contract = "ArtContract"
+content = "Assets/StreamingAssets/Content"   # the game's content JSON (item ids, visual.ramps)
 
 [projects.hearthdelve.exports]
+art = "Assets/StreamingAssets/Art"   # index.json, ramps.json, channels.json
 puppets = "Assets/StreamingAssets/Art/Puppets"
 dungeon = "Assets/StreamingAssets/Art/Dungeon"
 items = "Assets/StreamingAssets/Art/Items"

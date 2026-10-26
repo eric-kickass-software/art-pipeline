@@ -23,7 +23,7 @@
       "key": "#d020d0",
       "word": "magenta",
       "channel": 7,
-      "group": "cloth"
+      "group": "accent"
     }
   },
   "prompt": "{style}. One {body}, full body, three-quarter view facing left, seen slightly from above, standing in an A-pose, now wearing {item}. {materials} Clean dark outlines; the same face, head, skin and body, nothing else added. On a pure white background.",
@@ -31,7 +31,7 @@
   "prompt_held": "{style}. A single {item} on its own, upright and vertical, pointing straight up, the handle at the bottom, seen from the side, centred, game item art. {materials} Clean dark outlines, on a pure white background.",
   "material_text": "The {name} parts are one flat vivid pure {word} colour (a colour key), shaded only with darker and lighter {word}.",
   "items": {
-    "item.trousers": {
+    "item.cloth_trousers": {
       "slot": "legs",
       "depth": 1,
       "materials": [
@@ -56,7 +56,7 @@
         }
       ]
     },
-    "item.boots": {
+    "item.leather_boots": {
       "slot": "feet",
       "depth": 2,
       "materials": [
@@ -77,7 +77,7 @@
         }
       ]
     },
-    "item.tunic": {
+    "item.cloth_tunic": {
       "slot": "shirt",
       "depth": 3,
       "materials": [
@@ -118,9 +118,10 @@
             0.45
           ]
         }
-      ]
+      ],
+      "item": "item.iron_breastplate"
     },
-    "item.helm": {
+    "item.iron_helm": {
       "slot": "head",
       "depth": 7,
       "materials": [
@@ -154,7 +155,7 @@
         }
       ]
     },
-    "item.sword": {
+    "item.iron_sword": {
       "slot": "mainhand",
       "kind": "held",
       "materials": [
@@ -169,7 +170,7 @@
       "grip_angle": -45,
       "flip": false
     },
-    "item.greaves": {
+    "item.iron_greaves": {
       "slot": "legs",
       "depth": 1,
       "materials": [
@@ -182,7 +183,7 @@
       "complete": true
     },
     "item.breastplate": {
-      "slot": "shirt",
+      "slot": "chest",
       "depth": 3,
       "materials": [
         "cloth"
@@ -191,9 +192,10 @@
       "zones": [],
       "text": "Shiny steel breastplate, fantasy, medieval,",
       "fit": "shared",
-      "complete": true
+      "complete": true,
+      "item": "item.iron_breastplate"
     },
-    "item.cape": {
+    "item.cloth_cape": {
       "slot": "back",
       "depth": 3,
       "materials": [
@@ -205,7 +207,7 @@
       "fit": "shared",
       "complete": true
     },
-    "item.shield": {
+    "item.kite_shield": {
       "slot": "offhand",
       "depth": 8,
       "materials": [
@@ -227,6 +229,48 @@
         0.439
       ],
       "held_as": "shield"
+    }
+  },
+  "_doc_game": "Game items (R-002): a Workshop piece (an entry of items) belongs to the game item `item` (default: its own id); several pieces can make one game item (item.iron_breastplate = breastplate + pauldrons). slot is one of the game's art slots (requirements.json). game_items: what an intake file says about a NEW game item (one the game doesn't have yet): name, kind, slot (game slot), weaponType, text (one line for the game), materials (material -> default ramp id). Missing fields are derived from the pieces; items the game already has take all of this from the game's content.",
+  "game_items": {
+    "item.kite_shield": {
+      "name": "Kite Shield",
+      "kind": "weapon",
+      "slot": "off",
+      "weaponType": "shield",
+      "text": "A tall steel kite shield over a leather-backed frame, flat on top and pointed below.",
+      "materials": {
+        "metal": "metal.steel",
+        "leather": "leather.brown"
+      }
+    },
+    "item.cloth_trousers": {
+      "name": "Cloth Trousers",
+      "kind": "armor",
+      "slot": "legs",
+      "text": "Loose cloth trousers down to the shin, light and quiet.",
+      "materials": {
+        "cloth": "cloth.brown"
+      }
+    },
+    "item.cloth_tunic": {
+      "name": "Cloth Tunic",
+      "kind": "armor",
+      "slot": "body",
+      "text": "A simple cloth tunic with half sleeves, belted at the hips.",
+      "materials": {
+        "cloth": "cloth.green"
+      }
+    },
+    "item.iron_breastplate": {
+      "name": "Iron Breastplate",
+      "kind": "armor",
+      "slot": "body",
+      "text": "A rounded iron breastplate with matching plate pauldrons.",
+      "materials": {
+        "metal": "metal.iron",
+        "cloth": "cloth.grey"
+      }
     }
   }
 }

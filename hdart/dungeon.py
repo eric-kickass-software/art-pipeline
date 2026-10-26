@@ -1144,6 +1144,8 @@ def export(name, tiles=(32, 64)):
             entry["variants"].append(var)
     root.mkdir(parents=True, exist_ok=True)
     (root / "set.json").write_text(json.dumps(meta, indent=1) + "\n", encoding="utf-8")
+    from . import item_export
+    item_export.write_index()
     return root
 
 

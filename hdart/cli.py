@@ -279,6 +279,29 @@ def cmd_puppet_export(a):
     print(unity_export.export(a.race, a.size))
 
 
+def cmd_item_export(a):
+    from . import item_export as ie
+    r = ie.export(a.items or None, a.race, a.size)
+    for gid, e in r["exported"].items():
+        print(f"{gid}: {', '.join(e['builds'])}" + (" + intake" if e["intake"] else ""))
+        for w in e["warnings"]:
+            print(f"  ! {w}")
+    for gid, why in r["skipped"].items():
+        print(f"skipped {why}" if why.startswith(gid) else f"skipped {gid}: {why}")
+    print(f"index.json: {r['index']} packs")
+
+
+def cmd_export(a):
+    from . import item_export as ie, unity_export
+    if not a.check:   # everything: the race's puppet, then every game item with approved art
+        print(unity_export.export(a.race)); cmd_item_export(argparse.Namespace(items=None, race=a.race, size=512))
+    problems = ie.check()
+    for line in problems or [f"check: ok ({ie.art_root()})"]:
+        print(line)
+    if problems:
+        raise SystemExit(1)
+
+
 def cmd_dungeon_capture(a):
     from . import dungeon
     for f in dungeon.capture(a.set):
@@ -404,6 +427,16 @@ def main(argv=None):
     pe.add_argument("race", nargs="?", default="human")
     pe.add_argument("--size", type=int, default=512, help="canvas px (the paint's 1024 px rest pose scaled to this)")
     pe.set_defaults(fn=cmd_puppet_export)
+
+    ie_ = sub.add_parser("item-export", help="export game items (Item Workshop pieces) as art packs + intake files for new ids")
+    ie_.add_argument("items", nargs="*", help="game item ids (default: every one with approved art)")
+    ie_.add_argument("--race", default="human"); ie_.add_argument("--size", type=int, default=512)
+    ie_.set_defaults(fn=cmd_item_export)
+
+    ex = sub.add_parser("export", help="export the puppet and every item to the game; --check only validates what's there")
+    ex.add_argument("--check", action="store_true", help="validate Art/ (manifests, files, index maps, index.json) and intake files")
+    ex.add_argument("--race", default="human")
+    ex.set_defaults(fn=cmd_export)
 
     dc = sub.add_parser("dungeon-capture", help="export a dungeon set and screenshot Prototype V with it (Unity batch)")
     dc.add_argument("set", nargs="?", default="crypt")

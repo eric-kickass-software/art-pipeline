@@ -174,8 +174,8 @@ def workshop_post(st, action, b):
             return pf.previews(b["race"], b["kind"], b["id"], b.get("ramp"), save=False)
         raise ValueError(f"unknown action {action}")
     if action.startswith("items/"):   # Item Workshop: every action goes through puppet_items.api (reloaded per request)
-        from . import puppet, puppet_template, puppet_paint, puppet_face, puppet_items
-        for mod in (puppet, puppet_template, puppet_paint, puppet_face, puppet_items):
+        from . import config, puppet, puppet_template, puppet_paint, puppet_face, puppet_items, contract, unity_export, item_export
+        for mod in (config, puppet, puppet_template, puppet_paint, puppet_face, puppet_items, contract, unity_export, item_export):
             importlib.reload(mod)
         return puppet_items.api(action[6:], b)
     if action.startswith("paint/"):   # puppet Paint step (Races) and Parts editor

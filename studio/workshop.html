@@ -390,7 +390,10 @@
             <span class="hint" id="itFits"></span></div>
           <div class="itform">
             <label>Id</label><input id="itId">
-            <label>Slot</label><input id="itSlot" placeholder="torso, legs, feet, head, shoulders, hands, mainhand…">
+            <label>Slot</label><div class="row" style="margin:0"><select id="itSlot" style="width:160px"></select>
+              <span class="hint" id="itSlotHint">the game's layer slots (ArtContract/requirements.json)</span></div>
+            <label>Game item</label><div class="row" style="margin:0"><input id="itGame" list="itGameIds" style="width:240px" placeholder="(this piece's own id)">
+              <datalist id="itGameIds"></datalist><span class="hint" id="itGameHint"></span></div>
             <label>Kind</label><select id="itKind"><option value="">fitted (painted on the body)</option><option value="held">held (attached to a hand)</option></select>
             <label>Fit</label><select id="itFit"><option value="shared">shared: one fit for every build</option><option value="per_sex">per sex: a male and a female fit (gender variant)</option></select>
             <label>Description</label><textarea id="itText" rows="2" placeholder="what FLUX paints, e.g. a simple cloth tunic with sleeves to the mid forearm"></textarea>
@@ -402,13 +405,16 @@
               <label><input type="checkbox" id="itClipHair" style="width:auto"> clips the hair</label>
               <label><input type="checkbox" id="itComplete" style="width:auto"> FLUX pass for hidden joint areas</label></div>
             <label class="itheld">Held</label><div class="row itheld" style="margin:0"><label>as</label><select id="itHeldAs" style="width:110px" title="picks the held prompt (Prompts below) and the default grip point">
-                <option value="weapon">weapon</option><option value="shield">shield</option></select><label>hand</label><select id="itHand" style="width:150px"><option value="armB">armB (near hand)</option><option value="armA">armA (far hand)</option></select>
+                <option value="weapon">weapon</option><option value="shield">shield</option><option value="focus">focus</option></select><label>hand</label><select id="itHand" style="width:150px"><option value="armB">armB (near hand)</option><option value="armA">armA (far hand)</option></select>
               <label>length</label><input id="itLength" type="number" step="0.02" style="width:70px" title="the weapon's height as a fraction of the figure's">
               <label>grip angle°</label><input id="itGripAngle" type="number" step="5" style="width:70px" title="turns the weapon in the fist (counter-clockwise in the front view)">
               <input id="itGripAngleR" type="range" min="-180" max="180" step="1" style="width:160px" title="grip angle: or drag on the stage in the Grip card">
               <label><input type="checkbox" id="itFlip" style="width:auto"> flip (tip the other way)</label></div>
           </div>
-          <div class="row"><button class="primary" id="itSave">Save item</button><span class="hint" id="itSaved"></span></div>
+          <div class="row"><button class="primary" id="itSave">Save item</button><span class="hint" id="itSaved"></span>
+            <span style="flex:1"></span><button id="itExport" title="hdart item-export: the game item's pack (all its pieces' approved art), Art/index.json, ramps.json, and an intake file if the game doesn't have the item yet">Export to game</button>
+            <button id="itExportAll" title="every game item with approved art">Export all</button></div>
+          <pre class="hint" id="itExportOut" style="white-space:pre-wrap;margin:0"></pre>
         </div>
 
         <div class="card itfit" id="zeCard"><div class="row"><h2 style="margin:0">Zone</h2>
@@ -467,6 +473,7 @@
               <label>Hidden areas</label><textarea id="ipComplete" rows="3"></textarea>
               <label>Held</label><textarea id="ipHeld" rows="2"></textarea>
               <label>Held (shield)</label><textarea id="ipHeldShield" rows="2"></textarea>
+              <label>Held (focus)</label><textarea id="ipHeldFocus" rows="2"></textarea>
               <label>Material text</label><input id="ipMat">
             </div>
             <div class="row"><button id="ipSave">Save templates</button></div></details>
@@ -1845,14 +1852,18 @@ function itRenderList() {
   const items = IT.st.spec.items, slots = {};
   for (const [id, d] of Object.entries(items)) (slots[d.slot || "other"] ??= []).push(id);
   $("itList").innerHTML = Object.entries(slots).map(([s, ids]) => `<div class="hint" style="margin-top:8px;text-transform:uppercase;letter-spacing:1px">${s}</div>` +
-    ids.map(id => `<div class="tpl ${id === IT.sel ? "on" : ""}" data-it="${id}"><span style="flex:1">${id.replace(/^item\./, "")}${items[id].kind === "held" ? ' <span class="hint">held</span>' : ""}${items[id].fit === "per_sex" ? ' <span class="hint">♂♀</span>' : ""}</span>
+    ids.map(id => `<div class="tpl ${id === IT.sel ? "on" : ""}" data-it="${id}"><span style="flex:1">${id.replace(/^item\./, "")}${items[id].item && items[id].item !== id ? ` <span class="hint">→ ${items[id].item.replace(/^item\./, "")}</span>` : ""}${items[id].kind === "held" ? ' <span class="hint">held</span>' : ""}${items[id].fit === "per_sex" ? ' <span class="hint">♂♀</span>' : ""}</span>
       <span style="color:var(--ok)">${itFitsText(id)}</span> <span class="hint">${(IT.st.candidates[id] || []).length}</span></div>`).join("")).join("");
   $("itList").querySelectorAll("[data-it]").forEach(r => r.onclick = () => { IT.sel = r.dataset.it; ZE.loaded = null; itRenderList(); itRenderForm(); itRenderCands(); itRenderPrompts(); zeLoad(); });
 }
 function itRenderForm() {
   const d = itDef(); if (!IT.sel) return;
   $("itTitle").textContent = IT.sel; $("itFits").textContent = itFitsText(IT.sel) ? `approved: ${itFitsText(IT.sel)}` : "nothing approved yet";
-  $("itId").value = IT.sel; $("itSlot").value = d.slot || ""; $("itKind").value = d.kind || ""; $("itFit").value = d.fit || "shared";
+  const slots = IT.st.vocab.artSlots, cur = d.slot || "";
+  $("itSlot").innerHTML = (slots.includes(cur) || !cur ? "" : `<option value="${cur}">${cur} (not a game slot)</option>`) + slots.map(s => `<option>${s}</option>`).join("");
+  $("itSlotHint").textContent = IT.st.vocab.found ? `the game's layer slots (requirements.json ${IT.st.vocab.revision || ""})` : "no requirements.json found: built-in slots";
+  $("itGame").value = d.item || ""; $("itGameIds").innerHTML = IT.st.vocab.known.map(i => `<option>${i}</option>`).join(""); itGameHint();
+  $("itId").value = IT.sel; $("itSlot").value = cur; $("itKind").value = d.kind || ""; $("itFit").value = d.fit || "shared";
   $("itText").value = d.text || ""; $("itDepth").value = d.depth ?? 3; $("itBulk").value = d.bulk ?? 6;
   $("itClipHair").checked = (d.clips || []).includes("hair"); $("itComplete").checked = d.complete !== false;
   $("itHand").value = d.hand || "armB"; $("itLength").value = d.length ?? 0.48; $("itGripAngle").value = $("itGripAngleR").value = d.grip_angle ?? 0;
@@ -1866,7 +1877,7 @@ function itRenderForm() {
 }
 $("itSave").onclick = guard(async () => {
   const held = $("itKind").value === "held", num = (id) => $(id).value === "" ? null : +$(id).value;
-  const def = { slot: $("itSlot").value.trim(), kind: held ? "held" : null, fit: $("itFit").value, text: $("itText").value.trim(),
+  const def = { slot: $("itSlot").value, item: $("itGame").value.trim() || null, kind: held ? "held" : null, fit: $("itFit").value, text: $("itText").value.trim(),
     materials: [...document.querySelectorAll("[data-mat]")].filter(c => c.checked).map(c => c.dataset.mat), depth: num("itDepth") };
   if (held) Object.assign(def, gripDef());
   else Object.assign(def, { bulk: num("itBulk"), clips: $("itClipHair").checked ? ["hair"] : null, complete: $("itComplete").checked });
@@ -1874,11 +1885,28 @@ $("itSave").onclick = guard(async () => {
   IT.st = await itApi("item/save", { item: id, old_id: IT.sel, def }); IT.sel = id;
   $("itSaved").textContent = "saved"; setTimeout(() => $("itSaved").textContent = "", 1500); await itRefresh();
 });
+function itGameHint() {
+  const gid = $("itGame").value.trim() || IT.sel, g = IT.st.game[gid];
+  const pieces = g ? g.pieces.map(p => p.replace(/^item\./, "")).join(" + ") : "";
+  $("itGameHint").innerHTML = !g ? (gid === IT.sel ? "" : `${gid}: save to make it a game item`)
+    : (g.exists ? `<span style="color:var(--ok)">in the game</span>: art only` : `<b>new</b>: the export writes an intake file`) +
+      ` · ${g.slot || "?"}${g.weaponType ? " / " + g.weaponType : ""} · ${pieces}` +
+      (g.problems.length ? ` · <span style="color:var(--bad, #e05050)">${g.problems.join("; ")}</span>` : "");
+}
+$("itGame").oninput = () => itGameHint();
+async function itExport(items) {
+  $("itExportOut").textContent = "exporting…";
+  const r = await itApi("export", { items });
+  $("itExportOut").textContent = [...Object.entries(r.exported).map(([g, e]) => `✓ ${g}: ${e.builds.join(", ")}${e.intake ? " + intake file" : ""}${e.warnings.map(w => "\n  ! " + w).join("")}`),
+    ...Object.entries(r.skipped).map(([g, why]) => `✗ ${g}: ${why}`), `index.json: ${r.index} packs`].join("\n");
+}
+$("itExport").onclick = guard(async () => itExport([itDef().item || IT.sel]));
+$("itExportAll").onclick = guard(async () => itExport(null));
 $("itNew").onclick = guard(async () => {
   let id = $("itNewId").value.trim(); if (!id) throw new Error("Type an id first, e.g. item.leather_vest");
   if (!id.startsWith("item.")) id = "item." + id;
   if (IT.st.spec.items[id]) throw new Error(`${id} already exists`);
-  await itApi("item/save", { item: id, def: { slot: "torso", text: "", materials: ["cloth"], depth: 3, bulk: 6 } });
+  await itApi("item/save", { item: id, def: { slot: "shirt", text: "", materials: ["cloth"], depth: 3, bulk: 6 } });
   IT.sel = id; $("itNewId").value = ""; ZE.loaded = null; await itRefresh(); zeLoad();
 });
 
@@ -1887,7 +1915,7 @@ async function itRenderPrompts() {
   const sp = IT.st.spec;
   if (document.activeElement?.closest?.("details") == null) {
     $("ipFront").value = sp.prompt || ""; $("ipBack").value = sp.prompt_back || ""; $("ipComplete").value = sp.prompt_complete || "";
-    $("ipHeld").value = sp.prompt_held || ""; $("ipHeldShield").value = sp.prompt_held_shield || ""; $("ipMat").value = sp.material_text || ""; }
+    $("ipHeld").value = sp.prompt_held || ""; $("ipHeldShield").value = sp.prompt_held_shield || ""; $("ipHeldFocus").value = sp.prompt_held_focus || ""; $("ipMat").value = sp.material_text || ""; }
   if (!IT.sel || !$("itBuild").value) return;
   try { const P = await itApi("prompts", { item: IT.sel, build: $("itBuild").value });
     $("itPrompt").textContent = itHeld() ? `Held: ${P.held}` : `Front: ${P.front}\n\nBack (front as reference): ${P.back}` +
@@ -1896,7 +1924,7 @@ async function itRenderPrompts() {
 $("itBuild").onchange = () => itRenderPrompts();
 $("ipSave").onclick = guard(async () => {
   await itApi("spec/save", { prompts: { prompt: $("ipFront").value, prompt_back: $("ipBack").value, prompt_complete: $("ipComplete").value,
-    prompt_held: $("ipHeld").value, prompt_held_shield: $("ipHeldShield").value, material_text: $("ipMat").value } }); await itRefresh(); });
+    prompt_held: $("ipHeld").value, prompt_held_shield: $("ipHeldShield").value, prompt_held_focus: $("ipHeldFocus").value, material_text: $("ipMat").value } }); await itRefresh(); });
 $("itGen").onclick = guard(async () => {
   if (!itHeld() && ZE.dirty) throw new Error("Save the zone first (or undo your strokes).");
   if (itHeld() && ($("itHeldAs").value !== (itDef().held_as || "weapon") || $("itText").value.trim() !== (itDef().text || "")))

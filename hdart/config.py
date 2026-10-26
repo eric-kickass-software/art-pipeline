@@ -65,11 +65,12 @@ class Project:
     name: str
     path: Path
     contract: Path = None
+    content: Path = None
     unity: Path = None
     exports: dict = field(default_factory=dict)
 
     def export(self, kind):
-        """The export root of one kind of art (puppets, dungeon, items, legacy) in this project."""
+        """The export root of one kind of art (art, puppets, dungeon, items, legacy) in this project."""
         if kind not in self.exports:
             raise KeyError(f"project {self.name} has no '{kind}' export path in config.toml")
         return self.path / self.exports[kind]
@@ -88,5 +89,5 @@ def project(name=None):
         raise KeyError(f"no project profile '{name}' in config.toml")
     path = Path(os.environ["HD_PROJECT"]) if os.environ.get("HD_PROJECT") and name == profile() else Path(p["path"])
     unity = os.environ.get("HD_UNITY") or p.get("unity")
-    return Project(name, path, path / p["contract"] if p.get("contract") else None, Path(unity) if unity else None,
-                   dict(p.get("exports", {})))
+    return Project(name, path, path / p["contract"] if p.get("contract") else None, path / p["content"] if p.get("content") else None,
+                   Path(unity) if unity else None, dict(p.get("exports", {})))

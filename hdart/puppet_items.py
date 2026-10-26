@@ -224,7 +224,8 @@ def prompts(race, build, item_id, doc=None):
     mats = " ".join(doc["material_text"].replace("{name}", "metal" if m == "metal" else m).replace("{word}", doc["materials"][m]["word"])
                     for m in it["materials"])
     fill = lambda t: t.replace("{style}", style).replace("{body}", body).replace("{item}", it["text"]).replace("{materials}", mats)
-    held = doc.get("prompt_held_shield", PROMPT_HELD_SHIELD) if it.get("held_as") == "shield" else doc["prompt_held"]
+    held = {"shield": doc.get("prompt_held_shield", PROMPT_HELD_SHIELD), "focus": doc.get("prompt_held_focus", PROMPT_HELD_FOCUS)
+            }.get(it.get("held_as"), doc["prompt_held"])
     # an item drawn alone gets the style without the body proportions (chibi, stubby legs): with them FLUX puts a little
     # character behind a shield
     held_style = ppt.style_text({"style_groups": doc.get("held_style_groups", ["style", "rendering"])})
@@ -243,6 +244,11 @@ PROMPT_HELD_SHIELD = ("{style}. A single {item} on its own, seen straight from t
                       "upright, its whole front face visible, centred, game item art. Only the shield itself: no handle, no "
                       "hilt, no grip, no pole, nothing sticking out below or behind it, no hand, no arm. {materials} "
                       "Clean dark outlines, on a pure white background.")
+
+
+PROMPT_HELD_FOCUS = ("{style}. A single {item} on its own, a small object held in one hand (a tome, an orb, a holy symbol, a "
+                     "charm), seen straight from the front, face-on, upright, centred, game item art. Only the object itself: "
+                     "no hand, no arm. {materials} Clean dark outlines, on a pure white background.")
 
 
 PROMPT_COMPLETE = ("{style}. A parts sheet for 2D cutout animation: {item}, cut into its separate pieces (body, sleeves, "
@@ -493,7 +499,7 @@ def held_frame(doc, it, sp, view, parts, img, lev_img, grip=None):
         gx, gy = it["grip_at"][0] * W_, it["grip_at"][1] * H_
         if view == "back":   # the image is mirrored for the back view
             gx = W_ - gx
-    elif it.get("held_as") == "shield":   # the strap behind its middle
+    elif it.get("held_as") in ("shield", "focus"):   # held face-on: the strap / the palm behind its middle
         gy, gx = (ys.min() + ys.max()) / 2, (xs.min() + xs.max()) / 2
     else:
         g = a & (lev_img[..., 1] == doc["materials"]["leather"]["channel"]) & (lev_img[..., 0] < 254)   # not the outline
@@ -729,12 +735,14 @@ def rekey(race, item_id, cid, complete=False):
 # ----------------------------------------------------------------------------- wearing items
 
 def colour(lev, ramps, doc=None):
-    """A levels map coloured with one ramp per material ({material: ramp name}; default the group's first)."""
+    """A levels map coloured with one ramp per material ({material: ramp name or id like metal.iron}; default the
+    group's first)."""
     doc = doc or spec(); out = np.zeros(lev.shape, np.uint8); a = lev[..., 3] > 127
     for m, e in doc["materials"].items():
         sel = a & (lev[..., 1] == e["channel"]) & (lev[..., 0] < 254)
         if sel.any():
-            pal = np.array(pf.group_ramp(e["group"], (ramps or {}).get(m)), np.uint8)
+            r = (ramps or {}).get(m)
+            pal = np.array(pf.group_ramp(e["group"], r.split(".", 1)[1] if r and r.startswith(e["group"] + ".") else r), np.uint8)
             out[sel, :3] = pal[np.clip(lev[..., 0][sel], 0, len(pal) - 1)]
     out[a & (lev[..., 0] == 254), :3] = ppt.LINE; out[..., 3] = np.where(a, 255, 0)
     return out
@@ -910,32 +918,45 @@ def candidates(race, item_id):
 
 def state(race):
     from . import workshop as ws
+    from . import contract, item_export as ie
     doc = spec(); st = load_state(race); pal = ws.palettes_doc()["groups"]
-    doc.setdefault("prompt_held_shield", PROMPT_HELD_SHIELD)
+    doc.setdefault("prompt_held_shield", PROMPT_HELD_SHIELD); doc.setdefault("prompt_held_focus", PROMPT_HELD_FOCUS)
+    v = contract.vocab(); game = contract.game_items()
     return {"spec": doc, "approved": st["approved"], "builds": _builds(race),
             "candidates": {i: candidates(race, i) for i in doc["items"]},
             "masks": {i: sorted(f.name[len(i) + 1:-4] for f in ZONES.glob(f"{i}.*.png")) for i in doc["items"]} if ZONES.exists() else {},
             "ramps": {m: list(pal.get(e["group"], {})) for m, e in doc["materials"].items()},
             "hair": ws.load_state()["builds"].get(f"{race}.unisex", {}).get("face_sets", {}).get("hair", []),
-            "hair_ramps": list(pal.get("hair", {})), "grips": grip_state(race), "grip_spec": grip_spec()}
+            "hair_ramps": list(pal.get("hair", {})), "grips": grip_state(race), "grip_spec": grip_spec(),
+            "vocab": {"artSlots": contract.art_slots(v), "heldAs": list(contract.HELD_AS), "found": v["found"],
+                      "revision": v["revision"], "known": sorted(set(game) | set(v["wanted"]))},
+            "game": {g: ie.info(g, doc, v, game) for g in ie.game_ids(doc)}}
 
 
 ITEM_KEYS = {"slot": str, "kind": str, "text": str, "materials": list, "depth": (int, float), "bulk": (int, float),
              "clips": list, "fit": str, "hand": str, "length": (int, float), "tilt": (int, float), "zones": list,
              "denoise": (int, float), "complete": bool, "cover": bool, "guide": (int, float),
-             "grip_angle": (int, float), "flip": bool, "grip_at": list, "held_as": str}
+             "grip_angle": (int, float), "flip": bool, "grip_at": list, "held_as": str, "item": str}
+
+
+def game_id(piece_id, it):
+    """The game item a Workshop piece belongs to (several pieces can make one item: breastplate + pauldrons)."""
+    return it.get("item") or piece_id
 
 
 def save_item(item_id, d, old_id=None):
     """Create / update an item definition in specs/items.json (Item Workshop: item settings)."""
-    doc = spec()
-    if not item_id.startswith("item.") or not all(c.isalnum() or c in "._-" for c in item_id):
-        raise ValueError("an item id looks like item.name (letters, digits, . _ -)")
+    from . import contract
+    doc = spec(); voc = contract.vocab()
+    if item_id not in doc["items"] or (old_id and old_id != item_id):   # new names follow the game's id rule (R-002)
+        bad = contract.id_problem(item_id, voc)
+        if bad:
+            raise ValueError(bad)
     if old_id and old_id != item_id:
         if item_id in doc["items"]:
             raise ValueError(f"{item_id} already exists")
         doc["items"][item_id] = doc["items"].pop(old_id)
-    it = dict(doc["items"].get(item_id, {"slot": "torso", "depth": 3, "materials": ["cloth"], "bulk": 6, "zones": []}))
+    it = dict(doc["items"].get(item_id, {"slot": "shirt", "depth": 3, "materials": ["cloth"], "bulk": 6, "zones": []}))
     for k, v in d.items():
         if k not in ITEM_KEYS:
             continue
@@ -947,8 +968,14 @@ def save_item(item_id, d, old_id=None):
     bad = [m for m in it.get("materials", []) if m not in doc["materials"]]
     if bad or not it.get("materials"):
         raise ValueError(f"materials must be some of {list(doc['materials'])}")
-    if it.get("held_as", "weapon") not in ("weapon", "shield"):
-        raise ValueError("held_as is weapon or shield")
+    if it.get("held_as", "weapon") not in contract.HELD_AS:
+        raise ValueError(f"held_as is one of {', '.join(contract.HELD_AS)}")
+    if it.get("slot") not in contract.art_slots(voc):   # the game's layer slots (R-001)
+        raise ValueError(f"slot must be one of the game's art slots: {', '.join(contract.art_slots(voc))}")
+    if it.get("item"):
+        bad = contract.id_problem(it["item"], voc)
+        if bad:
+            raise ValueError(bad)
     if it.get("fit", "shared") not in ("shared", "per_sex"):
         raise ValueError("fit is shared or per_sex")
     doc["items"][item_id] = it
@@ -958,12 +985,12 @@ def save_item(item_id, d, old_id=None):
 
 def save_prompts(d):
     doc = spec()
-    for k in ("prompt", "prompt_back", "prompt_held", "prompt_held_shield", "prompt_complete", "material_text"):
+    for k in ("prompt", "prompt_back", "prompt_held", "prompt_held_shield", "prompt_held_focus", "prompt_complete", "material_text"):
         if k in d:
             if not isinstance(d[k], str) or not d[k].strip():
                 raise ValueError(f"{k} can't be empty")
             doc[k] = d[k]
-    for k in ("prompt", "prompt_back", "prompt_held", "prompt_held_shield", "prompt_complete"):
+    for k in ("prompt", "prompt_back", "prompt_held", "prompt_held_shield", "prompt_held_focus", "prompt_complete"):
         if k in doc and "{item}" not in doc[k]:
             raise ValueError(f"{k} must contain {{item}}")
     _write_spec(doc)
@@ -1403,6 +1430,9 @@ def api(action, b):
         return layer_save(race, b["item"], b["id"], b["view"], b["layers"])
     if action == "layer_revert":
         return layer_revert(race, b["item"], b["id"])
+    if action == "export":   # pack + layers (+ intake for new ids) of game items into the game (R-003, R-004)
+        from . import item_export as ie
+        return ie.export(b.get("items") or None, race)
     if action == "outfit":
         return outfit(race, b["build"], b.get("items", []), b.get("ramps"), b.get("hair"), b.get("hair_ramp"),
                       b.get("walk", True), b.get("cids"))

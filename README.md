@@ -47,7 +47,8 @@ Git holds only the tool and its workflow (code, specs, docs). Generated art (`sp
 ## Config, tests, backups
 - **`config.toml`** (git) holds every setting: ComfyUI URL and timeout, model file names, the Blender exe, the data
   root (where `sprites/`, `work/`, `archive/` live; empty = this folder), the backup folder, and a **profile per
-  project** (path, Unity exe, contract folder, export roots for puppets / dungeon / items / legacy). Machine-specific
+  project** (path, Unity exe, contract folder, content folder, export roots for art / puppets / dungeon / items /
+  legacy). Machine-specific
   overrides go in `config.local.toml` (git-ignored, same keys). Env vars beat both: `HD_PROJECT`, `HD_PROFILE`,
   `HD_COMFY_URL`, `HD_DATA`, `HD_BLENDER`, `HD_UNITY`. Code reads it through `hdart/config.py` when it needs a value.
 - **Tests:** `uv run python tests/run_all.py` (or one file: `uv run python tests/test_comfy.py`), ~10 min. No GPU:
@@ -113,6 +114,8 @@ Git holds only the tool and its workflow (code, specs, docs). Generated art (`sp
 | `hdart ai-base` / `ai-part` / `ai-kit` | AI character kit from the CLI (the Workshop is the curated way) | `sprites/ai/` |
 | `hdart dungeon-export [set]` | Approved dungeon pieces → Unity (format 2, with normal maps) | `Assets/StreamingAssets/Art/Dungeon/<set>/` |
 | `hdart puppet-export [race] [--size 512]` | A race's painted puppet (approved Paint per sex, else the newest), its hair and face sets and its skin/hair/eye ramps → Unity, each image with an index map (R = cel level, G = channel 1 skin / 2 hair / 3 eyes, A = mask) for recolouring (`hdart/unity_export.py`) | `Assets/StreamingAssets/Art/Puppets/<race>/` |
+| `hdart item-export [ids] [--race human] [--size 512]` | Game items (Item Workshop pieces, approved) → art packs, `Art/index.json`, `ramps.json`, `channels.json`, and an intake file per id the game doesn't have yet (`hdart/item_export.py`; see "Game items and export") | `Assets/StreamingAssets/Art/Items/<id>/`, `ArtContract/intake/items/<id>.json` |
+| `hdart export [--check]` | Puppet + every item; `--check` only validates `Art/` (manifests, files, index maps, `index.json` = the packs on disk) and the intake files, exit 1 on a problem | — |
 | `hdart dungeon-capture [set]` | Export + Prototype V batch screenshots (`-lightTour` frames via the Unity method) | `work/protov/` |
 
 `work/` is scratch (git-ignored). ComfyUI must be running for `textures`, `icons`, `mesh` and any generation.
@@ -455,7 +458,7 @@ state (approvals): `sprites/ai/items/<race>/state.json`.
 An item is a set of overlay layers, one per Template part it covers. Every build of a race is painted on the one shared
 Template, so an item fitted once is reused on every build of the race.
 - **Tabs:** Items, Outfit, Layers.
-- **Items tab:** the catalogue by slot (✓ = approved, ♂/♀ per sex); item settings (slot, kind fitted/held, fit,
+- **Items tab:** the catalogue by slot (✓ = approved, ♂/♀ per sex; `→ x` = part of game item x); item settings (slot, game item, kind fitted/held, fit,
   description, materials, depth, bulk, clips hair, FLUX hidden pass; held: hand, length, tilt); the **zone editor**
   (brush / eraser / lasso add / lasso erase, size, view zoom, undo/redo, front/back, on the male or female puppet; keys
   B E L K, Ctrl+Z/Y); Generate (fit on a build, n, seed) with the composed prompts shown and the shared prompt templates
@@ -516,6 +519,28 @@ Template, so an item fitted once is reused on every build of the race.
   `render(...)` stack items by `depth` for previews; `clips: ["hair"]` cuts the hair layer under the item.
 - Learned on the helm: a straight zone edge becomes a straight item edge (use curved zones); a soft guide or a high
   denoise lets FLUX draw the item smaller than the chibi head, so the bald skull shows around it.
+
+### Game items and export (A2, 2026-10-26)
+- **The game's vocabulary wins (R-001):** `hdart/contract.py` reads the active project's `ArtContract/requirements.json`
+  (never edits it): slots and their `artSlots`, weapon types (`heldAs`, `hands`), item kinds, the id rule, its
+  `revision`; and the game's item ids from its content (`Content/*/items/*.json`). A piece's **slot** is one of the
+  game's art slots (`head, shirt, chest, shoulders, skirt, legs, feet, gloves, back, mainhand, offhand`); held items are
+  held as `weapon`, `shield` or `focus` (tomes, orbs, holy symbols: face-on like a shield, own prompt
+  `prompt_held_focus`). New ids follow the game's rule (`item.<lowercase_words>`, no slot or kind in the id; R-002).
+- **Pieces and game items:** a Workshop entry is a **piece**; its `item` names the game item it belongs to (default:
+  its own id), so several pieces make one game item (`item.breastplate` + `item.pauldrons` → `item.iron_breastplate`).
+  The Items tab shows the game item under Slot ("in the game" = art only; "new" = the export writes an intake file).
+  A new item's intake fields come from `game_items` in `specs/items.json` (name, kind, slot, weaponType, one-line text,
+  materials → default ramps), else from its pieces; items the game has take them from the game's content.
+- **Export** (`hdart item-export`, or **Export to game** / **Export all** on the item card): per game item whose every
+  piece is approved for a build, `Art/Items/<id>/item.json` + layers (coloured with the default ramps) + `.idx.png`
+  index maps (R = cel level 0..4 / 254 outline, G = channel 4 cloth / 5 leather / 6 metal / 7 accent, A). `fits` is
+  keyed by build (`human.male`, ...), then view: layers `{piece, part, file, rect, depth, place, clips}`, `rect` in the
+  puppet canvas (same space as `puppet.json`), `place` over (fitted: above its part) or under (held: below the hand,
+  placed on that build's grip). `held` keeps each weapon's upright art and grip settings; `source` the candidates, the
+  tool's git sha and the `requirementsRevision`. Every export (item, puppet, dungeon) rewrites `Art/index.json` (all
+  packs on disk); item and puppet exports also write `Art/ramps.json` (every group, ids `<group>.<name>`) and
+  `Art/channels.json`. The pack folder is rebuilt whole. Test: `tests/test_item_export.py`.
 
 ## Legacy (retired 2026-10-25)
 The first character directions are retired: the Blender modular character kit, the AI sprite kit v3, the hand-drawn
