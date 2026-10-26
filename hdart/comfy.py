@@ -251,6 +251,17 @@ def _http(method, path, **kw):
                          "Start P:\\Tools\\ComfyUI\\start-comfyui.cmd") from e
 
 
+def image(nodes, timeout=None):
+    """run() into a private temp folder: the first output as a PIL image (loaded, so the folder can go)."""
+    with tempfile.TemporaryDirectory(prefix="hdart_") as d:
+        paths = run(nodes, d, timeout)
+        if not paths:
+            raise ComfyError("ComfyUI returned no image")
+        with Image.open(paths[0]) as im:
+            im.load()
+            return im.copy()
+
+
 def upload(path, name=None):
     with open(path, "rb") as f:
         r = _http("POST", "/upload/image", files={"image": (name or Path(path).name, f)}, data={"overwrite": "true"})

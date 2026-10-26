@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
-from . import ai_kit, comfy, config, iso, jobs, patterns
+from . import ai_kit, comfy, config, iso, jobs, patterns, store
 from .locks import CELLS as _CELL_CACHE, DUNGEON as LOCK, HARMONY as _REF_CACHE
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -669,13 +669,12 @@ def set_dir(name):
 
 
 def state(name):
-    p = set_dir(name) / "state.json"
-    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {"pieces": {}}
+    return store.read_json(set_dir(name) / "state.json", {"pieces": {}})
 
 
 def save_state(name, s):
-    set_dir(name).mkdir(parents=True, exist_ok=True)
-    (set_dir(name) / "state.json").write_text(json.dumps(s, indent=1), encoding="utf-8")
+    """Atomic (hdart.store); callers hold LOCK from their read to this write."""
+    store.write_json(set_dir(name) / "state.json", s)
 
 
 def piece_of(spec, pid):

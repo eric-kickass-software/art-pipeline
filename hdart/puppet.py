@@ -915,36 +915,33 @@ def template(build, frames=8):
         grid.append(g)
     grid[0].save(out / "walk_4dir_64.gif", save_all=True, append_images=grid[1:], duration=120, loop=0)
     (out / "template.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
-    s = ws.load_state()
-    keep = (s["builds"][build].get("puppet") or {}).get("joints")
-    s["builds"][build]["puppet"] = {"from": src, "made": meta["made"], "approved": False}
-    if keep:
-        s["builds"][build]["puppet"]["joints"] = keep
-    ws.save_state(s)
+    with ws.edit_state() as s:
+        keep = (s["builds"][build].get("puppet") or {}).get("joints")
+        s["builds"][build]["puppet"] = {"from": src, "made": meta["made"], "approved": False}
+        if keep:
+            s["builds"][build]["puppet"]["joints"] = keep
     return {"build": build, "dir": ws.rel(out), "files": sorted(p.name for p in out.glob("*.*"))}
 
 
 def set_joints(build, view, joints):
     """Hand-placed joints for one view: {limb: {pivot, mid, end}} in 512-px art coords; None clears them. The next
     template build uses them instead of the detected ones."""
-    s = ws.load_state()
-    p = s["builds"].get(build, {}).setdefault("puppet", {})
-    allj = p.setdefault("joints", {})
-    if joints:
-        allj[view] = {k: {n: [float(x) for x in v[n]] for n in ("pivot", "mid", "end") if n in v} for k, v in joints.items()}
-    else:
-        allj.pop(view, None)
-    ws.save_state(s)
+    with ws.edit_state() as s:
+        p = s["builds"].get(build, {}).setdefault("puppet", {})
+        allj = p.setdefault("joints", {})
+        if joints:
+            allj[view] = {k: {n: [float(x) for x in v[n]] for n in ("pivot", "mid", "end") if n in v} for k, v in joints.items()}
+        else:
+            allj.pop(view, None)
     return p
 
 
 def approve(build, on=True):
-    s = ws.load_state()
-    p = s["builds"].get(build, {}).get("puppet")
-    if not p:
-        raise ValueError(f"Build the puppet template of {build} first.")
-    p["approved"] = bool(on)
-    ws.save_state(s)
+    with ws.edit_state() as s:
+        p = s["builds"].get(build, {}).get("puppet")
+        if not p:
+            raise ValueError(f"Build the puppet template of {build} first.")
+        p["approved"] = bool(on)
     return p
 
 

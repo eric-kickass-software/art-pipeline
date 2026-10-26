@@ -55,7 +55,17 @@ Git holds only the tool and its workflow (code, specs, docs). Generated art (`sp
   at a closed port, so no test can queue behind the live Studio. `test_harmonize` reads the real crypt set: from a
   worktree, run it with `HD_DATA=P:\Tools\art-pipeline`.
 - **One ComfyUI wrapper:** tools call `comfy.img2img(...)` / `comfy.repaint(...)` (PIL in, PIL out; temp files and
-  unique upload names handled), or `comfy.run(build_*(...))`. Failures raise `comfy.ComfyError`, never `SystemExit`.
+  unique upload names handled), or `comfy.image(build_*(...))` (the output as a PIL image, no scratch folder).
+  Failures raise `comfy.ComfyError`, never `SystemExit`.
+- **The store** (`hdart/store.py`) is how tools keep candidates and state. State files (`workshop.json`, the Item
+  Workshop's `items/<race>/state.json`) change only inside `with store.State(path).edit() as s:` (or
+  `workshop.edit_state()`), which holds a per-file lock (threads and other processes, a `<file>.lock` beside it) from
+  the read to the write; every write is atomic. A GPU job generates first and edits the state after, never holding the
+  lock while ComfyUI runs. Candidates (Paint, hair/face, items, grip hands): `store.new(root, seed)` makes
+  `<root>/s<seed>_<time>/` (a suffix if two land in the same second), `store.write_meta()` writes `meta.json` with the
+  standard fields (`tool`, `id`, `made`, `seed`, `prompts`, `inputs`, `params`, `git`) beside the tool's own, and
+  `store.archive()` moves a candidate to `archive/workshop/<tool>/...` (never overwriting). Dungeon sets keep their
+  own lock (`locks.DUNGEON`) and file-per-candidate layout; their `state.json` writes are atomic too.
 - **Job kinds** are registered where the work lives (`@jobs.kind("dun")` in `dungeon.py`, `"item"` in
   `puppet_items.py`, ...; see `hdart/jobs.py`), so `studio.py` has no dispatch chain. A new module that registers
   kinds goes into `studio.JOB_MODULES`.

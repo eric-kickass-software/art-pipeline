@@ -20,6 +20,8 @@ class FakeComfy:
     def run(nodes, out_dir):
         Path(out_dir).mkdir(parents=True, exist_ok=True); p = Path(out_dir) / f"o{len(calls)}.png"
         Image.new("RGB", (1024, 1024), "white").save(p); return [p]
+    @staticmethod
+    def image(nodes): return Image.new("RGB", (1024, 1024), "white")
 ws.comfy = FakeComfy
 
 def err(f, *a):
