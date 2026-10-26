@@ -19,7 +19,7 @@ import json, shutil, time
 import numpy as np
 from PIL import Image
 
-from . import config, workshop as ws, puppet_face as pf, puppet_paint as ppt
+from . import config, store, workshop as ws, puppet_face as pf, puppet_paint as ppt
 from .palette import ramp_from_base
 
 
@@ -145,7 +145,7 @@ def _body(race, sex, size, has_faces, d):
 def _layers(race, kind, size, d):
     out = []
     for c in _cands(race, kind):
-        meta = json.loads((c / "meta.json").read_text(encoding="utf-8")) if (c / "meta.json").exists() else {}
+        meta = store.read_meta(c)
         e = {"id": f"{kind}.{c.name}", "seed": meta.get("seed"), "views": {}}
         for v in (VIEWS if kind == "hair" else ("front",)):
             lf, lv = c / f"layer_{v}.png", c / f"levels_{v}.png"

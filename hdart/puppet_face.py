@@ -14,13 +14,13 @@ parts' canvas) and ride on the head bone.
 Candidates: sprites/ai/face/<race>/<kind>/<id>/ (layer_<view>.png, prev_<sex>_<view>.png, meta.json). A race's hair
 set and face set (state: builds["<race>.unisex"]["face_sets"]) are the candidates added to them, like skin tone sets.
 """
-import json, math, shutil, time
+import json, math, shutil
 from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-from . import ai_kit, comfy, jobs, workshop as ws, puppet as pp, puppet_template as pt, puppet_paint as ppt
+from . import ai_kit, comfy, jobs, store, workshop as ws, puppet as pp, puppet_template as pt, puppet_paint as ppt
 
 SPEC = ai_kit.ROOT / "specs" / "face.json"
 KINDS = ("hair", "face")
@@ -455,9 +455,9 @@ def _hair_back(race, fid, sp, vparts, P, sd, d):
     lane = np.zeros_like(head); lane[max(0, hy1 - int(0.1 * hh)): hy1 + int(0.9 * hh), cx - int(0.38 * hw): cx + int(0.38 * hw)] = True
     region = ((around & ~(body & ~around)) | lane) & ~arms
     # 1. the hairstyle from behind: an edit of the painted front
-    name = comfy.upload(d / "paint_front.png"); (d / "tmp").mkdir(exist_ok=True)
-    p = comfy.run(comfy.build_edit(name, P["hair_back_edit"], seed=sd, lora_strength=0.6, prefix="hdart/hairback"), d / "tmp")[0]
-    ed = Image.open(p).convert("RGB").resize((ppt.SHEET, ppt.SHEET), Image.LANCZOS); ed.save(d / "edit_back.png")
+    name = comfy.upload(d / "paint_front.png")
+    ed = comfy.image(comfy.build_edit(name, P["hair_back_edit"], seed=sd, lora_strength=0.6, prefix="hdart/hairback"))
+    ed = ed.convert("RGB").resize((ppt.SHEET, ppt.SHEET), Image.LANCZOS); ed.save(d / "edit_back.png")
     side = hbox[2] - hbox[0]; mapped = bald.copy()
     mapped[hbox[1]:hbox[3], hbox[0]:hbox[2]] = np.asarray(ed.resize((side, side), Image.LANCZOS))
     Lb, _ = key_layer(bald, mapped, region | grow_(head, 30), head)
@@ -478,8 +478,7 @@ def generate(race, kind, sex="male", n=1, seed=1):
     build = f"{race}.{sex}"; cid, sp, parts = base(build); P = composed(race, sex)
     made = []
     for i in range(n):
-        sd = seed + i; fid = f"s{sd}_{int(time.time())}"
-        d = out_dir(race, kind) / fid; d.mkdir(parents=True, exist_ok=True)
+        sd = seed + i; fid, d = store.new(out_dir(race, kind), sd)
         try:
             _make_one(race, kind, sex, build, cid, sp, parts, P, d, fid, sd)
         except Exception as e:
@@ -558,10 +557,9 @@ def _make_one(race, kind, sex, build, cid, sp, parts, P, d, fid, sd):
         for v, lv in levels.items():   # hair: its cel levels (R = level 0..4, 254 = outline; A = hair), coloured by a hair ramp
             Image.fromarray(lv).save(d / f"levels_{v}.png")
         keyed = {v: int((lv[..., 3] > 0).sum()) for v, lv in levels.items()}   # pixels the colour key found (0 = not recolourable)
-        (d / "meta.json").write_text(json.dumps({"race": race, "kind": kind, "seed": sd, "made": int(time.time()), "on": build,
-                                                 "paint": cid, "keyed": keyed,
-                                                 "prompt": P[kind] if kind == "face" else P["hair"]}, indent=1),
-                                     encoding="utf-8")
+        prompt = P[kind] if kind == "face" else P["hair"]
+        store.write_meta(d, kind, seed=sd, prompts={kind: prompt}, inputs={"paint": cid}, params={"sex": sex},
+                         race=race, kind=kind, on=build, paint=cid, keyed=keyed, prompt=prompt)
         ppt._progress(d, of, of, "previews on male and female", sd)
         previews(race, kind, fid)
 
@@ -582,10 +580,8 @@ def face_from_paint(race, build, cid):
     bg = Image.new("RGBA", head.shape[1::-1], (255, 255, 255, 255)); bg.alpha_composite(Image.fromarray(head))
     box, _ = _head_box({"head": head}, 0.05, 0.05, 0.05)
     bg.convert("RGB").crop(box).resize((ppt.SHEET, ppt.SHEET), Image.LANCZOS).save(d / "paint_front.png")
-    meta = json.loads((d0 / "meta.json").read_text(encoding="utf-8")) if (d0 / "meta.json").exists() else {}
-    (d / "meta.json").write_text(json.dumps({"race": race, "kind": "face", "seed": meta.get("seed"), "made": int(time.time()),
-                                             "on": build, "paint": cid, "from_paint": True,
-                                             "keyed": {"front": int((lev[..., 3] > 0).sum())}}, indent=1), encoding="utf-8")
+    store.write_meta(d, "face", seed=store.read_meta(d0).get("seed"), inputs={"paint": cid}, params={"from_paint": True},
+                     race=race, kind="face", on=build, paint=cid, from_paint=True, keyed={"front": int((lev[..., 3] > 0).sum())})
     previews(race, "face", fid)
     return fid
 
@@ -643,8 +639,8 @@ def state(race):
     for kind in KINDS:
         dd = out_dir(race, kind); lst = []
         if dd.exists():
-            for c in sorted((p for p in dd.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime):
-                meta = json.loads((c / "meta.json").read_text(encoding="utf-8")) if (c / "meta.json").exists() else {}
+            for c in sorted(store.folders(dd), key=lambda p: p.stat().st_mtime):
+                meta = store.read_meta(c)
                 prog = json.loads((c / "progress.json").read_text(encoding="utf-8")) if (c / "progress.json").exists() else None
                 lst.append({"id": c.name, "dir": ws.rel(c), "meta": meta, "files": sorted(f.name for f in c.glob("*.*")), "progress": prog,
                             "stamp": int(max((f.stat().st_mtime for f in c.glob("*.*")), default=0)), "in_set": c.name in sets[kind]})
@@ -655,24 +651,18 @@ def state(race):
 def set_member(race, kind, fid, on=True):
     if not (out_dir(race, kind) / fid).exists():
         raise ValueError(f"No {kind} candidate {fid}.")
-    s = ws.load_state(); sets = _sets(s, race)
-    if on and fid not in sets[kind]:
-        sets[kind].append(fid)
-    if not on and fid in sets[kind]:
-        sets[kind].remove(fid)
-    ws.save_state(s)
+    with ws.edit_state() as s:
+        store.member(_sets(s, race)[kind], fid, on)
     return state(race)
 
 
 def archive(race, kind, fid):
-    s = ws.load_state()
-    if fid in _sets(s, race)[kind]:
-        raise ValueError("It's in the set: take it out first.")
-    src = out_dir(race, kind) / fid
-    if not src.exists():
-        raise ValueError(f"No {kind} candidate {fid}.")
-    dst = ws.ARCHIVE / "workshop" / "face" / race / kind / fid; dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(src), str(dst))
+    with store.lock(ws.STATE):
+        if fid in _sets(ws.load_state(), race)[kind]:
+            raise ValueError("It's in the set: take it out first.")
+        if not (out_dir(race, kind) / fid).exists():
+            raise ValueError(f"No {kind} candidate {fid}.")
+        store.archive(out_dir(race, kind) / fid, ws.ARCHIVE / "workshop" / "face" / race / kind / fid)
     return state(race)
 
 
@@ -746,7 +736,7 @@ def layer_doc(race, kind, fid):
     d = out_dir(race, kind) / fid
     if not d.exists():
         raise ValueError(f"No {kind} candidate {fid}.")
-    meta = json.loads((d / "meta.json").read_text(encoding="utf-8")) if (d / "meta.json").exists() else {}
+    meta = store.read_meta(d)
     build = meta.get("on") or f"{race}.male"
     cid, sp, parts = base(build)
     pd = ppt.out_dir(build) / cid
@@ -799,11 +789,10 @@ def save_layer(race, kind, fid, view, png):
         if (d / f"levels_{view}.png").exists():
             shutil.copy(d / f"levels_{view}.png", d / f"levels_orig_{view}.png")
     L = np.asarray(im); im.save(d / f"layer_{view}.png")
-    meta = json.loads((d / "meta.json").read_text(encoding="utf-8")) if (d / "meta.json").exists() else {}
+    meta = store.read_meta(d)
     sp = base(meta.get("on") or f"{race}.male")[1]
     lev = levels_from_layer(kind, L, sp); Image.fromarray(lev).save(d / f"levels_{view}.png")
-    meta.setdefault("keyed", {})[view] = int((lev[..., 3] > 0).sum()); meta["edited"] = True
-    (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    store.update_meta(d, keyed={**meta.get("keyed", {}), view: int((lev[..., 3] > 0).sum())}, edited=True)
     previews(race, kind, fid)
     return layer_doc(race, kind, fid)
 
@@ -815,8 +804,7 @@ def revert_layer(race, kind, fid):
             o = d / f"{stem}_orig_{v}.png"
             if o.exists():
                 shutil.move(str(o), str(d / f"{stem}_{v}.png"))
-    meta = json.loads((d / "meta.json").read_text(encoding="utf-8")) if (d / "meta.json").exists() else {}
-    meta.pop("edited", None); (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    store.update_meta(d, edited=None)
     previews(race, kind, fid)
     return layer_doc(race, kind, fid)
 
@@ -825,9 +813,8 @@ def refresh_previews(race):
     """Re-render every candidate's previews (after a new paint is approved)."""
     for kind in KINDS:
         dd = out_dir(race, kind)
-        for c in (dd.iterdir() if dd.exists() else []):
-            if c.is_dir():
-                previews(race, kind, c.name)
+        for c in store.folders(dd):
+            previews(race, kind, c.name)
     return state(race)
 
 

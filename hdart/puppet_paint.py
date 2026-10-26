@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-from . import ai_kit, comfy, jobs, workshop as ws, puppet as pp, puppet_template as pt
+from . import ai_kit, comfy, jobs, store, workshop as ws, puppet as pp, puppet_template as pt
 
 S, SHEET, GAP, MARGIN = 2, 1024, 14, 24
 D_FIGURE, D_COMPLETE = 0.8, 0.9
@@ -446,8 +446,7 @@ def paint(build, n=1, seed=1):
     lays = {v: layout(rendered[v], spec["views"][v]["order"], spec["views"][v]) for v in VIEWS}
     made = []
     for i in range(n):
-        sd = seed + i; cid = f"s{sd}_{int(time.time())}"
-        d = out_dir(build) / cid; (d / "parts").mkdir(parents=True, exist_ok=True)
+        sd = seed + i; cid, d = store.new(out_dir(build), sd); (d / "parts").mkdir()
         try:
             _paint_one(build, d, cid, sd, spec, rendered, lays, ramp, P, guide)
         except Exception as e:
@@ -466,8 +465,7 @@ def paint(build, n=1, seed=1):
 def _paint_one(build, d, cid, sd, spec, rendered, lays, ramp, P, guide):
     """One paint candidate (figure + completion pass per view, cleanup, outline, previews), reporting its progress."""
     if True:
-        ref = None; meta = {"build": build, "seed": sd, "made": int(time.time()), "template_edited": spec.get("edited"),
-                            "template_made": spec.get("made"), "prompts": {}}
+        ref = None; prompts = {}
         step = 0
         for v in VIEWS:
             V = spec["views"][v]; order = V["order"]; parts = rendered[v]
@@ -487,8 +485,9 @@ def _paint_one(build, d, cid, sd, spec, rendered, lays, ramp, P, guide):
             (d / "parts" / v).mkdir(exist_ok=True)
             for name, img in done.items():
                 Image.fromarray(img).save(d / "parts" / v / f"{name}.png")
-            meta["prompts"][v] = {"figure": fprompt, "complete": cprompt}
-        (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+            prompts[v] = {"figure": fprompt, "complete": cprompt}
+        store.write_meta(d, "paint", seed=sd, prompts=prompts, params={"face_guide": guide}, build=build,
+                         template_edited=spec.get("edited"), template_made=spec.get("made"))
         (d / "template.json").write_text(json.dumps(spec, indent=1), encoding="utf-8")   # joints/pivots of these parts
         for v in VIEWS:   # the template shapes (the editor's clamp)
             (d / "template" / v).mkdir(parents=True, exist_ok=True)
@@ -509,8 +508,8 @@ def candidates(build):
     if not d.exists():
         return []
     out = []
-    for c in sorted((p for p in d.iterdir() if p.is_dir() and not p.name.startswith("_")), key=lambda p: p.stat().st_ctime):   # oldest first
-        meta = json.loads((c / "meta.json").read_text(encoding="utf-8")) if (c / "meta.json").exists() else {}
+    for c in sorted(store.folders(d), key=lambda p: p.stat().st_ctime):   # oldest first
+        meta = store.read_meta(c)
         files = sorted(f.name for f in c.glob("*.*"))
         prog = json.loads((c / "progress.json").read_text(encoding="utf-8")) if (c / "progress.json").exists() else None
         out.append({"id": c.name, "dir": ws.rel(c), "meta": meta, "files": files, "edited": (c / "parts_orig").exists(),
@@ -560,25 +559,19 @@ def ramp_preview(build):
 def approve(build, cid, on=True):
     if on and not (out_dir(build) / cid).exists():
         raise ValueError(f"No paint candidate {cid} for {build}.")
-    s = ws.load_state(); b = s["builds"].setdefault(build, {})
-    p = b.setdefault("paint", {})
-    if on:
-        p["approved"] = cid
-    elif p.get("approved") == cid:
-        p.pop("approved")
-    ws.save_state(s)
+    with ws.edit_state() as s:
+        store.pick(s, ("builds", build, "paint", "approved"), cid, on)
     return state(build)
 
 
 def archive(build, cid):
     """Move a candidate to archive/workshop/paint/<build>/<id> (nothing is deleted)."""
-    if state(build)["approved"] == cid:
-        raise ValueError("That's the approved paint. Approve another one first.")
-    src = out_dir(build) / cid
-    if not src.exists():
-        raise ValueError(f"No paint candidate {cid}.")
-    dst = ws.ARCHIVE / "workshop" / "paint" / build / cid; dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(src), str(dst))
+    with store.lock(ws.STATE):
+        if state(build)["approved"] == cid:
+            raise ValueError("That's the approved paint. Approve another one first.")
+        if not (out_dir(build) / cid).exists():
+            raise ValueError(f"No paint candidate {cid}.")
+        store.archive(out_dir(build) / cid, ws.ARCHIVE / "workshop" / "paint" / build / cid)
     return state(build)
 
 

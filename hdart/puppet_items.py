@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter
 
-from . import ai_kit, comfy, jobs, puppet as pp, puppet_template as pt, puppet_paint as ppt, puppet_face as pf
+from . import ai_kit, comfy, jobs, store, puppet as pp, puppet_template as pt, puppet_paint as ppt, puppet_face as pf
 
 SPEC = ai_kit.ROOT / "specs" / "items.json"
 S, N = ppt.S, pf.N
@@ -183,7 +183,7 @@ def relevel(race, item_id, cid):
                 cent = np.array([v_[lab == i].mean() if (lab == i).any() else cent[i] for i in range(LEVELS)])
             cents[int(ch)] = np.sort(cent)
         meta["cents"] = {str(k): [float(x) for x in v] for k, v in cents.items()}
-        (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+        store.save_meta(d, meta)
     for f in sorted((d / "plevels").rglob("*.png")):
         lev = np.asarray(Image.open(f).convert("RGBA")).copy(); fp = d / "parts" / f.parent.name / f.name
         L = np.asarray(Image.open(fp).convert("RGBA")) if fp.exists() else None
@@ -541,8 +541,8 @@ def held_layer(doc, it, sp, view, parts, img, lev_img, grip=None):
 
 
 def _gen_held(doc, it, P, d, sd):
-    p = comfy.run(comfy.build_txt2img(P["held"], 768, 768, seed=sd, lora_strength=0.0, remove_bg=True, prefix="hdart/item_held"), d / "tmp")[0]
-    rgba = np.asarray(Image.open(p).convert("RGBA")).copy(); Image.fromarray(rgba).save(d / "paint_held.png")
+    im = comfy.image(comfy.build_txt2img(P["held"], 768, 768, seed=sd, lora_strength=0.0, remove_bg=True, prefix="hdart/item_held"))
+    rgba = np.asarray(im.convert("RGBA")).copy(); Image.fromarray(rgba).save(d / "paint_held.png")
     a = ai_kit.clean(rgba[..., 3] > 127, min_area=300); ys, xs = np.nonzero(a)
     rgba = rgba[ys.min():ys.max() + 1, xs.min():xs.max() + 1]; a = a[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
     H, W = a.shape; pad = 8
@@ -663,8 +663,8 @@ def _back_guide(doc, it, P, d, seed, comp, guide, before, region, Z):
     back of a tunic), its key-coloured item pixels are mapped onto the back puppet over the zone tint, and the edit (not
     the front) is the back pass's reference image. Returns (guide image, reference path)."""
     name = comfy.upload(d / "paint_front.png")
-    p_ = comfy.run(comfy.build_edit(name, P["back_edit"], seed=seed, lora_strength=0.6, prefix="hdart/itemback"), d / "tmp")[0]
-    ed = Image.open(p_).convert("RGB").resize((ppt.SHEET, ppt.SHEET), Image.LANCZOS); ed.save(d / "edit_back.png")
+    ed = comfy.image(comfy.build_edit(name, P["back_edit"], seed=seed, lora_strength=0.6, prefix="hdart/itemback"))
+    ed = ed.convert("RGB").resize((ppt.SHEET, ppt.SHEET), Image.LANCZOS); ed.save(d / "edit_back.png")
     box = pf._figure_box(comp); side = box[2] - box[0]
     mapped = before.copy(); mapped[box[1]:box[3], box[0]:box[2]] = np.asarray(ed.resize((side, side), Image.LANCZOS))
     Le, _ = key_item(doc, it["materials"], before, mapped, region, Z, cents={})
@@ -678,8 +678,8 @@ def generate(race, item_id, build=None, seed=1):
     """One candidate of an item, fitted on `build` (default <race>.male)."""
     doc = spec(); it = doc["items"][item_id]; build = build or f"{race}.male"
     cid_paint, sp, parts = pf.base(build); P = prompts(race, build, item_id, doc)
-    cid = f"s{seed}_{int(time.time())}"; d = out_dir(race, item_id) / cid; (d / "tmp").mkdir(parents=True, exist_ok=True)
-    meta = {"race": race, "item": item_id, "on": build, "paint": cid_paint, "seed": seed, "made": int(time.time()), "prompts": P}
+    cid, d = store.new(out_dir(race, item_id), seed)
+    meta = {"race": race, "item": item_id, "on": build, "paint": cid_paint, "made": int(time.time())}
     if it.get("kind") == "held":
         img, lev = _gen_held(doc, it, P, d, seed)
         Image.fromarray(img).save(d / "held.png"); Image.fromarray(lev).save(d / "held_levels.png")
@@ -698,7 +698,7 @@ def generate(race, item_id, build=None, seed=1):
             meta.setdefault("keyed", {})[v] = _extract(doc, it, sp, v, parts[v], zm, Z, body, region, before, after, d, cents, flux)
         meta["completed"] = bool(it.get("complete", True))
         meta["cents"] = {str(k): [float(x) for x in v] for k, v in cents.items()}
-    (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    store.write_meta(d, "item", seed=seed, prompts=P, inputs={"paint": cid_paint}, params={"build": build}, **meta)
     previews(race, item_id, cid)
     return cid
 
@@ -707,7 +707,7 @@ def rekey(race, item_id, cid, complete=False):
     """Re-run the extraction of a fitted candidate from its saved paints: after a change to keying, cover, outline or
     split, or to the item's zones. complete=True also runs the FLUX completion pass (GPU); else the smear fill."""
     doc = spec(); it = doc["items"][item_id]; d = out_dir(race, item_id) / cid
-    meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
+    meta = _meta(d)
     _, sp, parts = pf.base(meta["on"]); cents = {}
     P = prompts(race, meta["on"], item_id, doc)
     for v in VIEWS:
@@ -721,7 +721,7 @@ def rekey(race, item_id, cid, complete=False):
         meta.setdefault("keyed", {})[v] = _extract(doc, it, sp, v, parts[v], zm, Z, body, region, before, after, d, cents, flux)
     meta["completed"] = bool(complete)
     meta["cents"] = {str(k): [float(x) for x in v] for k, v in cents.items()}
-    (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    store.save_meta(d, meta)
     previews(race, item_id, cid)
     return meta["keyed"]
 
@@ -859,18 +859,16 @@ def _builds(race):
     return out
 
 
-def _state_path(race):
-    return ai_kit.AI_DIR / "items" / race / "state.json"
+def _state(race):
+    return store.State(ai_kit.AI_DIR / "items" / race / "state.json", {"approved": {}})
 
 
 def load_state(race):
-    f = _state_path(race)
-    return json.loads(f.read_text(encoding="utf-8")) if f.exists() else {"approved": {}}
+    return _state(race).load()
 
 
 def save_state(race, st):
-    _state_path(race).parent.mkdir(parents=True, exist_ok=True)
-    _state_path(race).write_text(json.dumps(st, indent=1), encoding="utf-8")
+    _state(race).save(st)
 
 
 def fit_key(it, build):
@@ -897,13 +895,9 @@ def previews(race, item_id, cid, ramps=None):
 
 
 def candidates(race, item_id):
-    root = out_dir(race, item_id); out = []
-    if not root.exists():
-        return out
-    for d in sorted(root.iterdir(), key=lambda p: p.name):
-        if not d.is_dir() or d.name.startswith("_") or not (d / "meta.json").exists():
-            continue
-        m = json.loads((d / "meta.json").read_text(encoding="utf-8"))
+    out = []
+    for d in store.folders(out_dir(race, item_id), finished=True):
+        m = store.read_meta(d)
         rel = lambda f: str((d / f).relative_to(ai_kit.AI_DIR)).replace("\\", "/") if (d / f).exists() else None
         out.append({"id": d.name, "on": m.get("on"), "seed": m.get("seed"), "made": m.get("made"), "completed": m.get("completed"),
                     "edited": bool(m.get("edited")),
@@ -1005,24 +999,19 @@ def reset_zone(item_id, view, sex=None):
 
 
 def approve(race, item_id, cid, key="all", on=True):
-    st = load_state(race); ap = st["approved"].setdefault(item_id, {})
-    if on:
-        ap[key] = cid
-    elif ap.get(key) == cid:
-        ap.pop(key)
-    save_state(race, st)
+    with _state(race).edit() as st:
+        store.pick(st, ("approved", item_id, key), cid, on)
     return st["approved"]
 
 
 def archive(race, item_id, cid):
-    import shutil
-    src = out_dir(race, item_id) / cid; dst = ai_kit.AI_DIR / "items" / race / "_archive" / item_id / cid
-    dst.parent.mkdir(parents=True, exist_ok=True); shutil.move(str(src), str(dst))
-    st = load_state(race)
-    for k, v in list(st["approved"].get(item_id, {}).items()):
-        if v == cid:
-            st["approved"][item_id].pop(k)
-    save_state(race, st)
+    """Move a candidate to archive/workshop/items/<race>/<item>/<id> (nothing is deleted); it stops being approved."""
+    from . import workshop as ws
+    with _state(race).edit() as st:
+        store.archive(out_dir(race, item_id) / cid, ws.ARCHIVE / "workshop" / "items" / race / item_id / cid)
+        for k, v in list(st["approved"].get(item_id, {}).items()):
+            if v == cid:
+                st["approved"][item_id].pop(k)
     return {"ok": True}
 
 
@@ -1166,10 +1155,9 @@ def gen_grip(race, build, seed=1):
     rod filled in) and an over layer (the fingers in front of the grip); the rod gives the grip point and axis."""
     g = grip_spec(); doc = spec(); P = grip_prompts(build, g)
     pcid, sp, parts = pf.base(build)
-    gid = f"s{seed}_{int(time.time())}"; d = grip_dir(race, build) / gid; (d / "tmp").mkdir(parents=True, exist_ok=True)
+    gid, d = store.new(grip_dir(race, build), seed)
     key = _rgb(doc["materials"][g["key"]]["key"])
-    meta = {"build": build, "paint": pcid, "seed": seed, "made": int(time.time()), "prompts": P, "wrist": g["wrist"], "grip": {},
-            "zoom": GRIP_ZOOM}
+    meta = {"build": build, "paint": pcid, "made": int(time.time()), "wrist": g["wrist"], "grip": {}, "zoom": GRIP_ZOOM}
     ref = None
     for v in VIEWS:
         comp, ca, region, rods = _grip_setup(sp, v, parts[v], g, key)
@@ -1183,7 +1171,7 @@ def gen_grip(race, build, seed=1):
             ref = {arm: d / f"paint_{arm}_front.png" for arm in rods}
         Image.fromarray(after).save(d / f"after_{v}.png")
         _grip_extract(after, key, rods, d, v, meta)
-    (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    store.write_meta(d, "grip", seed=seed, prompts=P, inputs={"paint": pcid}, params={"wrist": g["wrist"], "zoom": GRIP_ZOOM}, **meta)
     grip_previews(race, build, gid)
     return gid
 
@@ -1196,7 +1184,7 @@ def regrip(race, build, gid):
         comp, ca, region, rods = _grip_setup(sp, v, parts[v], g, key)
         after = np.asarray(Image.open(d / f"after_{v}.png").convert("RGB")).copy()
         _grip_extract(after, key, rods, d, v, meta)
-    (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    store.save_meta(d, meta)
     grip_previews(race, build, gid)
     return gid
 
@@ -1240,24 +1228,18 @@ def grip_assets(race, build, view):
 def grip_state(race):
     st = load_state(race); out = {}
     for b in _builds(race):
-        root = grip_dir(race, b); cands = []
-        if root.exists():
-            for d in sorted(root.iterdir(), key=lambda p: p.name, reverse=True):
-                if (d / "meta.json").exists():
-                    rel = lambda f: str((d / f).relative_to(ai_kit.AI_DIR)).replace("\\", "/") if (d / f).exists() else None
-                    cands.append({"id": d.name, "sep": {v: rel(f"sep_{v}.png") for v in VIEWS},
-                                  "paint": {v: rel(f"paint_{v}.png") for v in VIEWS}, "stamp": int((d / "meta.json").stat().st_mtime)})
+        cands = []
+        for d in reversed(store.folders(grip_dir(race, b), finished=True)):
+            rel = lambda f: str((d / f).relative_to(ai_kit.AI_DIR)).replace("\\", "/") if (d / f).exists() else None
+            cands.append({"id": d.name, "sep": {v: rel(f"sep_{v}.png") for v in VIEWS},
+                          "paint": {v: rel(f"paint_{v}.png") for v in VIEWS}, "stamp": int((d / "meta.json").stat().st_mtime)})
         out[b] = {"candidates": cands, "approved": st.get("grip", {}).get(b)}
     return out
 
 
 def approve_grip(race, build, gid, on=True):
-    st = load_state(race); g = st.setdefault("grip", {})
-    if on:
-        g[build] = gid
-    elif g.get(build) == gid:
-        g.pop(build)
-    save_state(race, st)
+    with _state(race).edit() as st:
+        store.pick(st, ("grip", build), gid, on)
     return grip_state(race)
 
 
@@ -1267,7 +1249,9 @@ LAYER_SEP = "@item"   # an item layer's name in the editor: "<part>@item", drawn
 
 
 def _meta(d):
-    return json.loads((d / "meta.json").read_text(encoding="utf-8"))
+    if not (d / "meta.json").exists():
+        raise ValueError(f"No candidate {d.name}.")
+    return store.read_meta(d)
 
 
 def _blank():
@@ -1352,7 +1336,7 @@ def layer_save(race, item_id, cid, view, layers):
             fp.unlink(missing_ok=True); fl.unlink(missing_ok=True); continue
         fp.parent.mkdir(parents=True, exist_ok=True); fl.parent.mkdir(parents=True, exist_ok=True)
         Image.fromarray(L).save(fp); Image.fromarray(levels_from_edit(doc, it, L, cents)).save(fl)
-    meta["edited"] = True; (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    store.update_meta(d, edited=True)
     previews(race, item_id, cid)
     return layer_doc(race, item_id, cid)
 
@@ -1363,7 +1347,7 @@ def layer_revert(race, item_id, cid):
     if (d / "parts_orig").exists():
         for sub in ("parts", "plevels"):
             shutil.rmtree(d / sub, ignore_errors=True); shutil.move(str(d / f"{sub}_orig"), str(d / sub))
-    meta = _meta(d); meta.pop("edited", None); (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    store.update_meta(d, edited=None)
     previews(race, item_id, cid)
     return layer_doc(race, item_id, cid)
 

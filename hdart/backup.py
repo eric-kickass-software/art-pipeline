@@ -21,7 +21,7 @@ SKIP_DIRS = {"tmp", "_meshes", "__pycache__"}
 
 
 def _scratch(rel):
-    return any(p in SKIP_DIRS or p.startswith("_tmp") for p in rel.parts)
+    return any(p in SKIP_DIRS or p.startswith("_tmp") for p in rel.parts) or rel.suffix in (".lock", ".tmp")
 
 
 def _kept_dungeon(state):

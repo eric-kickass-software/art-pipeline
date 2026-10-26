@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from . import ai_kit, comfy, config, jobs
+from . import ai_kit, comfy, config, jobs, store
 
 ROOT = Path(__file__).resolve().parent.parent
 STATE = ai_kit.AI_DIR / "workshop.json"
@@ -34,15 +34,21 @@ QA_COLORS = {"hair": (214, 70, 200), "skin": (240, 190, 150), "eyes": (60, 200, 
 
 # ----------------------------------------------------------------------------- state & prompts
 
+def _state():
+    return store.State(STATE, {"builds": {}, "parts": {}})
+
+
 def load_state():
-    if STATE.exists():
-        return json.loads(STATE.read_text(encoding="utf-8"))
-    return {"builds": {}, "parts": {}}
+    return _state().load()
 
 
 def save_state(s):
-    STATE.parent.mkdir(parents=True, exist_ok=True)
-    STATE.write_text(json.dumps(s, indent=1), encoding="utf-8")
+    _state().save(s)
+
+
+def edit_state():
+    """`with edit_state() as s:` changes workshop.json under its lock (Workshop, Paint, Face and Item Workshop share it)."""
+    return _state().edit()
 
 
 def style():
@@ -290,27 +296,29 @@ def gen_base(build, facing, n=4, seed=1, description=None):
             back_from_front(Image.open(ai_kit.AI_DIR / front), sd, what=b["description"]).save(dst)
             cands.append(rel(dst))
             continue
-        p = comfy.run(nodes, out / "tmp")[0]
         dst = out / f"{facing}_s{sd}_{int(time.time())}.png"
-        Image.open(p).convert("RGB").resize((ai_kit.BIG, ai_kit.BIG), Image.NEAREST).save(dst)
+        comfy.image(nodes).convert("RGB").resize((ai_kit.BIG, ai_kit.BIG), Image.NEAREST).save(dst)
         cands.append(rel(dst))
-    b[facing]["candidates"] = cands + [c for c in b[facing].get("candidates", []) if c not in cands][:8]
-    save_state(s)
+    with edit_state() as s:   # merge: approvals may have happened while ComfyUI ran
+        b = s["builds"].setdefault(build, {"description": st["builds"].get(build, build), "front": {}, "back": {}})
+        if description:
+            b["description"] = description
+        b = b.setdefault(facing, {})
+        b["candidates"] = cands + [c for c in b.get("candidates", []) if c not in cands][:8]
     return cands
 
 
 def approve_base(build, facing, file):
-    s = load_state()
-    b = s["builds"][build]
-    b[facing]["approved"] = file
-    if facing == "front":
-        b["back"].pop("approved", None)  # a new front invalidates the back
-    dst = ai_kit.base_path(build, facing)
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy(ai_kit.AI_DIR / file, dst)
-    dst.with_suffix(".json").write_text(json.dumps(ai_kit.alignment(dst), indent=1), encoding="utf-8")
-    ai_kit._ANATOMY.clear()
-    save_state(s)
+    with edit_state() as s:
+        b = s["builds"][build]
+        b[facing]["approved"] = file
+        if facing == "front":
+            b["back"].pop("approved", None)  # a new front invalidates the back
+        dst = ai_kit.base_path(build, facing)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(ai_kit.AI_DIR / file, dst)
+        dst.with_suffix(".json").write_text(json.dumps(ai_kit.alignment(dst), indent=1), encoding="utf-8")
+        ai_kit._ANATOMY.clear()
     if b["front"].get("approved") and b["back"].get("approved"):
         for f in ("front", "back"):
             ai_kit.build_base_part(build, f)
@@ -413,17 +421,15 @@ def gen_race(race, sex, facing, n=4, seed=1):
             nodes = comfy.build_edit(name, prompt, seed=sd, lora_strength=0.6, prefix=f"hdart/race_{race}_{sex}_{facing}")
         else:
             nodes = comfy.build_txt2img(prompt, ai_kit.BIG, ai_kit.BIG, seed=sd, lora_strength=1.0, prefix=f"hdart/race_{race}")
-        p = comfy.run(nodes, out / "tmp")[0]
         dst = out / f"{facing}_s{sd}_{int(time.time())}.png"
-        Image.open(p).convert("RGB").resize((ai_kit.BIG, ai_kit.BIG), Image.LANCZOS).save(dst)
+        comfy.image(nodes).convert("RGB").resize((ai_kit.BIG, ai_kit.BIG), Image.LANCZOS).save(dst)
         r_ = rel(dst)
         cands.append(r_)
         b[facing].setdefault("meta", {})[r_] = {"from": src, "seed": sd}
-    s = load_state()  # merge: approvals may have happened while ComfyUI ran
-    b2 = s["builds"].setdefault(build, {"race": race, "sex": sex, "front": {}, "back": {}})
-    b2[facing]["candidates"] = cands + [c for c in b2[facing].get("candidates", []) if c not in cands]
-    b2[facing].setdefault("meta", {}).update(b[facing]["meta"])
-    save_state(s)
+    with edit_state() as s:   # merge: approvals may have happened while ComfyUI ran
+        b2 = s["builds"].setdefault(build, {"race": race, "sex": sex, "front": {}, "back": {}})
+        b2[facing]["candidates"] = cands + [c for c in b2[facing].get("candidates", []) if c not in cands]
+        b2[facing].setdefault("meta", {}).update(b[facing]["meta"])
     return cands
 
 
@@ -431,12 +437,11 @@ def approve_race(build, facing, file):
     """Approve one race mannequin image. A new front invalidates that build's back."""
     if build.split(".", 1)[-1] not in MANNEQUIN_SEXES:
         raise ValueError("Only the unisex has a mannequin.")
-    s = load_state()
-    b = s["builds"][build]
-    b[facing]["approved"] = file
-    if facing == "front":
-        b["back"].pop("approved", None)
-    save_state(s)
+    with edit_state() as s:
+        b = s["builds"][build]
+        b[facing]["approved"] = file
+        if facing == "front":
+            b["back"].pop("approved", None)
     return b
 
 
@@ -573,25 +578,21 @@ def archive_base(build, facing, file=None):
     """Archive mannequin candidates of one build + facing: just `file`, or (no file) every candidate that isn't
     approved, plus the older files in the _base folder the board no longer lists. The approved one never moves.
     Returns how many files moved."""
-    s = load_state()
-    b = s["builds"].get(build, {}).get(facing, {})
-    approved = b.get("approved")
-    if file:
-        if file == approved:
-            raise ValueError("That's the approved mannequin. Approve another one first.")
-        rels = {file}
-    else:
-        rels = {c for c in b.get("candidates", []) if c != approved}
-        rels |= {rel(p) for p in (CAND / build / "_base").glob(f"{facing}_*.png")} - {approved}
-    for r in rels:
-        src = ai_kit.AI_DIR / r
-        if src.exists():
-            dst = ARCHIVE / "workshop" / r
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(src), str(dst))
-    if b:
-        b["candidates"] = [c for c in b.get("candidates", []) if c not in rels]
-        save_state(s)
+    with edit_state() as s:
+        b = s["builds"].get(build, {}).get(facing, {})
+        approved = b.get("approved")
+        if file:
+            if file == approved:
+                raise ValueError("That's the approved mannequin. Approve another one first.")
+            rels = {file}
+        else:
+            rels = {c for c in b.get("candidates", []) if c != approved}
+            rels |= {rel(p) for p in (CAND / build / "_base").glob(f"{facing}_*.png")} - {approved}
+        for r in rels:
+            if (ai_kit.AI_DIR / r).exists():
+                store.archive(ai_kit.AI_DIR / r, ARCHIVE / "workshop" / r)
+        if b:
+            b["candidates"] = [c for c in b.get("candidates", []) if c not in rels]
     return len(rels)
 
 
@@ -603,11 +604,18 @@ def part_entry(s, part, build):
                                              "status": "new"})
 
 
+def _add_part_candidates(part, build, facing, text, cands):
+    with edit_state() as s:   # merge: approvals may have happened while ComfyUI ran
+        e, pb = part_entry(s, part, build)
+        e["text"] = text
+        pb[facing]["candidates"] = cands + [c for c in pb[facing].get("candidates", []) if c not in cands][:8]
+        pb["status"] = "candidates"
+
+
 def gen_part(part, build, facing, text, n=4, seed=5, lora=0.6):
     st = style()
     s = load_state()
     e, pb = part_entry(s, part, build)
-    e["text"] = text
     slot = e["slot"]
     base = ai_kit.base_path(build, facing)
     if not base.exists():
@@ -633,9 +641,7 @@ def gen_part(part, build, facing, text, n=4, seed=5, lora=0.6):
             dst = out / f"{facing}_card_s{sd}_{int(time.time())}.png"
             img.save(dst)
             cands.append(rel(dst))
-        pb[facing]["candidates"] = cands + [c for c in pb[facing].get("candidates", []) if c not in cands][:8]
-        pb["status"] = "candidates"
-        save_state(s)
+        _add_part_candidates(part, build, facing, text, cands)
         return cands
     extra = []
     name = comfy.upload(base)
@@ -643,24 +649,20 @@ def gen_part(part, build, facing, text, n=4, seed=5, lora=0.6):
         sd = seed + k
         nodes = comfy.build_edit(name, part_prompt(slot, text, facing, st), seed=sd, lora_strength=lora,
                                  prefix="hdart/ws_part", megapixels=ai_kit.BIG ** 2 / 1e6, extra_images=extra)
-        p = comfy.run(nodes, out / "tmp")[0]
         dst = out / f"{facing}_s{sd}_{int(time.time())}.png"
-        Image.open(p).convert("RGB").resize((ai_kit.BIG, ai_kit.BIG), Image.NEAREST).save(dst)
+        comfy.image(nodes).convert("RGB").resize((ai_kit.BIG, ai_kit.BIG), Image.NEAREST).save(dst)
         cands.append(rel(dst))
-    pb[facing]["candidates"] = cands + [c for c in pb[facing].get("candidates", []) if c not in cands][:8]
-    pb["status"] = "candidates"
-    save_state(s)
+    _add_part_candidates(part, build, facing, text, cands)
     return cands
 
 
 def approve_raw(part, build, facing, file):
-    s = load_state()
-    e, pb = part_entry(s, part, build)
-    pb[facing]["approved"] = file
-    if facing == "front":
-        pb["back"].pop("approved", None)
-    pb["status"] = "cut" if pb["front"].get("approved") and pb["back"].get("approved") else "raw"
-    save_state(s)
+    with edit_state() as s:
+        e, pb = part_entry(s, part, build)
+        pb[facing]["approved"] = file
+        if facing == "front":
+            pb["back"].pop("approved", None)
+        pb["status"] = "cut" if pb["front"].get("approved") and pb["back"].get("approved") else "raw"
     return cut(part, build, facing)
 
 
@@ -691,13 +693,12 @@ def auto_layer(part, build, facing):
 
 
 def cut(part, build, facing, thresh=None, speck=None, res=64):
-    s = load_state()
-    e, pb = part_entry(s, part, build)
-    if thresh is not None:
-        pb["cut"]["thresh"] = int(thresh)
-    if speck is not None:
-        pb["cut"]["speck"] = int(speck)
-    save_state(s)
+    with edit_state() as s:
+        e, pb = part_entry(s, part, build)
+        if thresh is not None:
+            pb["cut"]["thresh"] = int(thresh)
+        if speck is not None:
+            pb["cut"]["speck"] = int(speck)
     layer, base, edited = auto_layer(part, build, facing)
     ed = load_edits(build, part, facing)
     keep = ((layer[..., 3] > 0) | (ed == 255)) & (ed != 128)
@@ -745,19 +746,17 @@ def fix_region(target, build, facing, image_rel, mask_url, prompt, seed=7, part=
     nodes = comfy.build_edit(name, full, seed=seed, lora_strength=0.6, prefix="hdart/ws_fix",
                              megapixels=ai_kit.BIG ** 2 / 1e6)
     out_dir = CAND / build / (part or "_base")
-    p = comfy.run(nodes, out_dir / "tmp")[0]
-    fixed = np.asarray(Image.open(p).convert("RGB").resize(src.size, Image.NEAREST))
+    fixed = np.asarray(comfy.image(nodes).convert("RGB").resize(src.size, Image.NEAREST))
     res = np.where(grow[..., None], fixed, np.asarray(src)).astype(np.uint8)
     dst = out_dir / f"{facing}_fix_s{seed}_{int(time.time())}.png"
     Image.fromarray(res).save(dst)
-    s = load_state()
-    if target == "part":
-        e, pb = part_entry(s, part, build)
-        pb[facing].setdefault("candidates", []).insert(0, rel(dst))
-    else:
-        b = s["builds"][build]
-        b[facing].setdefault("candidates", []).insert(0, rel(dst))
-    save_state(s)
+    with edit_state() as s:
+        if target == "part":
+            e, pb = part_entry(s, part, build)
+            pb[facing].setdefault("candidates", []).insert(0, rel(dst))
+        else:
+            b = s["builds"][build]
+            b[facing].setdefault("candidates", []).insert(0, rel(dst))
     return rel(dst)
 
 
@@ -838,26 +837,29 @@ def qa(part, build, facing, layer, base, edited, res):
 
 
 def approve_cut(part, build):
-    s = load_state()
-    e, pb = part_entry(s, part, build)
     ai_kit.templates_from_layers(build, part)
-    pb["status"] = "approved"
-    save_state(s)
+    with edit_state() as s:
+        e, pb = part_entry(s, part, build)
+        pb["status"] = "approved"
 
 
 def reject(part, build):
-    s = load_state()
-    e, pb = part_entry(s, part, build)
     shutil.rmtree(ai_kit.LAYERS / build / part, ignore_errors=True)
     for r in ai_kit.RESOLUTIONS:
         shutil.rmtree(ai_kit.TEMPLATES / f"r{r}" / build / part, ignore_errors=True)
-    pb["status"] = "rejected"
-    save_state(s)
+    with edit_state() as s:
+        e, pb = part_entry(s, part, build)
+        pb["status"] = "rejected"
 
 
 def import_existing(build="slim"):
     """One-off: register parts made before the Workshop as 'unreviewed' with their raw edits as candidates."""
-    s = load_state()
+    with edit_state() as s:
+        _import_existing(s, build)
+    return s
+
+
+def _import_existing(s, build):
     lib = json.loads((ROOT / "specs" / "ai_parts.json").read_text(encoding="utf-8"))["parts"]
     b = s["builds"].setdefault(build, {"description": style()["builds"].get(build, build), "front": {}, "back": {}})
     for f in ("front", "back"):
@@ -875,8 +877,6 @@ def import_existing(build="slim"):
         pb[facing].setdefault("approved", rel(raw))
         if pb["status"] == "new":
             pb["status"] = "unreviewed"
-    save_state(s)
-    return s
 
 
 # ----------------------------------------------------------------------------- sets & characters
