@@ -19,13 +19,13 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from . import ai_kit, comfy
+from . import ai_kit, comfy, config, jobs
 
 ROOT = Path(__file__).resolve().parent.parent
 STATE = ai_kit.AI_DIR / "workshop.json"
 CAND = ai_kit.AI_DIR / "candidates"
 STYLE = ROOT / "specs" / "ai_style.json"
-ARCHIVE = ROOT / "archive"  # git-ignored, shared with the Dungeon Forge
+ARCHIVE = config.data_dir() / "archive"  # git-ignored, shared with the Dungeon Forge
 ORDER = ("medium", "style", "proportions", "view", "rendering", "framing", "world")
 QA_COLORS = {"hair": (214, 70, 200), "skin": (240, 190, 150), "eyes": (60, 200, 90), "cloth1": (70, 110, 230),
              "cloth2": (60, 200, 220), "leather": (140, 90, 50), "metal": (170, 170, 185), "wood": (220, 140, 40),
@@ -154,21 +154,8 @@ def _blur_into(img, mask, radius=10):
 
 def _i2i(init, refs, prompt, seed, lora, denoise, mask=None):
     """img2img; `mask` (0..255 array, or bool) limits the redraw to it and keeps everything else exactly."""
-    CAND.mkdir(parents=True, exist_ok=True)
-    init.save(CAND / "_tmp_init.png")
-    names = []
-    for k, r in enumerate(refs):
-        r.save(CAND / f"_tmp_ref{k}.png")
-        names.append(comfy.upload(CAND / f"_tmp_ref{k}.png"))
-    mask_name = None
-    if mask is not None:
-        m8 = np.where(mask, 255, 0) if mask.dtype == bool else mask
-        Image.fromarray(m8.astype(np.uint8)).save(CAND / "_tmp_mask.png")
-        mask_name = comfy.upload(CAND / "_tmp_mask.png")
-    nodes = comfy.build_img2img(comfy.upload(CAND / "_tmp_init.png"), prompt, denoise=denoise, seed=seed,
-                                lora_strength=lora, ref_images=names, prefix="hdart/ws_back", mask_name=mask_name)
-    p = comfy.run(nodes, CAND / "tmp")[0]
-    return np.asarray(Image.open(p).convert("RGB").resize((ai_kit.BIG, ai_kit.BIG), Image.NEAREST))
+    out = comfy.img2img(init, prompt, seed=seed, denoise=denoise, lora=lora, refs=refs, mask=mask, prefix="hdart/ws_back")
+    return np.asarray(out.resize((ai_kit.BIG, ai_kit.BIG), Image.NEAREST))
 
 
 def _grow(mask, n):
@@ -894,8 +881,8 @@ def import_existing(build="slim"):
 
 # ----------------------------------------------------------------------------- sets & characters
 
-SETS = ROOT / "sprites" / "sets"
-CHARS = ROOT / "sprites" / "characters"
+SETS = config.data_dir() / "sprites" / "sets"
+CHARS = config.data_dir() / "sprites" / "characters"
 
 
 def safe(name):
@@ -957,3 +944,27 @@ def image(relpath):
     if ai_kit.AI_DIR.resolve() not in p.parents:
         raise ValueError("outside the AI folder")
     return p.read_bytes()
+
+
+# ----------------------------------------------------------------------------- Studio job kinds (hdart.jobs)
+
+@jobs.kind("base")
+def _job_base(a):
+    return gen_base(a["build"], a["facing"], int(a.get("n", 4)), int(a.get("seed", 1)), a.get("description"))
+
+
+@jobs.kind("race")
+def _job_race(a):
+    return gen_race(a["race"], a["sex"], a["facing"], int(a.get("n", 4)), int(a.get("seed", 1)))
+
+
+@jobs.kind("part")
+def _job_part(a):
+    return gen_part(a["part"], a["build"], a["facing"], a["text"], int(a.get("n", 4)), int(a.get("seed", 5)),
+                    float(a.get("lora", 0.6)))
+
+
+@jobs.kind("fix")
+def _job_fix(a):
+    return fix_region(a["target"], a["build"], a["facing"], a["image"], a["mask"], a["prompt"], int(a.get("seed", 7)),
+                      a.get("part"))

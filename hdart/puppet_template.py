@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-from . import ai_kit, workshop as ws, puppet as pp
+from . import ai_kit, jobs, workshop as ws, puppet as pp
 
 SPEC = ai_kit.ROOT / "specs" / "puppet_template.json"
 PX = pp.PX
@@ -585,3 +585,15 @@ def preview(spec=None, s=2, frames=8):
             sheet.paste(im.resize((T, T), Image.LANCZOS), (c * T, 34 + r * T))
     _save(sheet, out / "template_sheet.png")
     return {"dir": ws.rel(out), "files": sorted(p.name for p in out.glob("*.*"))}
+
+
+# ----------------------------------------------------------------------------- Studio job kinds (hdart.jobs)
+
+@jobs.kind("tpl", gpu=False, reload=("puppet", "puppet_template"))
+def _job_preview(a):   # clean puppet template: preview
+    return preview(None)
+
+
+@jobs.kind("tpl_measure", gpu=False, reload=("puppet", "puppet_template"))
+def _job_measure(a):   # re-measure from the art, then preview
+    return preview(measure(a.get("build", "human.unisex")))

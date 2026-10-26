@@ -158,7 +158,7 @@
                border-radius:6px; padding:8px; z-index:30; display:none; box-shadow:0 10px 30px #000a; }
   #jobsPanel.on { display:block; }
   .job { padding:4px 0; border-bottom:1px solid var(--line); font-size:12px; display:flex; justify-content:space-between; gap:6px; }
-  .job .s { color:var(--muted); } .job .s.running { color:var(--info); } .job .s.done { color:var(--ok); } .job .s.failed { color:var(--bad); }
+  .job .s { color:var(--muted); } .job .s.running { color:var(--info); } .job .s.done { color:var(--ok); } .job .s.failed { color:var(--bad); } .job .x { border:0; background:none; color:var(--muted); cursor:pointer; padding:0 2px; } .job .note { color:var(--muted); font-size:11px; }
   .chips { display:flex; flex-wrap:wrap; gap:4px; margin:4px 0; }
   .chip { font-size:11px; padding:2px 7px; border-radius:10px; background:#2f2838; border:1px solid var(--line); cursor:pointer; }
   .chip:hover { border-color:var(--accent); } .chip.have { opacity:.4; cursor:default; }
@@ -1843,11 +1843,12 @@ $("#captureBtn").onclick = async () => { await post("capture", {}); $("#exportHi
 // ---- jobs
 $("#jobsBtn").onclick = () => $("#jobsPanel").classList.toggle("on");
 $("#clearJobs").onclick = async () => { await api("/api/ws/jobs/clear", {}); pollJobs(); };
+async function cancelJob(id) { await api("/api/ws/jobs/cancel", { id }); pollJobs(); }
 async function pollJobs() {
   try { JOBS = (await api("/api/ws/jobs")).jobs; } catch { return; }
   const active = JOBS.filter(j => j.status === "queued" || j.status === "running");
   $("#jobsBtn").textContent = active.length ? `Queue: ${active.length} (${active[0].label})` : "Queue: idle";
-  $("#jobs").innerHTML = JOBS.slice().reverse().map(j => `<div class="job"><span>${esc(j.label)}${j.error ? `<div class="err">${esc(j.error)}</div>` : ""}</span><span class="s ${j.status}">${j.status}</span></div>`).join("") || `<div class="hint">Nothing queued.</div>`;
+  $("#jobs").innerHTML = JOBS.slice().reverse().map(j => `<div class="job"><span>${esc(j.label)}${j.note ? `<div class="note">${esc(j.note)}</div>` : ""}${j.error ? `<div class="err">${esc(j.error)}</div>` : ""}</span><span><span class="s ${j.status}">${j.status}</span>${j.status === "queued" || j.status === "running" ? `<button class="x" title="Cancel this job" onclick="cancelJob(${j.id})">✕</button>` : ""}</span></div>`).join("") || `<div class="hint">Nothing queued.</div>`;
   let reload = false, caps = false;
   for (const j of JOBS) {
     if ((j.status === "done" || j.status === "failed") && !seenDone.has(j.id)) {

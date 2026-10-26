@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-from . import ai_kit, comfy, workshop as ws, puppet as pp, puppet_template as pt
+from . import ai_kit, comfy, jobs, workshop as ws, puppet as pp, puppet_template as pt
 
 S, SHEET, GAP, MARGIN = 2, 1024, 14, 24
 D_FIGURE, D_COMPLETE = 0.8, 0.9
@@ -236,12 +236,10 @@ def unsheet_one(painted, base, lay, n):
 # ----------------------------------------------------------------------------- ComfyUI passes
 
 def _run(init, mask, prompt, seed, denoise, tag, refs=()):
-    tmp = ai_kit.AI_DIR / "paint" / "_tmp"; tmp.mkdir(parents=True, exist_ok=True)
-    init.save(tmp / f"{tag}_init.png"); Image.fromarray(np.where(mask, 255, 0).astype(np.uint8)).save(tmp / f"{tag}_mask.png")
-    names = [comfy.upload(r) for r in refs]
-    nodes = comfy.build_img2img(comfy.upload(tmp / f"{tag}_init.png"), prompt, denoise=denoise, seed=seed, ref_images=names,
-                                mask_name=comfy.upload(tmp / f"{tag}_mask.png"), prefix="hdart/paint")
-    return Image.open(comfy.run(nodes, tmp)[0]).convert("RGB").resize(init.size, Image.LANCZOS)
+    """One masked img2img pass (`tag` names it in logs only); `refs` are image paths."""
+    out = comfy.img2img(init, prompt, seed=seed, denoise=denoise, refs=[Image.open(r).convert("RGB") for r in refs],
+                        mask=np.asarray(mask, dtype=bool), prefix="hdart/paint")
+    return out.resize(init.size, Image.LANCZOS)
 
 
 def owners(parts, order):
@@ -682,3 +680,20 @@ def fix_region(build, cid, view, part, mask, prompt="", seed=3, denoise=0.75):
     Image.fromarray(new).save(d / "parts" / view / f"{part}.png")
     render_previews(d, spec)
     return parts_doc(build, cid)["stamp"]
+
+
+# ----------------------------------------------------------------------------- Studio job kinds (hdart.jobs)
+
+@jobs.kind("paint", reload=("puppet", "puppet_template", "puppet_paint"))   # puppet Paint step
+def _job_paint(a):
+    return paint(a["build"], int(a.get("n", 1)), int(a.get("seed", 1)))
+
+
+@jobs.kind("paint_preview", gpu=False, reload=("puppet", "puppet_template", "puppet_paint"))   # walk re-render
+def _job_preview(a):
+    return preview(a["build"], a["id"])["stamp"]
+
+
+@jobs.kind("paint_fix", reload=("puppet", "puppet_template", "puppet_paint"))   # Parts editor: repaint a region
+def _job_fix(a):
+    return fix_region(a["build"], a["id"], a["view"], a["part"], a["mask"], a.get("prompt", ""), int(a.get("seed", 3)))

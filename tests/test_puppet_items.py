@@ -1,0 +1,88 @@
+"""Item Workshop backend (hdart.puppet_items) on the fake ComfyUI: a fitted item (trousers) and a held one (sword) are
+generated on a fake-painted puppet, keyed into cel levels per material, split into per-part layers, approved, worn
+and re-keyed. The fake paints every masked area in the item material's key colour (shaded top to bottom, so there are
+several cel levels) and returns the txt2img sword as a leather grip + metal blade cut-out.
+Run: uv run python tests/test_puppet_items.py"""
+import json, shutil, tempfile
+from pathlib import Path
+import numpy as np
+from PIL import Image
+import hdart.ai_kit as ak
+import hdart.workshop as ws
+import hdart.puppet_paint as ppt
+import hdart.puppet_face as pf
+import hdart.puppet_items as pi
+from hdart.fake_comfy import FakeComfy, info
+
+tmp = Path(tempfile.mkdtemp())
+ak.AI_DIR = tmp / "ai"; ws.CAND = ak.AI_DIR / "candidates"; ws.STATE = ak.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "archive"
+shutil.copy(pi.SPEC, tmp / "items.json"); pi.SPEC = tmp / "items.json"
+doc = pi.spec()
+KEY = {m: np.array([int(e["key"][i:i + 2], 16) for i in (1, 3, 5)], float) for m, e in doc["materials"].items()}
+calls, paint_key = [], {"m": None}
+
+
+def shaded(key, h, w):
+    yy = np.linspace(1.0, 0.45, h)[:, None, None]
+    return np.clip(np.broadcast_to(key * yy, (h, w, 3)), 0, 255).astype(np.uint8)
+
+
+def respond(nodes, uploads):
+    i = info(nodes, uploads); calls.append(i["prompt"])
+    if i["init"] is None:   # txt2img: the held item on white, background removed
+        im = np.zeros((768, 768, 4), np.uint8)
+        im[120:560, 360:408, :3] = shaded(KEY["metal"], 440, 48); im[560:660, 368:400, :3] = shaded(KEY["leather"], 100, 32)
+        im[120:660, 360:408, 3] = np.where(im[120:660, 360:408, :3].sum(-1) > 0, 255, 0)
+        return [Image.fromarray(im, "RGBA")]
+    a = np.asarray(i["init"].convert("RGB")).copy()
+    if i["mask"] is not None and paint_key["m"]:
+        m = i["mask"]; a[m] = shaded(KEY[paint_key["m"]], *a.shape[:2])[m]
+    return [Image.fromarray(a)]
+
+
+fake = FakeComfy(respond).start()
+c = ppt.paint("human.male", n=1, seed=1)[0]; ppt.approve("human.male", c)
+
+# fitted: zones from the spec's rules, both views keyed, split per body part, levels in 0..4 on the cloth channel
+paint_key["m"] = "cloth"
+t = pi.generate("human", "item.trousers", seed=2)
+d = pi.out_dir("human", "item.trousers") / t; meta = json.loads((d / "meta.json").read_text())
+assert meta["on"] == "human.male" and meta["paint"] == c and meta["keyed"]["front"] > 2000 and meta["keyed"]["back"] > 2000
+assert any("from behind" in (p or "") for p in calls)   # the back is guided by an edit of the painted front (AB2)
+for v in ("front", "back"):
+    lev = np.asarray(Image.open(d / f"levels_{v}.png")); on = lev[..., 3] > 0
+    assert set(np.unique(lev[..., 1][on])) <= {4}, v                                         # cloth = channel 4
+    assert set(np.unique(lev[..., 0][on])) <= set(range(pi.LEVELS)) | {254} and len(np.unique(lev[..., 0][on])) >= 3, v
+    parts = {f.stem for f in (d / "parts" / v).glob("*.png")}
+    assert "torso" in parts and any(p.startswith("leg") for p in parts) and not any(p.startswith("arm") for p in parts), (v, parts)
+    assert {f.stem for f in (d / "plevels" / v).glob("*.png")} == parts
+assert (d / "prev_male_front.png").exists()
+
+# held: the cut-out keyed per material (leather grip, metal blade) and framed
+paint_key["m"] = None
+s = pi.generate("human", "item.sword", seed=3)
+sd = pi.out_dir("human", "item.sword") / s
+hl = np.asarray(Image.open(sd / "held_levels.png")); on = hl[..., 3] > 0
+assert {5, 6} <= set(np.unique(hl[..., 1][on])) and Image.open(sd / "held.png").size == hl.shape[1::-1]
+
+# approve, resolve, wear: the dressed build has the item over the paint; candidates listing
+pi.approve("human", "item.trousers", t); pi.approve("human", "item.sword", s)
+assert pi.resolve("human", "item.trousers", "human.male") == t and pi.resolve("human", "item.trousers", "human.female") == t
+r = pi.render("human.male", [("item.trousers", t, {}), ("item.sword", s, {})], frames=0)
+bare = pi.render("human.male", [], frames=0)
+assert np.any(np.asarray(r["front"][0]) != np.asarray(bare["front"][0]))
+assert [x["id"] for x in pi.candidates("human", "item.trousers")] == [t]
+
+# re-key from the saved paints (no GPU): same result
+before = (d / "levels_front.png").read_bytes()
+n_calls = len(calls)
+k = pi.rekey("human", "item.trousers", t)
+assert len(calls) == n_calls and k["front"] == meta["keyed"]["front"] and (d / "levels_front.png").read_bytes() == before
+
+# the queue entry point (job kind "item") and archive
+new = pi.job({"action": "generate", "race": "human", "item": "item.trousers", "n": 1, "seed": 4})
+assert len(new) == 1 and new[0] != t
+pi.archive("human", "item.trousers", new[0])
+assert not (pi.out_dir("human", "item.trousers") / new[0]).exists() and pi.resolve("human", "item.trousers", "human.male") == t
+fake.stop(); shutil.rmtree(tmp)
+print("ok")

@@ -1,7 +1,9 @@
-"""Where the pipeline and the Unity project it writes into live. The pipeline is in P:/Tools/art-pipeline, outside
-the Hearthdelve repo, so the project is found by path: HD_PROJECT, or the root checkout by default."""
-import os
-from pathlib import Path
+"""Where the pipeline lives and which project it writes into. Settings are in hdart/config.py (config.toml);
+`REPO` is kept for old callers and resolves the active project's path when read, not at import."""
+from .config import ROOT, data_dir, project  # noqa: F401  (ROOT = this tool, P:/Tools/art-pipeline)
 
-ROOT = Path(__file__).resolve().parent.parent                                   # this tool (P:/Tools/art-pipeline)
-REPO = Path(os.environ.get("HD_PROJECT", r"P:\Projects\Unity\Hearthdelve"))     # Unity project root
+
+def __getattr__(name):
+    if name == "REPO":
+        return project().path
+    raise AttributeError(name)

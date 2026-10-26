@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter
 
-from . import ai_kit, comfy, puppet as pp, puppet_template as pt, puppet_paint as ppt, puppet_face as pf
+from . import ai_kit, comfy, jobs, puppet as pp, puppet_template as pt, puppet_paint as ppt, puppet_face as pf
 
 SPEC = ai_kit.ROOT / "specs" / "items.json"
 S, N = ppt.S, pf.N
@@ -1425,6 +1425,7 @@ def api(action, b):
     raise ValueError(f"unknown items action {action}")
 
 
+@jobs.kind("item", reload=("puppet", "puppet_template", "puppet_paint", "puppet_face", "puppet_items"))
 def job(a):
     """The Item Workshop's queue jobs (job kind "item", `action` in the args); reloaded per job."""
     race = a.get("race", "human")

@@ -6,16 +6,15 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .paths import REPO, ROOT                            # this tool / Unity project root (HD_PROJECT)
-BLENDER_DEFAULT = r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe"
+from . import config
+from .paths import ROOT                                  # this tool
 SPEC = ROOT / "specs" / "character_kit.json"
 PALETTES = ROOT / "specs" / "palettes.json"
 KIT = ROOT / "kit" / "character_kit.blend"
-CHAR_OUT = REPO / "Assets" / "Art" / "Characters"
 
 
 def blender():
-    return os.environ.get("HD_BLENDER", BLENDER_DEFAULT)
+    return config.blender()
 
 
 def run_blender(script, blend=None, **kw):
@@ -286,7 +285,14 @@ def cmd_dungeon_capture(a):
         print(dungeon.CAPTURES / f)
 
 
+def cmd_backup(a):
+    from .backup import backup
+    r = backup(a.dest, dry_run=a.dry_run)
+    print(f"{'would copy' if a.dry_run else 'copied'} {r['files']} files, {r['bytes'] / 1e6:.0f} MB -> {r['dest']}")
+
+
 def main(argv=None):
+    ART = config.project().export("legacy")   # the old CLI writers' root (Assets/Art, not read by the game)
     p = argparse.ArgumentParser(prog="hdart", description=__doc__)
     sub = p.add_subparsers(required=True)
 
@@ -298,14 +304,14 @@ def main(argv=None):
 
     r = sub.add_parser("kit-render", help="render every kit part into indexed layer sheets")
     r.add_argument("--kit", default=str(KIT)); r.add_argument("--spec", default=str(SPEC))
-    r.add_argument("--out", default=str(CHAR_OUT)); r.add_argument("--bodies"); r.add_argument("--parts")
+    r.add_argument("--out", default=str(ART / "Characters")); r.add_argument("--bodies"); r.add_argument("--parts")
     r.add_argument("--views"); r.add_argument("--textures"); r.add_argument("--supersample")
     r.set_defaults(fn=cmd_kit_render)
 
     for name, fn, hlp in (("compose", cmd_compose, "compose one appearance JSON into sprite sheets"),
                           ("preview", cmd_preview, "random characters: lineups, crowd grid, GIFs")):
         c = sub.add_parser(name, help=hlp)
-        c.add_argument("--renders", default=str(CHAR_OUT)); c.add_argument("--spec", default=str(SPEC))
+        c.add_argument("--renders", default=str(ART / "Characters")); c.add_argument("--spec", default=str(SPEC))
         c.add_argument("--palettes", default=str(PALETTES)); c.add_argument("--out", default=str(ROOT / "work" / "preview"))
         if name == "compose":
             c.add_argument("appearance")
@@ -321,7 +327,7 @@ def main(argv=None):
     t.set_defaults(fn=cmd_textures)
 
     i = sub.add_parser("icons", help="pixel-art icons for items/spells (FLUX.2 + pixel LoRA + BiRefNet)")
-    i.add_argument("--spec", default=str(ICONS)); i.add_argument("--out", default=str(REPO / "Assets" / "Art" / "Icons"))
+    i.add_argument("--spec", default=str(ICONS)); i.add_argument("--out", default=str(ART / "Icons"))
     i.add_argument("--only"); i.add_argument("--variants", type=int, default=1); i.add_argument("--seed", type=int, default=0)
     i.set_defaults(fn=cmd_icon)
 
@@ -333,12 +339,12 @@ def main(argv=None):
 
     v = sub.add_parser("vfx", help="procedural pixel spell effects (battle flipbooks)")
     v.add_argument("--spec", default=str(ROOT / "specs" / "spells.json")); v.add_argument("--palettes", default=str(PALETTES))
-    v.add_argument("--out", default=str(REPO / "Assets" / "Art" / "VFX")); v.add_argument("--size", type=int, default=64)
+    v.add_argument("--out", default=str(ART / "VFX")); v.add_argument("--size", type=int, default=64)
     v.set_defaults(fn=cmd_vfx)
 
     tl = sub.add_parser("tiles", help="render an isometric biome tile set from its textures (Blender)")
     tl.add_argument("--spec", default=str(ROOT / "specs" / "tiles_crypt.json"))
-    tl.add_argument("--out", default=str(REPO / "Assets" / "Art" / "Tiles")); tl.add_argument("--tile", type=int, default=32)
+    tl.add_argument("--out", default=str(ART / "Tiles")); tl.add_argument("--tile", type=int, default=32)
     tl.add_argument("--smooth", action="store_true", help="use the full-res textures instead of the pixel textures")
     tl.set_defaults(fn=cmd_tiles)
 
@@ -347,7 +353,7 @@ def main(argv=None):
     px.set_defaults(fn=cmd_pixel_textures)
 
     mr = sub.add_parser("mesh-render", help="render a GLB into battle / iso / icon sprites (Blender)")
-    mr.add_argument("glb"); mr.add_argument("--name"); mr.add_argument("--out", default=str(REPO / "Assets" / "Art" / "Monsters"))
+    mr.add_argument("glb"); mr.add_argument("--name"); mr.add_argument("--out", default=str(ART / "Monsters"))
     mr.add_argument("--height", default="1.8"); mr.add_argument("--views", default="battle,iso4,icon")
     mr.add_argument("--cell", default="96"); mr.add_argument("--yaw", default="0"); mr.add_argument("--colors", default="16")
     mr.add_argument("--voxel", default="0.075", help="voxel size in world units (0 = smooth)")
@@ -355,13 +361,13 @@ def main(argv=None):
     mr.set_defaults(fn=cmd_mesh_render)
 
     rm = sub.add_parser("room", help="mock crypt room with random heroes and torch light (review image)")
-    rm.add_argument("--renders", default=str(CHAR_OUT)); rm.add_argument("--tiles", default=str(REPO / "Assets" / "Art" / "Tiles" / "crypt"))
+    rm.add_argument("--renders", default=str(ART / "Characters")); rm.add_argument("--tiles", default=str(ART / "Tiles" / "crypt"))
     rm.add_argument("--out", default=str(ROOT / "work" / "room_preview.png")); rm.add_argument("--heroes", type=int, default=6)
     rm.add_argument("--seed", type=int, default=8); rm.add_argument("--scale", type=int, default=2)
     rm.set_defaults(fn=cmd_room)
 
     sk = sub.add_parser("sprite-kit", help="bake the 2D JRPG sprite kit (hdart/sprite_kit.py) into layer sheets")
-    sk.add_argument("--spec", default=str(SPRITE_SPEC)); sk.add_argument("--out", default=str(CHAR_OUT))
+    sk.add_argument("--spec", default=str(SPRITE_SPEC)); sk.add_argument("--out", default=str(ART / "Characters"))
     sk.add_argument("--parts"); sk.add_argument("--res", type=int, default=64, help="grid size: 32, 64, 128 or 256")
     sk.set_defaults(fn=cmd_sprite_kit)
 
@@ -402,6 +408,11 @@ def main(argv=None):
     dc = sub.add_parser("dungeon-capture", help="export a dungeon set and screenshot Prototype V with it (Unity batch)")
     dc.add_argument("set", nargs="?", default="crypt")
     dc.set_defaults(fn=cmd_dungeon_capture)
+
+    bk = sub.add_parser("backup", help="copy approved art, every tool's state and the specs to a dated folder (config: paths.backups)")
+    bk.add_argument("--dest", help="backup root (default: config.toml [paths] backups)")
+    bk.add_argument("--dry-run", action="store_true", help="only count what would be copied")
+    bk.set_defaults(fn=cmd_backup)
 
     a = p.parse_args(argv)
     a.fn(a)

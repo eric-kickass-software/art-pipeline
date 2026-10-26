@@ -1,4 +1,4 @@
-"""Face tab backend (hdart.puppet_face), ComfyUI stubbed: paint passes return their init; hair passes paint the masked
+"""Face tab backend (hdart.puppet_face), on the fake ComfyUI: paint passes return their init; hair passes paint the masked
 area in the green key, face passes draw a dark eye with a magenta iris. Run: uv run python tests/test_puppet_face.py"""
 import json, shutil, tempfile
 from pathlib import Path
@@ -12,37 +12,27 @@ import hdart.puppet_face as pf
 tmp = Path(tempfile.mkdtemp())
 ak.AI_DIR = tmp / "ai"; ws.CAND = ak.AI_DIR / "candidates"; ws.STATE = ak.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "archive"
 shutil.copy(pf.SPEC, tmp / "face.json"); pf.SPEC = tmp / "face.json"
-uploads, calls = {}, []
+from hdart.fake_comfy import FakeComfy, info
+calls = []
 
 
-class FakeComfy:
-    @staticmethod
-    def upload(p):
-        uploads[Path(p).name] = Path(p); return Path(p).name
-    @staticmethod
-    def build_img2img(name, prompt, **kw):
-        calls.append(prompt); return {"init": name, "mask": kw.get("mask_name"), "prompt": prompt}
-    @staticmethod
-    def build_edit(name, prompt, **kw):   # the back-hair edit: returns its input (the painted front head, green hair)
-        calls.append(prompt); return {"init": name, "mask": None, "prompt": prompt}
-    @staticmethod
-    def run(nodes, out_dir):
-        im = Image.open(uploads[nodes["init"]]).convert("RGB"); a = np.asarray(im).copy()
-        m = np.asarray(Image.open(uploads[nodes["mask"]]).convert("L")) > 127 if nodes["mask"] else None
-        if m is not None and "green-screen" in nodes["prompt"]:   # hair in the key colour, shaded top to bottom
-            yy = np.mgrid[:a.shape[0], :a.shape[1]][0] / a.shape[0]
-            g = np.stack([30 + 0 * yy, 150 + 80 * (1 - yy), 30 + 0 * yy], -1).astype(np.uint8); a[m] = g[m]
-        elif m is not None and "magenta" in nodes["prompt"]:      # a face: a dark eye with a magenta iris in the masked area
-            ys, xs = np.nonzero(m); cx, cy = int(xs.mean()), int(ys.mean())
-            im2 = Image.fromarray(a); d = ImageDraw.Draw(im2)
-            for dx in (-60, 60):
-                d.ellipse([cx + dx - 30, cy - 40, cx + dx + 30, cy + 20], fill=(20, 16, 18))
-                d.ellipse([cx + dx - 18, cy - 28, cx + dx + 18, cy + 8], fill=(200, 30, 200))
-            a = np.asarray(im2)
-        p = Path(out_dir) / f"out_{len(calls)}.png"; Image.fromarray(a).save(p); return [p]
+def respond(nodes, uploads):
+    i = info(nodes, uploads); calls.append(i["prompt"])
+    a = np.asarray(i["init"].convert("RGB")).copy(); m = i["mask"]   # the back-hair edit has no mask: returns its input
+    if m is not None and "green-screen" in i["prompt"]:   # hair in the key colour, shaded top to bottom
+        yy = np.mgrid[:a.shape[0], :a.shape[1]][0] / a.shape[0]
+        g = np.stack([30 + 0 * yy, 150 + 80 * (1 - yy), 30 + 0 * yy], -1).astype(np.uint8); a[m] = g[m]
+    elif m is not None and "magenta" in i["prompt"]:      # a face: a dark eye with a magenta iris in the masked area
+        ys, xs = np.nonzero(m); cx, cy = int(xs.mean()), int(ys.mean())
+        im2 = Image.fromarray(a); d = ImageDraw.Draw(im2)
+        for dx in (-60, 60):
+            d.ellipse([cx + dx - 30, cy - 40, cx + dx + 30, cy + 20], fill=(20, 16, 18))
+            d.ellipse([cx + dx - 18, cy - 28, cx + dx + 18, cy + 8], fill=(200, 30, 200))
+        a = np.asarray(im2)
+    return [Image.fromarray(a)]
 
 
-ppt.comfy = FakeComfy; pf.ppt = ppt; pf.comfy = FakeComfy
+fake = FakeComfy(respond).start()
 for sex in ("male", "female"):
     c = ppt.paint(f"human.{sex}", n=1, seed=1); ppt.approve(f"human.{sex}", c[0])
 
@@ -107,5 +97,5 @@ try:
     pf.save_spec(bad); raise SystemExit("no error")
 except ValueError:
     pass
-shutil.rmtree(tmp)
+fake.stop(); shutil.rmtree(tmp)
 print("ok")

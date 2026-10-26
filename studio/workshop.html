@@ -73,7 +73,7 @@
                border-radius:6px; padding:8px; z-index:30; display:none; box-shadow:0 10px 30px #000a; }
   #jobsPanel.on { display:block; }
   .job { padding:4px 0; border-bottom:1px solid var(--line); font-size:12px; display:flex; justify-content:space-between; gap:6px; }
-  .job .s { color:var(--muted); } .job .s.running { color:var(--info); } .job .s.done { color:var(--ok); } .job .s.failed { color:var(--bad); }
+  .job .s { color:var(--muted); } .job .s.running { color:var(--info); } .job .s.done { color:var(--ok); } .job .s.failed { color:var(--bad); } .job .x { border:0; background:none; color:var(--muted); cursor:pointer; padding:0 2px; } .job .note { color:var(--muted); font-size:11px; }
   .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
   .bcands .cand { width:200px; } .bcands .cand img { width:190px; height:190px; }
   .pcands .pcand { background:var(--card); border:2px solid transparent; border-radius:6px; padding:4px; width:316px; }
@@ -567,7 +567,7 @@ async function pollJobs() {
     const active = jobs.filter(j => j.status === "queued" || j.status === "running");
     const run = jobs.find(j => j.status === "running");
     $("jobsBtn").textContent = active.length ? `Queue: ${active.length} (${run ? run.label : "starting"})` : "Queue: idle";
-    $("jobsList").innerHTML = jobs.slice().reverse().map(j => `<div class="job"><span>${j.label}</span><span class="s ${j.status}" title="${j.error || ""}">${j.status}</span></div>`).join("") || `<p class="hint">Nothing queued.</p>`;
+    $("jobsList").innerHTML = jobs.slice().reverse().map(j => `<div class="job"><span>${j.label}${j.note ? `<div class="note">${j.note}</div>` : ""}</span><span><span class="s ${j.status}" title="${j.error || ""}">${j.status}</span>${j.status === "queued" || j.status === "running" ? `<button class="x" title="Cancel this job" onclick="cancelJob(${j.id})">✕</button>` : ""}</span></div>`).join("") || `<p class="hint">Nothing queued.</p>`;
     const done = jobs.filter(j => j.status === "done" || j.status === "failed").length;
     if (done !== lastDone) { lastDone = done; const f = jobs.filter(j => j.status === "failed").pop(); if (f) err(`${f.label}: ${f.error}`); await refresh(); }
     markRunning(active);
@@ -579,6 +579,7 @@ function markRunning(active) {
     active.some(j => j.label.startsWith(`${c.dataset.part} · ${c.dataset.build}`))));
 }
 async function queue(list) { await api("/api/ws/jobs", { jobs: list }); pollJobs(); }
+async function cancelJob(id) { await api("/api/ws/jobs/cancel", { id }); pollJobs(); }
 
 // ------------------------------------------------------------------ board
 const selected = new Set();
