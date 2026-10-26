@@ -8,9 +8,9 @@ one note per tool, and per project the handoff contract and asset plan, e.g. `He
 project and the tools go through that project's ledger (Hearthdelve: `Game Dev/Hearthdelve/Hearthdelve - Requirements.md`).
 
 **Location:** `P:\Tools\art-pipeline`, its own git repo (moved out of the Hearthdelve repo's `Tools/ArtPipeline` on
-2026-10-12; history before that is in the Hearthdelve repo). Output goes into the Unity project at `HD_PROJECT`,
-by default the root checkout `P:\Projects\Unity\Hearthdelve` (see `hdart/paths.py`). Set `HD_PROJECT` to point a run
-at a worktree instead. Paths like `Assets/...` below are in that project.
+2026-10-12; history before that is in the Hearthdelve repo). Output goes into the active project's profile in
+`config.toml` (Hearthdelve: the root checkout `P:\Projects\Unity\Hearthdelve`). Set `HD_PROJECT` to point a run at a
+worktree instead. Paths like `Assets/...` below are in that project. See **Config, tests, backups** below.
 Git holds only the tool and its workflow (code, specs, docs). Generated art (`sprites/`, `textures/`, `kit/`, `work/`,
 `archive/`) stays local: approved art is exported into the game project, and the rest can be thrown away or regenerated.
 
@@ -31,8 +31,10 @@ Git holds only the tool and its workflow (code, specs, docs). Generated art (`sp
 | /items | **Item Workshop**: equipment as overlay layers on the painted puppets. Items (zone editor, generate, candidates, per-sex fits), Outfit (dress-up with ramps + walk) | `studio/workshop.html`, `hdart/puppet_items.py` | `specs/items.json`, `specs/item_zones/`, `sprites/ai/items/<race>/` |
 | /dungeon | **Dungeon Forge**: dungeon sets. Pieces (walls, floors, doors, archways, wall decor, props, traps) → candidates → approve → room preview → export to Unity → Prototype V capture | `studio/dungeon.html`, `hdart/dungeon.py`, `hdart/iso.py`, `blender/mesh_template.py` | `specs/dungeon_sets/<set>.json` (pieces), `specs/dungeon_style.json` (descriptors + catalog), `sprites/dungeon/<set>/state.json` + `candidates/`, Blender mesh cache `sprites/dungeon/_meshes/` |
 
-3. The generation **queue** (top right in Workshop/Dungeon) runs one job at a time, because ComfyUI is single-GPU anyway. Jobs live in memory, so a restart
-   clears the queue, but every result is already on disk.
+3. The generation **queue** (top right in Workshop/Dungeon) runs one job at a time, because ComfyUI is single-GPU anyway. The queue is saved
+   (`sprites/studio_jobs.json`): after a restart the queued jobs run again; one that was running shows as failed
+   ("interrupted"), because it may have written half its outputs. ✕ cancels a job (a running one interrupts ComfyUI).
+   Before a GPU job the queue waits while ComfyUI is busy with someone else's work (a test, the CLI, a second Studio).
 4. Scripted use (what earlier sessions did): the same HTTP API the pages use, e.g.
    `POST /api/dun/generate {"set","piece","n","seed","denoise?","lora?"}` → job id; `GET /api/ws/jobs`;
    `POST /api/dun/approve {"set","piece","rel","on"}`; `GET /api/dun/room?set=crypt&tile=64&scale=2` (PNG);
@@ -41,6 +43,26 @@ Git holds only the tool and its workflow (code, specs, docs). Generated art (`sp
 5. Unity: in the root project, Hearthdelve → **Scene Launcher** (Ctrl+Shift+L). Dungeon art shows in **Prototype V**;
    `hdart dungeon-capture crypt` exports and screenshots it in batch (needs the project *closed* in the editor,
    or point `HD_PROJECT` at a worktree checkout).
+
+## Config, tests, backups
+- **`config.toml`** (git) holds every setting: ComfyUI URL and timeout, model file names, the Blender exe, the data
+  root (where `sprites/`, `work/`, `archive/` live; empty = this folder), the backup folder, and a **profile per
+  project** (path, Unity exe, contract folder, export roots for puppets / dungeon / items / legacy). Machine-specific
+  overrides go in `config.local.toml` (git-ignored, same keys). Env vars beat both: `HD_PROJECT`, `HD_PROFILE`,
+  `HD_COMFY_URL`, `HD_DATA`, `HD_BLENDER`, `HD_UNITY`. Code reads it through `hdart/config.py` when it needs a value.
+- **Tests:** `uv run python tests/run_all.py` (or one file: `uv run python tests/test_comfy.py`), ~10 min. No GPU:
+  `hdart/fake_comfy.py` is a fake ComfyUI (same HTTP API, deterministic images) and the runner points `HD_COMFY_URL`
+  at a closed port, so no test can queue behind the live Studio. `test_harmonize` reads the real crypt set: from a
+  worktree, run it with `HD_DATA=P:\Tools\art-pipeline`.
+- **One ComfyUI wrapper:** tools call `comfy.img2img(...)` / `comfy.repaint(...)` (PIL in, PIL out; temp files and
+  unique upload names handled), or `comfy.run(build_*(...))`. Failures raise `comfy.ComfyError`, never `SystemExit`.
+- **Job kinds** are registered where the work lives (`@jobs.kind("dun")` in `dungeon.py`, `"item"` in
+  `puppet_items.py`, ...; see `hdart/jobs.py`), so `studio.py` has no dispatch chain. A new module that registers
+  kinds goes into `studio.JOB_MODULES`.
+- **Backups:** `uv run hdart backup` (`--dry-run` to count) copies every tool's state and layers, the approved dungeon
+  candidates and the specs to `P:\Archive\art-pipeline-backups\<date_time>\` (~0.5 GB; config `paths.backups`).
+  Scratch (`tmp/`, `_tmp*`, the mesh cache), unapproved dungeon candidates, `archive/` and `work/` are left out. Old
+  backups aren't pruned: delete them by hand. Run it before risky work (a big regenerate, a cleanup).
 
 ## Setup (once per machine)
 | Piece | Where | Notes |
@@ -77,6 +99,7 @@ Git holds only the tool and its workflow (code, specs, docs). Generated art (`sp
 | `hdart vfx` | Procedural spell flipbooks (`specs/spells.json`) | `Assets/Art/VFX/` |
 
 | `hdart studio [--no-browser]` | The web tools above (or use `start-art-tools.cmd`) | http://127.0.0.1:4321 |
+| `hdart backup [--dry-run] [--dest dir]` | Copies state, approved art and specs to a dated folder (see Config, tests, backups) | `P:Archivert-pipeline-backups<date_time>` |
 | `hdart ai-base` / `ai-part` / `ai-kit` | AI character kit from the CLI (the Workshop is the curated way) | `sprites/ai/` |
 | `hdart dungeon-export [set]` | Approved dungeon pieces → Unity (format 2, with normal maps) | `Assets/StreamingAssets/Art/Dungeon/<set>/` |
 | `hdart puppet-export [race] [--size 512]` | A race's painted puppet (approved Paint per sex, else the newest), its hair and face sets and its skin/hair/eye ramps → Unity, each image with an index map (R = cel level, G = channel 1 skin / 2 hair / 3 eyes, A = mask) for recolouring (`hdart/unity_export.py`) | `Assets/StreamingAssets/Art/Puppets/<race>/` |
@@ -316,9 +339,9 @@ tab is gone: its descriptor groups are there, its mannequin clothing / builds / 
      as context); "keep inside the template shape" clamp; wheel zoom to 8×, pan; undo/redo; keys B E H O I M [ ].
      Save writes the parts (the painted originals are kept in `parts_orig/`, "Revert to painted" restores them) and
      queues `paint_preview` (walk re-render; scrub its frames beside the canvas). Tests: `tests/test_puppet_paint.py`
-     (ComfyUI stubbed).
+     (fake ComfyUI stub).
    - API: `race/state {race}`, `race/spec {spec}`, `race/approve {build, facing, file}`, `puppet/approve {build, on}`; queue job kind `race`
-     `{race, sex, facing, n, seed}`. Tests: `tests/test_races.py` (ComfyUI stubbed).
+     `{race, sex, facing, n, seed}`. Tests: `tests/test_races.py` (fake ComfyUI stub).
 1. **Mannequins** tab: generate and approve the male/female/slim base (front, then a back made from the mirrored front, clamped to the
    same silhouette so the card's two sides line up). How the back is made (`back_from_front`, tested 2026-10-20 on
    4 seeds, `tests/test_workshop_backs.py`):
@@ -388,7 +411,7 @@ tab is gone: its descriptor groups are there, its mannequin clothing / builds / 
      any colour painted in still takes the hair ramps; face = the magenta-key irises) and the previews. The AI fix is for
      paint parts only. Actions `face/layer_doc|layer_save|layer_revert`.
    - Jobs `face_gen {race, what (hair|face), sex, n, seed}`; actions `face/state|spec|set|archive|preview|ramp_preview`.
-     Tests: `tests/test_puppet_face.py` (ComfyUI stubbed with a fake that paints the keys).
+     Tests: `tests/test_puppet_face.py` (on `hdart.fake_comfy`, with a respond hook that paints the keys).
 5. **Ramps** tab (2026-10-24: painted puppets + the race's colour set): pick a **race**; the preview recolours its painted
    **male and female** puppets (approved Paint, else the newest), front and back, full size and 64 px. Skin levels are
    measured on the assembled rest pose of both views together (`puppet_paint.ramp_preview`, action

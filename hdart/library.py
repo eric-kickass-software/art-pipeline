@@ -18,6 +18,8 @@ import numpy as np
 import requests
 from PIL import Image
 
+from . import jobs
+
 ROOT = Path(__file__).resolve().parent.parent
 LIB = ROOT / "library"
 MATS = LIB / "materials"
@@ -202,3 +204,10 @@ def image_template(tpl, kind, per, height_tiles):
     img = Image.fromarray(a).resize((per, int(round(a.shape[0] * per / W))), Image.LANCZOS)
     hm = (np.asarray(Image.fromarray(h).resize(img.size, Image.LANCZOS)).astype(np.float64) / 255) if h is not None else np.ones(img.size[::-1])
     return {"rgb": img, "height": hm, "region": (hm > np.percentile(hm, 15)).astype(np.uint8)}
+
+
+# ----------------------------------------------------------------------------- Studio job kinds (hdart.jobs)
+
+@jobs.kind("lib_import", gpu=False)   # downloads, no ComfyUI
+def _job_import(a):
+    return import_material(a["source"], a["asset"], a.get("hit"))["id"]

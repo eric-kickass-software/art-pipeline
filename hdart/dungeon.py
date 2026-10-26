@@ -17,13 +17,12 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
-from . import ai_kit, comfy, iso, patterns
+from . import ai_kit, comfy, config, iso, jobs, patterns
 from .locks import CELLS as _CELL_CACHE, DUNGEON as LOCK, HARMONY as _REF_CACHE
-from .paths import REPO
 
 ROOT = Path(__file__).resolve().parent.parent
-DUN = ROOT / "sprites" / "dungeon"
-ARCHIVE = ROOT / "archive"  # git-ignored: archived sets, candidates and spec history, for removal by hand later
+DUN = config.data_dir() / "sprites" / "dungeon"
+ARCHIVE = config.data_dir() / "archive"  # git-ignored: archived sets, candidates and spec history, for removal by hand later
 STYLE = ROOT / "specs" / "dungeon_style.json"
 SCALE = 8  # generation is done at 8x the native pixel size
 ORDER = ("medium", "style", "view", "rendering", "framing", "biome")
@@ -113,9 +112,8 @@ def mesh_pass(piece, tile, h, length):
     png = MESHES / f"{name}.normal.png"
     if not png.exists():
         import subprocess
-        from .cli import BLENDER_DEFAULT
         extra = [a for k in ("opening", "spring") if k in piece for a in (f"--{k}", str(piece[k]))]
-        subprocess.run([BLENDER_DEFAULT, "-b", "-P", str(ROOT / "blender" / "mesh_template.py"), "--",
+        subprocess.run([config.blender(), "-b", "-P", str(ROOT / "blender" / "mesh_template.py"), "--",
                         "--mesh", piece["mesh"], "--tile", str(tile), "--height", f"{h:g}", "--length", str(length),
                         "--scale", str(SCALE), "--thickness", str(piece.get("thickness", 0.25)), "--out", str(MESHES),
                         *extra], check=True, capture_output=True)
@@ -175,16 +173,8 @@ def mirrored(piece):
 # ----------------------------------------------------------------------------- generation
 
 def _i2i(init, prompt, seed, denoise, lora, steps=8):
-    DUN.mkdir(parents=True, exist_ok=True)
-    tmp = DUN / f"_tmp_init_{time.time_ns()}.png"  # unique: drafts can run while another job uses the folder
-    init.save(tmp)
-    try:
-        nodes = comfy.build_img2img(comfy.upload(tmp), prompt, denoise=denoise, seed=seed, lora_strength=lora,
-                                    prefix="hdart/dun_tile", steps=steps)
-    finally:
-        tmp.unlink(missing_ok=True)
-    p = comfy.run(nodes, DUN / "tmp")[0]
-    return Image.open(p).convert("RGB").resize(init.size, Image.NEAREST)
+    out = comfy.img2img(init, prompt, seed=seed, denoise=denoise, lora=lora, steps=steps, prefix="hdart/dun_tile")
+    return out.resize(init.size, Image.NEAREST)
 
 
 def gen_tile(piece, tile=64, seed=1, denoise=0.72, lora=0.0, st=None):
@@ -293,21 +283,8 @@ def floor_texture_prompt(st, text):
 def repaint(img, mask, prompt, seed, denoise=1.0, lora=0.0, reference=True):
     """Masked FLUX repaint (comfy.build_repaint). `mask` is float 0..1 (0 = keep, 1 = repaint fully). The result
     is blended back with the same mask in pixel space, so kept areas stay exactly the input (no VAE drift)."""
-    tmp = DUN / "tmp"
-    tmp.mkdir(parents=True, exist_ok=True)
-    stem = f"_rp_{time.time_ns()}"
-    img.save(tmp / f"{stem}.png")
-    Image.fromarray((np.clip(mask, 0, 1) * 255).astype(np.uint8)).save(tmp / f"{stem}.mask.png")
-    try:
-        nodes = comfy.build_repaint(comfy.upload(tmp / f"{stem}.png"), comfy.upload(tmp / f"{stem}.mask.png"),
-                                    prompt, denoise=denoise, seed=seed, lora_strength=lora, prefix="hdart/dun_rp",
-                                    reference=reference)
-        p = comfy.run(nodes, tmp)[0]
-    finally:
-        for f in (tmp / f"{stem}.png", tmp / f"{stem}.mask.png"):
-            f.unlink(missing_ok=True)
-    out = Image.open(p).convert("RGB")
-    p.unlink(missing_ok=True)
+    out = comfy.repaint(img, np.asarray(mask, dtype=np.float32), prompt, seed=seed, denoise=denoise, lora=lora,
+                        reference=reference, prefix="hdart/dun_rp")
     if out.size != img.size:
         out = out.resize(img.size, Image.LANCZOS)
     m = np.clip(mask, 0, 1)[..., None]
@@ -677,7 +654,10 @@ def pixel_steps(spec):
 # ----------------------------------------------------------------------------- sets: candidates, approval, export
 
 SETS = ROOT / "specs" / "dungeon_sets"
-EXPORT = REPO / "Assets" / "StreamingAssets" / "Art" / "Dungeon"
+
+
+def export_root():
+    return config.project().export("dungeon")
 
 
 def load_set(name):
@@ -1126,7 +1106,7 @@ def export(name, tiles=(32, 64)):
     game asks for; set.json's `ppu` (pixels per tile = Unity pixels per unit) and `filter` say how to show them."""
     spec = load_set(name)
     s = state(name)
-    root = EXPORT / spec["id"]
+    root = export_root() / spec["id"]
     out_t = output_tile(spec)
     meta = {"id": spec["id"], "name": spec.get("name", spec["id"]), "format": 2, "tiles": list(tiles),
             "ppu": out_t, "filter": "point" if spec.get("pixel") else "bilinear", "pieces": {}}
@@ -2857,7 +2837,7 @@ def apply_material(name, master_id, mid, use=("template", "words"), strength=0.6
 
 def export_status(name, spec):
     """"none" (never exported), "stale" (approvals or the spec changed since), or "ok"."""
-    f = EXPORT / spec["id"] / "set.json"
+    f = export_root() / spec["id"] / "set.json"
     if not f.exists():
         return "none"
     newest = max((p.stat().st_mtime for p in (set_dir(name) / "state.json", SETS / f"{name}.json") if p.exists()), default=0)
@@ -3253,8 +3233,7 @@ def room_preview(name, tile=None, scale=3, include=None, grid=None, floor_board=
     return out.resize((out.width * scale, out.height * scale), Image.NEAREST)
 
 
-UNITY = Path(r"C:\Program Files\Unity\Hub\Editor\6000.3.26f1\Editor\Unity.exe")
-CAPTURES = ROOT / "work" / "protov"
+CAPTURES = config.data_dir() / "work" / "protov"
 
 
 def capture(name, tiles=(32, 64)):
@@ -3263,10 +3242,59 @@ def capture(name, tiles=(32, 64)):
     export(name, tiles)
     CAPTURES.mkdir(parents=True, exist_ok=True)
     log = CAPTURES / "capture.log"
-    r = subprocess.run([str(UNITY), "-batchmode", "-projectPath", str(REPO), "-executeMethod",
+    proj = config.project()
+    if not proj.unity:
+        raise RuntimeError(f"no Unity exe for project {proj.name} (config.toml: projects.{proj.name}.unity)")
+    r = subprocess.run([str(proj.unity), "-batchmode", "-projectPath", str(proj.path), "-executeMethod",
                         "Hearthdelve.Editor.PrototypeVSetup.Capture", "-reviewOut", str(CAPTURES), "-artSet", name,
                         "-logFile", str(log), "-quit"], timeout=1800)
     if r.returncode != 0:
         tail = log.read_text(encoding="utf-8", errors="replace").splitlines()[-25:] if log.exists() else []
         raise RuntimeError(f"Unity exited {r.returncode} (is this project open in the editor?)\n" + "\n".join(tail))
     return sorted(p.name for p in CAPTURES.glob("v0*.png"))
+
+
+# ----------------------------------------------------------------------------- Studio job kinds (hdart.jobs)
+
+@jobs.kind("dun")
+def _job_generate(a):
+    return generate(a["set"], a["piece"], int(a.get("n", 3)), int(a.get("seed", 1)), float(a["denoise"]) if a.get("denoise") not in (None, "") else None, a.get("prompt") or None,
+                    float(a["lora"]) if a.get("lora") not in (None, "") else None, a.get("variation"), bool(a.get("draft")))
+
+
+@jobs.kind("dun_trial")
+def _job_trial(a):
+    return trial(a["set"], a["piece"], a["rel"], a.get("variation", ""), int(a.get("seed", 1)))
+
+
+@jobs.kind("dun_edit")
+def _job_edit(a):
+    return edit_candidate(a["set"], a["piece"], a["rel"], a.get("prompt", ""), float(a.get("denoise", 0.5)),
+                          int(a.get("seed", 1)))
+
+
+@jobs.kind("dun_rescale")
+def _job_rescale(a):
+    if a.get("fit"):  # wall master: fit courses between the keep lines
+        return fit_wall_master(a["set"], a["piece"], a["rel"], float(a.get("keep_top", 0)), float(a.get("keep_bottom", 0)),
+                               a.get("mode", "keep"), bool(a.get("redetail")), int(a.get("seed", 1)))
+    if "fx" in a:  # wall master: brick width / height, cap and base kept
+        return rescale_wall_master(a["set"], a["piece"], a["rel"], float(a["fx"]), float(a["fy"]),
+                                   float(a.get("keep_top", KEEP_TOP)), float(a.get("keep_bottom", KEEP_BOTTOM)),
+                                   bool(a.get("redetail")), int(a.get("seed", 1)))
+    return rescale_master(a["set"], a["piece"], a["rel"], float(a["factor"]), bool(a.get("redetail")), int(a.get("seed", 1)))
+
+
+@jobs.kind("dun_finalize")
+def _job_finalize(a):
+    return finalize_draft(a["set"], a["piece"], a["rel"], a.get("seed"))
+
+
+@jobs.kind("dun_build")
+def _job_build(a):
+    return build_walls(a["set"], a["piece"])
+
+
+@jobs.kind("dun_capture", gpu=False)   # Unity batch run, not ComfyUI
+def _job_capture(a):
+    return capture(a["set"])

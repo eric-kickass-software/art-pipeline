@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-from . import ai_kit, comfy, workshop as ws, puppet as pp, puppet_template as pt, puppet_paint as ppt
+from . import ai_kit, comfy, jobs, workshop as ws, puppet as pp, puppet_template as pt, puppet_paint as ppt
 
 SPEC = ai_kit.ROOT / "specs" / "face.json"
 KINDS = ("hair", "face")
@@ -829,3 +829,10 @@ def refresh_previews(race):
             if c.is_dir():
                 previews(race, kind, c.name)
     return state(race)
+
+
+# ----------------------------------------------------------------------------- Studio job kinds (hdart.jobs)
+
+@jobs.kind("face_gen", reload=("puppet", "puppet_template", "puppet_paint", "puppet_face"))
+def _job_generate(a):   # Face tab: racial hair / faces; `what` = hair / face
+    return generate(a["race"], a["what"], a.get("sex", "male"), int(a.get("n", 1)), int(a.get("seed", 1)))

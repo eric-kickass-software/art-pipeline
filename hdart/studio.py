@@ -108,125 +108,17 @@ class Studio:
                 "view": self.kit.manifest["views"][view], "res": self.res}
 
 
-class Jobs:
-    """Sequential background queue for generation (ComfyUI runs one job at a time anyway)."""
+# Every module that registers Studio job kinds (hdart.jobs.kind); imported at start so the registry is complete.
+JOB_MODULES = ("dungeon", "library", "workshop", "puppet", "puppet_template", "puppet_paint", "puppet_face", "puppet_items")
+BASE_RELOAD = ("comfy", "ai_kit", "workshop", "dungeon")   # reloaded before every job (plus each kind's own list)
 
-    def __init__(self):
-        self.items, self.lock, self.n = [], threading.Lock(), 0
-        threading.Thread(target=self.run, daemon=True).start()
 
-    def add(self, kind, args, label):
-        with self.lock:
-            self.n += 1
-            job = {"id": self.n, "kind": kind, "args": args, "label": label, "status": "queued", "error": None,
-                   "result": None}
-            self.items.append(job)
-        return job
-
-    def snapshot(self):
-        with self.lock:
-            return [{k: v for k, v in j.items() if k != "args"} for j in self.items[-60:]]
-
-    def clear_done(self):
-        with self.lock:
-            self.items = [j for j in self.items if j["status"] in ("queued", "running")]
-
-    def run(self):
-        import time as _t
-        from . import workshop as ws
-        while True:
-            job = None
-            with self.lock:
-                job = next((j for j in self.items if j["status"] == "queued"), None)
-                if job:
-                    job["status"] = "running"
-            if not job:
-                _t.sleep(0.4)
-                continue
-            a = job["args"]
-            try:
-                import importlib
-                from . import ai_kit, comfy, dungeon as dg
-                for mod in (comfy, ai_kit, ws, dg):  # pick up code changes without restarting the Studio
-                    importlib.reload(mod)
-                if job["kind"] == "dun":
-                    job["result"] = dg.generate(a["set"], a["piece"], int(a.get("n", 3)), int(a.get("seed", 1)),
-                                                float(a["denoise"]) if a.get("denoise") not in (None, "") else None,
-                                                a.get("prompt") or None,
-                                                float(a["lora"]) if a.get("lora") not in (None, "") else None,
-                                                a.get("variation"), bool(a.get("draft")))
-                elif job["kind"] == "dun_trial":
-                    job["result"] = dg.trial(a["set"], a["piece"], a["rel"], a.get("variation", ""), int(a.get("seed", 1)))
-                elif job["kind"] == "dun_edit":
-                    job["result"] = dg.edit_candidate(a["set"], a["piece"], a["rel"], a.get("prompt", ""),
-                                                      float(a.get("denoise", 0.5)), int(a.get("seed", 1)))
-                elif job["kind"] == "dun_rescale":
-                    if a.get("fit"):  # wall master: fit courses between the keep lines
-                        job["result"] = dg.fit_wall_master(a["set"], a["piece"], a["rel"], float(a.get("keep_top", 0)),
-                                                           float(a.get("keep_bottom", 0)), a.get("mode", "keep"),
-                                                           bool(a.get("redetail")), int(a.get("seed", 1)))
-                    elif "fx" in a:  # wall master: brick width / height, cap and base kept
-                        job["result"] = dg.rescale_wall_master(a["set"], a["piece"], a["rel"], float(a["fx"]), float(a["fy"]),
-                                                               float(a.get("keep_top", dg.KEEP_TOP)), float(a.get("keep_bottom", dg.KEEP_BOTTOM)),
-                                                               bool(a.get("redetail")), int(a.get("seed", 1)))
-                    else:
-                        job["result"] = dg.rescale_master(a["set"], a["piece"], a["rel"], float(a["factor"]),
-                                                          bool(a.get("redetail")), int(a.get("seed", 1)))
-                elif job["kind"] == "dun_finalize":
-                    job["result"] = dg.finalize_draft(a["set"], a["piece"], a["rel"], a.get("seed"))
-                elif job["kind"] == "dun_build":
-                    job["result"] = dg.build_walls(a["set"], a["piece"])
-                elif job["kind"] == "lib_import":
-                    from . import library
-                    job["result"] = library.import_material(a["source"], a["asset"], a.get("hit"))["id"]
-                elif job["kind"] == "dun_capture":
-                    job["result"] = dg.capture(a["set"])
-                elif job["kind"] == "base":
-                    job["result"] = ws.gen_base(a["build"], a["facing"], int(a.get("n", 4)), int(a.get("seed", 1)),
-                                                a.get("description"))
-                elif job["kind"] == "puppet":
-                    from . import puppet
-                    importlib.reload(puppet)
-                    job["result"] = puppet.template(a["build"])
-                elif job["kind"] in ("paint", "paint_preview", "paint_fix"):   # puppet Paint step / Parts editor
-                    from . import puppet, puppet_template, puppet_paint
-                    for mod in (puppet, puppet_template, puppet_paint):
-                        importlib.reload(mod)
-                    if job["kind"] == "paint":
-                        job["result"] = puppet_paint.paint(a["build"], int(a.get("n", 1)), int(a.get("seed", 1)))
-                    elif job["kind"] == "paint_preview":
-                        job["result"] = puppet_paint.preview(a["build"], a["id"])["stamp"]
-                    else:
-                        job["result"] = puppet_paint.fix_region(a["build"], a["id"], a["view"], a["part"], a["mask"],
-                                                                a.get("prompt", ""), int(a.get("seed", 3)))
-                elif job["kind"] == "face_gen":   # Face tab: racial hair / faces on the painted puppets
-                    from . import puppet, puppet_template, puppet_paint, puppet_face
-                    for mod in (puppet, puppet_template, puppet_paint, puppet_face):
-                        importlib.reload(mod)
-                    # `what` = hair / face (`kind` is the job's own kind, face_gen)
-                    job["result"] = puppet_face.generate(a["race"], a["what"], a.get("sex", "male"), int(a.get("n", 1)),
-                                                         int(a.get("seed", 1)))
-                elif job["kind"] == "item":   # Item Workshop: every item job goes through puppet_items.job (reloaded here)
-                    from . import puppet, puppet_template, puppet_paint, puppet_face, puppet_items
-                    for mod in (puppet, puppet_template, puppet_paint, puppet_face, puppet_items):
-                        importlib.reload(mod)
-                    job["result"] = puppet_items.job(a)
-                elif job["kind"] in ("tpl", "tpl_measure"):   # clean puppet template: re-measure (from the art) and/or preview
-                    from . import puppet, puppet_template
-                    importlib.reload(puppet); importlib.reload(puppet_template)
-                    spec = puppet_template.measure(a.get("build", "human.unisex")) if job["kind"] == "tpl_measure" else None
-                    job["result"] = puppet_template.preview(spec)
-                elif job["kind"] == "race":
-                    job["result"] = ws.gen_race(a["race"], a["sex"], a["facing"], int(a.get("n", 4)), int(a.get("seed", 1)))
-                elif job["kind"] == "part":
-                    job["result"] = ws.gen_part(a["part"], a["build"], a["facing"], a["text"], int(a.get("n", 4)),
-                                                int(a.get("seed", 5)), float(a.get("lora", 0.6)))
-                elif job["kind"] == "fix":
-                    job["result"] = ws.fix_region(a["target"], a["build"], a["facing"], a["image"], a["mask"],
-                                                  a["prompt"], int(a.get("seed", 7)), a.get("part"))
-                job["status"] = "done"
-            except BaseException as e:   # comfy.run raises SystemExit (ComfyUI down / workflow rejected): that would kill
-                job["status"], job["error"] = "failed", str(e) or type(e).__name__   # this worker and stall the queue
+def make_jobs():
+    import importlib
+    from . import config, jobs
+    for name in JOB_MODULES:
+        importlib.import_module(f"hdart.{name}")
+    return jobs.Jobs(config.data_dir() / "sprites" / "studio_jobs.json", base_reload=BASE_RELOAD)
 
 
 JOBS = None
@@ -363,6 +255,8 @@ def workshop_post(st, action, b):
     if action == "jobs/clear":
         JOBS.clear_done()
         return {"ok": True}
+    if action == "jobs/cancel":
+        return {"status": JOBS.cancel(int(b["id"]))}
     if action == "board":
         return ws.board()
     if action == "cut/data":
@@ -611,7 +505,7 @@ def png_url(arr):
 def serve(renders, spec, palettes, port=4321, open_browser=True):
     global JOBS
     st = Studio(renders, spec, palettes)
-    JOBS = Jobs()
+    JOBS = make_jobs()
 
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):

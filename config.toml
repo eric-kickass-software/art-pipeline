@@ -1,0 +1,38 @@
+# hdart settings (read by hdart/config.py). Machine-specific overrides go in config.local.toml next to this file
+# (git-ignored, same keys). Env vars beat both: HD_PROJECT (the active project's path), HD_PROFILE (which project),
+# HD_COMFY_URL, HD_DATA, HD_BLENDER, HD_UNITY.
+
+[comfy]
+url = "http://127.0.0.1:8188"
+timeout = 1800                  # seconds one workflow may take
+
+[models]                        # file names in P:\Tools\ComfyUI\models\<folder>
+klein = "flux-2-klein-4b.safetensors"          # FLUX.2 [klein] 4B distilled, Apache-2.0
+qwen = "qwen_3_4b.safetensors"
+flux2_vae = "flux2-vae.safetensors"
+pixel_lora = "pixel-art-klein4b.safetensors"   # Limbicnation/pixel-art-lora, Apache-2.0
+trellis = "trellis_2_int8_convrot.safetensors" # TRELLIS.2, MIT
+dino = "dino_v3_vit_l.safetensors"
+birefnet = "birefnet.safetensors"
+
+[programs]
+blender = 'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe'
+
+[paths]
+data = ""                       # where sprites/, work/ and archive/ live; "" = this tool's folder
+backups = 'P:\Archive\art-pipeline-backups'   # hdart backup writes dated folders here (outside any worktree)
+
+[profile]
+default = "hearthdelve"
+
+# One profile per project the tools serve. Export paths are relative to the project.
+[projects.hearthdelve]
+path = 'P:\Projects\Unity\Hearthdelve'
+unity = 'C:\Program Files\Unity\Hub\Editor\6000.3.26f1\Editor\Unity.exe'
+contract = "ArtContract"
+
+[projects.hearthdelve.exports]
+puppets = "Assets/StreamingAssets/Art/Puppets"
+dungeon = "Assets/StreamingAssets/Art/Dungeon"
+items = "Assets/StreamingAssets/Art/Items"
+legacy = "Assets/Art"           # the old CLI writers (kit-render, icons, tiles, mesh-render, vfx); the game doesn't read it

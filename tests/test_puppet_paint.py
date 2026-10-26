@@ -1,5 +1,5 @@
-"""Puppet Paint step + Parts editor backend (hdart.puppet_paint), ComfyUI stubbed: every pass returns its init image,
-so the flow runs without a GPU. Run: uv run python tests/test_puppet_paint.py"""
+"""Puppet Paint step + Parts editor backend (hdart.puppet_paint), on the fake ComfyUI: every pass returns its init
+image, so the flow runs without a GPU. Run: uv run python tests/test_puppet_paint.py"""
 import base64, io, json, shutil, tempfile
 from pathlib import Path
 import numpy as np
@@ -10,22 +10,15 @@ import hdart.puppet_paint as ppt
 
 tmp = Path(tempfile.mkdtemp())
 ak.AI_DIR = tmp / "ai"; ws.CAND = ak.AI_DIR / "candidates"; ws.STATE = ak.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "archive"
-uploads, calls = {}, []
+from hdart.fake_comfy import FakeComfy, default_respond, info
+calls = []
 
 
-class FakeComfy:
-    @staticmethod
-    def upload(p):
-        uploads[Path(p).name] = Path(p); return Path(p).name
-    @staticmethod
-    def build_img2img(name, prompt, **kw):
-        calls.append((prompt, kw.get("ref_images"))); return {"init": name}
-    @staticmethod
-    def run(nodes, out_dir):
-        p = Path(out_dir) / f"out_{len(calls)}.png"; shutil.copy(uploads[nodes["init"]], p); return [p]
+def respond(nodes, uploads):
+    i = info(nodes, uploads); calls.append((i["prompt"], i["refs"])); return default_respond(nodes, uploads)
 
 
-ppt.comfy = FakeComfy
+fake = FakeComfy(respond).start()
 shutil.copy(ppt.SPEC, tmp / "paint.json"); ppt.SPEC = tmp / "paint.json"
 body, clothes = ppt.prompts("human.female")
 assert "female" in body and ppt.spec()["sexes"]["female"]["extra"] in body and "sports bra" in clothes
@@ -67,13 +60,11 @@ import hdart.puppet_face as pf
 assert ppt.spec()["face_guide"] == "faint" and not (pf.out_dir("human", "face") / f"p_{c[0]}").exists()
 
 # a paint that fails keeps its progress (stage "failed" + the error); never stale, never used as the build's paint
-real_run = FakeComfy.run
-FakeComfy.run = staticmethod(lambda nodes, out_dir: (_ for _ in ()).throw(RuntimeError("ComfyUI fell over")))
+fake.fail = "ComfyUI fell over"
 try:
     ppt.paint("human.female", n=1, seed=77); raise SystemExit("no error")
-except RuntimeError:
+except RuntimeError:   # comfy.ComfyError
     pass
-FakeComfy.run = real_run
 bad = [c for c in ppt.state("human.female")["candidates"] if c["progress"]]
 assert len(bad) == 1 and bad[0]["progress"]["stage"] == "failed" and "fell over" in bad[0]["progress"]["error"] and not bad[0]["stale"]
 ppt.archive("human.female", bad[0]["id"])
@@ -120,5 +111,5 @@ except ValueError:
 c2 = ppt.paint("human.female", n=1, seed=9)[0]
 ppt.archive("human.female", c2)
 assert not (ppt.out_dir("human.female") / c2).exists() and (ws.ARCHIVE / "workshop" / "paint" / "human.female" / c2).exists()
-shutil.rmtree(tmp)
+fake.stop(); shutil.rmtree(tmp)
 print("ok")

@@ -6,22 +6,30 @@ stay explicit and diffable. Each `build_*` returns a prompt dict; `run()` queues
 the outputs.
 """
 import json
-import os
+import tempfile
 import time
 import uuid
 from pathlib import Path
 
+import numpy as np
 import requests
+from PIL import Image
 
-URL = os.environ.get("HD_COMFY_URL", "http://127.0.0.1:8188")
+from . import config
 
-KLEIN = "flux-2-klein-4b.safetensors"         # FLUX.2 [klein] 4B distilled, Apache-2.0
-QWEN = "qwen_3_4b.safetensors"
-FLUX2_VAE = "flux2-vae.safetensors"
-PIXEL_LORA = "pixel-art-klein4b.safetensors"  # Limbicnation/pixel-art-lora, Apache-2.0
-TRELLIS = "trellis_2_int8_convrot.safetensors"  # TRELLIS.2, MIT
-DINO = "dino_v3_vit_l.safetensors"
-BIREFNET = "birefnet.safetensors"
+URL = None   # set to point this process at another ComfyUI (tests: hdart.fake_comfy); else config.comfy_url()
+
+
+class ComfyError(RuntimeError):
+    """ComfyUI is down, rejected the workflow, failed in it, or timed out."""
+
+
+def url():
+    return URL or config.comfy_url()
+
+
+def _m(name):
+    return config.model(name)
 
 
 class Graph:
@@ -44,11 +52,11 @@ class Ref:
 
 
 def _klein_model(g, lora_strength):
-    model = g.add("UNETLoader", unet_name=KLEIN, weight_dtype="default")
+    model = g.add("UNETLoader", unet_name=_m("klein"), weight_dtype="default")
     if lora_strength:
-        model = g.add("LoraLoaderModelOnly", model=model[0], lora_name=PIXEL_LORA, strength_model=lora_strength)
-    clip = g.add("CLIPLoader", clip_name=QWEN, type="flux2", device="default")
-    vae = g.add("VAELoader", vae_name=FLUX2_VAE)
+        model = g.add("LoraLoaderModelOnly", model=model[0], lora_name=_m("pixel_lora"), strength_model=lora_strength)
+    clip = g.add("CLIPLoader", clip_name=_m("qwen"), type="flux2", device="default")
+    vae = g.add("VAELoader", vae_name=_m("flux2_vae"))
     return model, clip, vae
 
 
@@ -68,7 +76,7 @@ def build_txt2img(prompt, width=1024, height=1024, seed=0, steps=4, lora_strengt
                 sigmas=sigmas[0], latent_image=latent[0])
     img = g.add("VAEDecode", samples=out[0], vae=vae[0])
     if remove_bg:
-        bgm = g.add("LoadBackgroundRemovalModel", bg_removal_name=BIREFNET)
+        bgm = g.add("LoadBackgroundRemovalModel", bg_removal_name=_m("birefnet"))
         mask = g.add("RemoveBackground", bg_removal_model=bgm[0], image=img[0])
         inv = g.add("InvertMask", mask=mask[0])
         rgba = g.add("JoinImageWithAlpha", image=img[0], alpha=inv[0])
@@ -144,13 +152,13 @@ def build_img2mesh(image_name, seed=42, prefix="hdart/mesh", resolution=1024):
     stage settings. `image_name` must already be uploaded (see upload())."""
     g = Graph()
     load = g.add("LoadImage", image=image_name)
-    bgm = g.add("LoadBackgroundRemovalModel", bg_removal_name=BIREFNET)
+    bgm = g.add("LoadBackgroundRemovalModel", bg_removal_name=_m("birefnet"))
     mask = g.add("RemoveBackground", bg_removal_model=bgm[0], image=load[0])
     crop = g.add("ImageCropToMask", images=load[0], masks=mask[0], width=1024, height=1024,
                  pad_factor=1.1, grow_mask=0, background="#000000")
-    cv = g.add("CLIPVisionLoader", clip_name=DINO)
+    cv = g.add("CLIPVisionLoader", clip_name=_m("dino"))
     cond = g.add("Trellis2Conditioning", clip_vision_model=cv[0], image=crop[0])
-    unet = g.add("UNETLoader", unet_name=TRELLIS, weight_dtype="default")
+    unet = g.add("UNETLoader", unet_name=_m("trellis"), weight_dtype="default")
     shape_vae = g.add("VAELoader", vae_name="trellis_2_shape_vae_bf16.safetensors")
     tex_vae = g.add("VAELoader", vae_name="trellis_2_texture_vae_bf16.safetensors")
     # stage 1: sparse structure
@@ -183,8 +191,6 @@ def build_img2mesh(image_name, seed=42, prefix="hdart/mesh", resolution=1024):
     return g.nodes
 
 
-# ----------------------------------------------------------------------------- transport
-
 def build_repaint(image_name, mask_name, prompt, denoise=1.0, seed=0, steps=8, lora_strength=0.0,
                   prefix="hdart/repaint", reference=True):
     """FLUX.2-klein masked repaint. The mask is a greyscale image (its red channel is read): black = keep exactly,
@@ -210,42 +216,72 @@ def build_repaint(image_name, mask_name, prompt, denoise=1.0, seed=0, steps=8, l
     return g.nodes
 
 
+# ----------------------------------------------------------------------------- transport
+
 def alive():
     try:
-        return requests.get(f"{URL}/system_stats", timeout=2).ok
+        return requests.get(f"{url()}/system_stats", timeout=2).ok
     except requests.RequestException:
         return False
 
 
-def upload(path):
+def queue():
+    """ComfyUI's queue: {"running": n, "pending": n}, or None when it's down."""
+    try:
+        q = requests.get(f"{url()}/queue", timeout=2).json()
+    except (requests.RequestException, ValueError):
+        return None
+    return {"running": len(q.get("queue_running", [])), "pending": len(q.get("queue_pending", []))}
+
+
+def interrupt():
+    """Stop the workflow ComfyUI is running now (whoever queued it)."""
+    try:
+        requests.post(f"{url()}/interrupt", timeout=5)
+    except requests.RequestException:
+        pass
+
+
+def _http(method, path, **kw):
+    """One request to ComfyUI; a dropped connection is a ComfyError like every other failure."""
+    try:
+        return requests.request(method, f"{url()}{path}", **kw)
+    except requests.RequestException as e:
+        raise ComfyError(f"ComfyUI is not reachable at {url()} ({type(e).__name__}). "
+                         "Start P:\\Tools\\ComfyUI\\start-comfyui.cmd") from e
+
+
+def upload(path, name=None):
     with open(path, "rb") as f:
-        r = requests.post(f"{URL}/upload/image", files={"image": (Path(path).name, f)}, data={"overwrite": "true"})
-    r.raise_for_status()
+        r = _http("POST", "/upload/image", files={"image": (name or Path(path).name, f)}, data={"overwrite": "true"})
+    if not r.ok:
+        raise ComfyError(f"ComfyUI refused the upload: {r.status_code} {r.text[:500]}")
     return r.json()["name"]
 
 
-def run(nodes, out_dir, timeout=1800):
-    """Queue a prompt, wait for it, download every output file into out_dir. Returns the paths."""
+def run(nodes, out_dir, timeout=None):
+    """Queue a prompt, wait for it, download every output file into out_dir. Returns the paths. Raises ComfyError."""
+    base, timeout = url(), timeout or config.comfy_timeout()
     if not alive():
-        raise SystemExit(f"ComfyUI is not running at {URL}. Start P:\\Tools\\ComfyUI\\start-comfyui.cmd")
-    r = requests.post(f"{URL}/prompt", json={"prompt": nodes, "client_id": str(uuid.uuid4())})
+        raise ComfyError(f"ComfyUI is not running at {base}. Start P:\\Tools\\ComfyUI\\start-comfyui.cmd")
+    r = _http("POST", "/prompt", json={"prompt": nodes, "client_id": str(uuid.uuid4())})
     if not r.ok:
-        raise SystemExit(f"ComfyUI rejected the workflow: {r.text[:2000]}")
+        raise ComfyError(f"ComfyUI rejected the workflow: {r.text[:2000]}")
     pid = r.json()["prompt_id"]
     t0 = time.time()
     while True:
-        h = requests.get(f"{URL}/history/{pid}").json()
+        h = _http("GET", f"/history/{pid}").json()
         if pid in h:
             entry = h[pid]
             status = entry.get("status", {})
             if status.get("status_str") == "error":
-                msgs = [m for m in status.get("messages", []) if m[0] == "execution_error"]
-                raise SystemExit(f"ComfyUI error: {json.dumps(msgs)[:3000]}")
+                msgs = [m for m in status.get("messages", []) if m[0] in ("execution_error", "execution_interrupted")]
+                raise ComfyError(f"ComfyUI error: {json.dumps(msgs)[:3000]}")
             if status.get("completed", True):
                 break
         if time.time() - t0 > timeout:
-            raise SystemExit("ComfyUI timed out")
-        time.sleep(1.0)
+            raise ComfyError("ComfyUI timed out")
+        time.sleep(0.2 if URL else 1.0)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     paths = []
@@ -255,8 +291,59 @@ def run(nodes, out_dir, timeout=1800):
                 if not isinstance(f, dict) or "filename" not in f:
                     continue
                 q = {"filename": f["filename"], "subfolder": f.get("subfolder", ""), "type": f.get("type", "output")}
-                data = requests.get(f"{URL}/view", params=q).content
+                data = _http("GET", "/view", params=q).content
                 p = out / f["filename"]
                 p.write_bytes(data)
                 paths.append(p)
     return paths
+
+
+# ----------------------------------------------------------------------------- image in, image out
+# The one wrapper every tool uses for its passes: save the inputs to a private temp folder, upload them under unique
+# names (two jobs never overwrite each other's inputs), run, read the first output back, delete the temp files.
+
+def _mask_image(mask):
+    """A mask as an 8-bit greyscale image: PIL as is, bool -> 0/255, float 0..1 -> 0..255, ints as given."""
+    if isinstance(mask, Image.Image):
+        return mask.convert("L")
+    m = np.asarray(mask)
+    if m.dtype == bool:
+        m = np.where(m, 255, 0)
+    elif m.dtype.kind == "f":
+        m = np.clip(m, 0, 1) * 255
+    return Image.fromarray(m.astype(np.uint8))
+
+
+def _pass(images, build, mode="RGB"):
+    """Upload `images` ({key: PIL image}), call build(names) -> nodes, run it, return the first output (PIL, `mode`)."""
+    with tempfile.TemporaryDirectory(prefix="hdart_") as d:
+        d, tag = Path(d), uuid.uuid4().hex[:12]
+        names = {}
+        for k, im in images.items():
+            f = d / f"hd_{tag}_{k}.png"
+            im.save(f)
+            names[k] = upload(f)
+        outs = run(build(names), d / "out")
+        if not outs:
+            raise ComfyError("ComfyUI returned no image")
+        with Image.open(outs[0]) as im:
+            return im.convert(mode)
+
+
+def img2img(init, prompt, *, seed, denoise, lora=0.0, steps=8, refs=(), mask=None, prefix="hdart/i2i"):
+    """FLUX img2img of a PIL image (build_img2img), optional reference images and a redraw mask (see _mask_image).
+    Returns the output at ComfyUI's size: callers resize it to theirs."""
+    images = {"init": init.convert("RGB")}
+    images.update({f"ref{k}": r for k, r in enumerate(refs)})
+    if mask is not None:
+        images["mask"] = _mask_image(mask)
+    return _pass(images, lambda n: build_img2img(n["init"], prompt, denoise=denoise, seed=seed, steps=steps,
+                                                 lora_strength=lora, prefix=prefix, mask_name=n.get("mask"),
+                                                 ref_images=[n[f"ref{k}"] for k in range(len(refs))]))
+
+
+def repaint(img, mask, prompt, *, seed, denoise=1.0, lora=0.0, steps=8, reference=True, prefix="hdart/repaint"):
+    """FLUX masked repaint of a PIL image (build_repaint); `mask` as in img2img. Returns the output at ComfyUI's size."""
+    return _pass({"img": img, "mask": _mask_image(mask)},
+                 lambda n: build_repaint(n["img"], n["mask"], prompt, denoise=denoise, seed=seed, steps=steps,
+                                         lora_strength=lora, prefix=prefix, reference=reference))

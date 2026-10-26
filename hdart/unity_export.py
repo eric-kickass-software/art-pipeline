@@ -19,10 +19,13 @@ import json, shutil, time
 import numpy as np
 from PIL import Image
 
-from . import paths, workshop as ws, puppet_face as pf, puppet_paint as ppt
+from . import config, workshop as ws, puppet_face as pf, puppet_paint as ppt
 from .palette import ramp_from_base
 
-OUT = paths.REPO / "Assets" / "StreamingAssets" / "Art" / "Puppets"
+
+
+def out_root():
+    return config.project().export("puppets")
 SEXES = ("male", "female")
 VIEWS = ("front", "back")
 SKIN, HAIR, EYES = 1, 2, 3
@@ -163,7 +166,7 @@ def _layers(race, kind, size, d):
 
 def export(race="human", size=512):
     """Export a race's puppet art into the game; returns the folder."""
-    d = OUT / race
+    d = out_root() / race
     if d.exists():
         shutil.rmtree(d)   # only this race's export folder: stale parts / layers go
     d.mkdir(parents=True)

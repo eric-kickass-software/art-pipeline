@@ -18,7 +18,7 @@ import numpy as np
 
 N = 64  # native cell size
 SPEC_PATH = Path(__file__).resolve().parent.parent / "specs" / "sprite_kit.json"
-from . import sprite_parts  # noqa: E402
+from . import config, sprite_parts  # noqa: E402
 from .sprite_parts import BODIES, CH, GROUND, PARTS, Z, Layer, Pose, shade_layer  # noqa: E402,F401
 
 DESIGN = 64  # resolution the code-drawn parts are designed at; other resolutions use templates only
@@ -88,7 +88,7 @@ def shift(a, dx, dy):
 # palette (sprites/index_palette.*): each colour = one channel + one shade step. A painted file replaces
 # the code drawing for that layer; a missing arm pose falls back to the down-down drawing.
 
-TEMPLATES = Path(__file__).resolve().parent.parent / "sprites" / "parts"
+TEMPLATES = config.data_dir() / "sprites" / "parts"
 POSES = [("down", "down"), ("raise", "down"), ("forward", "down"), ("forward", "forward"), ("raise", "raise")]
 LEG_LAYERS = ("legs", "feet", "legwear", "footwear")
 _INDEX = {}

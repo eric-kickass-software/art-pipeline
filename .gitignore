@@ -16,3 +16,6 @@ __pycache__/
 # Materials library downloads (re-downloadable; the material JSON files are in git)
 /library/cache/
 /.claude/
+
+# Machine-specific settings (hdart/config.py)
+/config.local.toml

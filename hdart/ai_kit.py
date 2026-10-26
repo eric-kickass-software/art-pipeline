@@ -20,11 +20,11 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from . import comfy
+from . import comfy, config
 
 ROOT = Path(__file__).resolve().parent.parent
-AI_DIR = ROOT / "sprites" / "ai"
-TEMPLATES = ROOT / "sprites" / "parts"
+AI_DIR = config.data_dir() / "sprites" / "ai"
+TEMPLATES = config.data_dir() / "sprites" / "parts"
 LAYERS = AI_DIR / "layers"   # extracted parts at full 512 px, the source for every resolution
 BIG = 512
 RESOLUTIONS = (32, 64, 128, 256)

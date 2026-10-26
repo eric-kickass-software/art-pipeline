@@ -15,7 +15,7 @@ import heapq
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from . import ai_kit, workshop as ws
+from . import ai_kit, jobs, workshop as ws
 
 PX = 512
 BG = (196, 198, 204)
@@ -946,3 +946,10 @@ def approve(build, on=True):
     p["approved"] = bool(on)
     ws.save_state(s)
     return p
+
+
+# ----------------------------------------------------------------------------- Studio job kinds (hdart.jobs)
+
+@jobs.kind("puppet", gpu=False, reload=("puppet",))
+def _job_template(a):
+    return template(a["build"])
