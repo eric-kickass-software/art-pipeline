@@ -3,8 +3,9 @@
 Local, scriptable generation of the game's art: painted 2D cutout puppets (Character Workshop), equipment
 layers for them (Item Workshop) and dungeon art sets (Dungeon Forge). Everything runs on this PC (RTX 4080); nothing goes to a cloud service.
 This README is **how to use** the tools. What they are, their status, open items and decisions live in the vault:
-`Game Dev/Hearthdelve/Hearthdelve - Art Pipeline.md` (hub) and `Game Dev/Hearthdelve/Art/` (one note per tool,
-plus the Unity handoff contract, the pipeline architecture and the asset plan).
+`Game Dev/Art Pipeline/` (hub `Art Pipeline.md`, `Art Pipeline - Status.md` read first, `Art Pipeline - Roadmap.md`,
+one note per tool, and per project the handoff contract and asset plan, e.g. `Hearthdelve/`). Requests between a
+project and the tools go through that project's ledger (Hearthdelve: `Game Dev/Hearthdelve/Hearthdelve - Requirements.md`).
 
 **Location:** `P:\Tools\art-pipeline`, its own git repo (moved out of the Hearthdelve repo's `Tools/ArtPipeline` on
 2026-10-12; history before that is in the Hearthdelve repo). Output goes into the Unity project at `HD_PROJECT`,
@@ -491,7 +492,7 @@ Prototype C, removed in Hearthdelve `3ca39de`). Their CLI commands (`kit-build`,
 Unity code reads any more. Don't run them for the game. The same goes for `tiles`, `icons`, `mesh-render` and `vfx`
 (`Assets/Art/Tiles|Icons|Monsters|VFX`), until they're moved onto the art packs (vault: `Art - Unity Handoff`).
 Their old documentation is in this file's git history (before this change) and in the vault's
-`Logs/Archive/Hearthdelve - Art Pipeline v1 (2026-10-25).md`.
+`Game Dev/Art Pipeline/Logs/Hearthdelve - Art Pipeline v1 (2026-10-25).md`.
 
 ## Known limits / next steps
 - Texture prompts sometimes produce a 2×2 repeat (visible cross); re-roll with `--seed` or reword.
