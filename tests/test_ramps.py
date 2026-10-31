@@ -19,6 +19,14 @@ lev, cent = ws.skin_levels(Image.fromarray(a), size=3)
 assert lev[15, 30] == 2 and lev[30, 30] == -1 and lev[40, 30] == 0 and lev[11, 21] == -1, (lev[15, 30], lev[40, 30])
 assert cent[0][0] < cent[1][0] < cent[2][0], cent
 
+# brushwork noise on a smooth light -> dark gradient: smooth bands that only step one way, no speckle
+rng = np.random.default_rng(0); g = np.full((128, 128, 3), 255, np.uint8)
+ramp = np.linspace(0, 1, 100)[None, :, None] * np.array([90, 80, 70]) + np.array([150, 95, 75])
+g[14:114, 14:114] = np.clip(ramp + rng.normal(0, 9, (100, 100, 3)), 0, 255).astype(np.uint8)
+lev, _ = ws.skin_levels(Image.fromarray(g), size=5)
+row = lev[60, 20:108]
+assert (row >= 0).all() and (np.diff(row) >= 0).all(), row
+
 # save / rename / delete keep the rest of the file
 doc = ws.save_ramp("skin", "test_tone", base="#825c43", tune={"saturation": 1.4}, colors=["#111111", "#222222", "#333333", "#444444", "#555555"], races=["human"])
 e = doc["groups"]["skin"]["test_tone"]

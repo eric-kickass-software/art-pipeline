@@ -205,6 +205,10 @@ def workshop_post(st, action, b):
             return out
         if action == "paint/revert":
             return ppt.revert_parts(b["build"], b["id"])
+        if action == "paint/bands_save":   # Parts editor, Bands: hand-edited skin levels
+            return ppt.save_bands(b["build"], b["id"], b["view"], b["bands"])
+        if action == "paint/bands_reset":   # redo bands from the paint: one part, or all (new skin key)
+            return ppt.reset_bands(b["build"], b["id"], b.get("view"), b.get("part"))
         raise ValueError(f"unknown action {action}")
     if action in ("tpl/state", "tpl/save"):   # clean puppet template editor
         from . import puppet, puppet_template

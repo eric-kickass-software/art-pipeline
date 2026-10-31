@@ -337,7 +337,7 @@ def skin_key(head):
     """The skin cel levels of a head part (RGB centres)."""
     a = head[..., 3] > 127
     bg = np.full(head.shape[:2] + (3,), 255, np.uint8); bg[a] = head[a, :3]
-    _, cent = ws.skin_levels(Image.fromarray(bg), 5)
+    cent = ws.skin_key(Image.fromarray(bg), 5)
     return np.array(cent, float) if cent else np.array([[220, 170, 140]], float)
 
 
@@ -691,7 +691,8 @@ def ramp_preview(build):
     url = lambda im: "data:image/png;base64," + base64.b64encode((lambda b: (im.save(b, "PNG"), b.getvalue())[1])(io.BytesIO())).decode()
     enc = lambda lv, m: np.dstack([np.clip(lv, 0, 255).astype(np.uint8), np.zeros(lv.shape + (2,), np.uint8), np.where(m, 255, 0).astype(np.uint8)])
     small = lambda a: np.asarray(Image.fromarray(a).resize((pp.PX, pp.PX), Image.NEAREST))
-    comps, hairs, irises = {}, {}, {}
+    comps, hairs, irises, levs = {}, {}, {}, {}
+    cent = ppt.ensure_bands(build, cid)   # the skin key; makes missing bands first
     for v in ("front", "back"):
         face_L = np.asarray(Image.open(face_d / "layer_front.png").convert("RGBA")).copy() if face_d and v == "front" and (face_d / "layer_front.png").exists() else None
         iris = np.asarray(Image.open(face_d / "levels_front.png").convert("RGBA")) if face_d and v == "front" and (face_d / "levels_front.png").exists() else None
@@ -701,21 +702,17 @@ def ramp_preview(build):
         hair_L = colour_levels(hl, hair_ramp()) if hl is not None else None
         comps[v] = compose(sp, v, parts[v], [face_L, hair_L], blank=face_L is not None)
         hairs[v] = hl; irises[v] = iris
-    both = Image.new("RGB", (N * 2, N), (255, 255, 255))
-    for i, v in enumerate(("front", "back")):
-        both.paste(comps[v], (i * N, 0), comps[v])
-    excl = np.zeros((N, N * 2), bool)   # hair and irises are not skin
-    for i, v in enumerate(("front", "back")):
-        for lv in (hairs[v], irises[v]):
-            if lv is not None:
-                excl[:, i * N:(i + 1) * N] |= lv[..., 3] > 0
-    bw = np.asarray(both).copy(); bw[excl] = 255
-    lev, cent = ws.skin_levels(Image.fromarray(bw), ws.palettes_doc().get("rampSize", 5))
+        # the skin = the parts' bands (Parts editor), minus what the hair and face layers cover
+        lev = ppt.bands_composite(ppt.out_dir(build) / cid, sp, v)
+        for L in (hl, face_L):
+            if L is not None:
+                lev[L[..., 3] > 0] = -1
+        levs[v] = lev
     out = {"build": build, "id": cid, "approved": bool(ppt.state(build)["approved"]), "hair": hair_d.name if hair_d else None,
            "face": face_d.name if face_d else None, "facings": {}}
-    for i, v in enumerate(("front", "back")):
-        lv = small(lev[:, i * N:(i + 1) * N].astype(np.int16).clip(-1, 255).astype(np.int16))
-        f = {"art": url(comps[v].resize((pp.PX, pp.PX), Image.LANCZOS)), "levels": url(Image.fromarray(enc(np.clip(lv, 0, 255), lv >= 0))), "key": cent}
+    for v in ("front", "back"):
+        lv = levs[v]
+        f = {"art": url(comps[v].resize((pp.PX, pp.PX), Image.LANCZOS)), "levels": url(Image.fromarray(small(enc(np.clip(lv, 0, 255), lv >= 0)))), "key": cent}
         if hairs[v] is not None:
             f["hair"] = url(Image.fromarray(small(hairs[v])))
         if irises[v] is not None:

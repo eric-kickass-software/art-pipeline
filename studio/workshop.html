@@ -269,6 +269,10 @@
         <label class="chip"><input id="paClamp" type="checkbox" checked style="width:auto"> keep inside the template shape</label>
         <label class="chip"><input id="paTop" type="checkbox" checked style="width:auto"> selected part on top</label>
         <label class="chip"><input id="paGhost" type="checkbox" checked style="width:auto"> template outline</label></div>
+      <div class="row" id="paBandRow"><label class="chip"><input id="paBands" type="checkbox" style="width:auto"> <b>Skin bands</b></label>
+        <span id="paLv"></span>
+        <button id="paBandReset" title="Redo the selected part's bands from its paint (drops its hand edits). Shift-click: every part, with a new skin key">Redo bands from paint</button>
+        <span class="hint">the skin's cel levels the ramps colour, one colour per level (darkest first). Brush paints the chosen level (keys 1-5), Heal smooths, Eyedropper picks a level; only skin changes. Saving paint redoes its part's bands unless you edited them here</span></div>
       <div class="row" id="paFixRow"><label>AI fix</label><input id="paPrompt" placeholder="optional: what to paint there (e.g. smooth skin, the shoulder of the grey top)" style="flex:1">
         <button class="primary" id="paFix">Fix marked area</button><button id="paClearMask">Clear mark</button></div>
       <details><summary class="hint">AI fix wording (every fix; {body} and {clothes} come from the build's paint prompts in Race; your text above is added)</summary>
@@ -355,8 +359,7 @@
           <div class="row"><button id="rSetAdd">Add this ramp to the set</button><button id="rSetDel">Remove it from the set</button>
             <label>Monk tones</label><input id="rMonkPick" value="1,3,5,7,9" style="max-width:110px" title="Monk Skin Tone Scale numbers (1 = lightest, 10 = darkest)">
             <button id="rSetMake">Create starter set</button></div>
-          <div class="hint">Every skin, hair and eye ramp tagged with the race, each on its male and female (front, 64 px; the other layers in the
-            set's first ramp). Click one to edit it. The add/remove buttons tag the ramp you're editing (any group). "Create starter set" adds one
+          <div class="hint">Every skin, hair and eye ramp tagged with the race. Click one to edit it (the preview above shows it). The add/remove buttons tag the ramp you're editing (any group). "Create starter set" adds one
             skin ramp per Monk tone (named &lt;race&gt;_monk&lt;n&gt;, default sliders; existing names are kept).</div>
           <div class="pv" id="rAllPrev"></div></div>
       </div>
@@ -968,12 +971,13 @@ function drawPreview() {
   if (!RS.imgs) return; const el = $("rPrev"); el.innerHTML = ""; const ramp = rampsFor();
   const keys = Object.keys(RS.imgs);
   if (!keys.length) { el.innerHTML = `<p class="hint">No painted puppets for this race yet: Race → Paint.</p>`; return; }
-  for (const k of keys) el.appendChild(shown(onBg(recolor(k, ramp), 512), 220, k.replace("|", ", ")));
-  for (const k of keys) el.appendChild(shown(small(recolor(k, ramp), 64), 128, `${k.replace("|", ", ")}, 64 px`));
+  el.style.cssText = "display:grid;grid-template-columns:repeat(2,minmax(0,300px));gap:8px";   // male on top, female below
+  for (const sex of ["male", "female"]) for (const f of ["front", "back"]) { const k = `${sex}|${f}`;
+    if (RS.imgs[k]) el.appendChild(shown(onBg(recolor(k, ramp), 512), 300, `${sex}, ${f}`)); else el.appendChild(document.createElement("div")); }
 }
 function drawAll() {   // the race's colour set: every skin, hair and eye ramp tagged with it, on its male and female fronts
   if (!RS.doc || !RS.imgs) return;
-  const el = $("rAllPrev"), race = $("rRace").value; el.innerHTML = "";
+  const el = $("rAllPrev"), race = $("rRace").value; el.innerHTML = ""; el.style.display = "block";   // one group under the other
   const names = { skin: "Skin", hair: "Hair", eyes: "Eyes" };
   for (const g of ["skin", "hair", "eyes"]) {
     const row = document.createElement("div"); row.innerHTML = `<h2>${names[g]}</h2>`; el.appendChild(row);
@@ -982,9 +986,8 @@ function drawAll() {   // the race's colour set: every skin, hair and eye ramp t
       p_.textContent = `No ${g} ramps tagged "${race}" yet: pick one in the ${g} group and "Add this ramp to the set"${g === "skin" ? ", or create a starter set" : ""}.`; row.appendChild(p_); continue; }
     for (const [n, e] of tones) {
       const on = RS.group === g && n === RS.name, ramp = on ? curRamp() : rampOf(e);
-      const box = document.createElement("div"); box.className = "ritem" + (on ? " on" : ""); box.style.display = "inline-block";
-      for (const sex of ["male", "female"]) if (RS.imgs[`${sex}|front`]) box.appendChild(shown(small(recolor(`${sex}|front`, rampsFor({ [g]: ramp })), 64), 110, sex));
-      const cap = document.createElement("div"); cap.className = "hint"; cap.textContent = n; box.appendChild(cap);
+      const box = document.createElement("div"); box.className = "ritem" + (on ? " on" : "");
+      box.innerHTML = `<span class="nm">${n}</span><span class="strip">${ramp.map(c => `<i style="background:${rgb2hex(c)}"></i>`).join("")}</span>`;
       box.onclick = () => { if (RS.group !== g) { RS.group = g; $("rGroup").value = g; RS.name = null; } selectRamp(n); };
       row.appendChild(box);
     }
@@ -1396,9 +1399,13 @@ setInterval(() => {   // when a template job finishes: new preview (and, after a
 }, 2000);
 
 // ------------------------------------------------------------------ Parts editor (touch up a painted candidate)
-const PA = { build: null, id: null, doc: null, view: "front", parts: {}, tmpl: {}, sel: null, hidden: new Set(), tool: "brush",
+const PA = { build: null, id: null, doc: null, view: "front", parts: {}, tmpl: {}, bmask: {}, lv: 2, sel: null, hidden: new Set(), tool: "brush",
   vw: { z: 1, ox: 0, oy: 0 }, undo: [], redo: [], dirty: {}, mask: null, stroke: null, pan: null, space: false, inited: false, fixJob: null };
 const PA_N = 1024, PA_LINE = "#28201e";
+const PA_BAND = ["#3b2a6b", "#8a3f8f", "#d4606a", "#f2a65a", "#fbeaa0"];   // band display colours, darkest level first
+const PA_BAND_RGB = PA_BAND.map(h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)));
+const paBandsOn = () => $("paBands").checked && !PA.layer && PA.doc && PA.doc.views[PA.view].bands;
+const paEK = () => paKey(PA.view, PA.sel) + (paBandsOn() ? "#b" : "");   // the canvas the tools edit
 const paCanvas = (w = PA_N, h = PA_N) => { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; };
 const paLoadImg = (src) => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = src; });
 const paKey = (v, n) => `${v}|${n}`;
@@ -1407,7 +1414,39 @@ async function paLoadView(v) {   // the part images (editable canvases) and the 
   await Promise.all(vd.order.map(async n => {
     if (!PA.parts[paKey(v, n)]) { const c = paCanvas(); c.getContext("2d").drawImage(await paLoadImg(img(vd.parts[n]) + t), 0, 0); PA.parts[paKey(v, n)] = c; }
     if (vd.template[n] && !PA.tmpl[paKey(v, n)]) { const c = paCanvas(); c.getContext("2d").drawImage(await paLoadImg(img(vd.template[n])), 0, 0); PA.tmpl[paKey(v, n)] = c; }
+    if (vd.bands && vd.bands[n] && !PA.parts[paKey(v, n) + "#b"]) paBandCanvas(v, n, await paLoadImg(img(vd.bands[n]) + t));
   }));
+}
+function paBandCanvas(v, n, im) {   // a part's bands (R = level, 255 = not skin) -> a display canvas (skin only) + its skin mask
+  const src = paCanvas(), sx = src.getContext("2d", { willReadFrequently: true }); sx.drawImage(im, 0, 0);
+  const d = sx.getImageData(0, 0, PA_N, PA_N), out = paCanvas(), ox = out.getContext("2d"), o = ox.createImageData(PA_N, PA_N);
+  const mask = paCanvas(), mx = mask.getContext("2d"), m = mx.createImageData(PA_N, PA_N);
+  for (let i = 0; i < d.data.length; i += 4) if (d.data[i + 3] > 127 && d.data[i] !== 255) {
+    const c = PA_BAND_RGB[Math.min(PA_BAND_RGB.length - 1, d.data[i])];
+    o.data[i] = c[0]; o.data[i + 1] = c[1]; o.data[i + 2] = c[2]; o.data[i + 3] = 255; m.data[i] = m.data[i + 1] = m.data[i + 2] = m.data[i + 3] = 255; }
+  ox.putImageData(o, 0, 0); mx.putImageData(m, 0, 0);
+  PA.parts[paKey(v, n) + "#b"] = out; PA.bmask[paKey(v, n)] = mask;
+}
+function paBandSnap(key, box) {   // after a heal: band pixels back to the nearest level colour, nothing outside the skin
+  const pad = 8, x0 = Math.max(0, Math.floor(box[0]) - pad), y0 = Math.max(0, Math.floor(box[1]) - pad);
+  const W = Math.min(PA_N, Math.ceil(box[2]) + pad) - x0, H = Math.min(PA_N, Math.ceil(box[3]) + pad) - y0; if (W < 1 || H < 1) return;
+  const ctx = PA.parts[key].getContext("2d"), im = ctx.getImageData(x0, y0, W, H), d = im.data;
+  const m = PA.bmask[key.slice(0, -2)].getContext("2d").getImageData(x0, y0, W, H).data;
+  for (let i = 0; i < d.length; i += 4) { if (!m[i + 3]) { d[i + 3] = 0; continue; } if (!d[i + 3]) continue;
+    const c = PA_BAND_RGB[paBandLevel(d[i], d[i + 1], d[i + 2])]; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255; }
+  ctx.putImageData(im, x0, y0);
+}
+function paBandLevel(r, g, b) { let best = 0, bd = 1e9;
+  PA_BAND_RGB.forEach((c, i) => { const dd = (c[0] - r) ** 2 + (c[1] - g) ** 2 + (c[2] - b) ** 2; if (dd < bd) { bd = dd; best = i; } }); return best; }
+function paBandPng(key) {   // display canvas -> the bands PNG the server wants (R = level, A = skin)
+  const d = PA.parts[key].getContext("2d").getImageData(0, 0, PA_N, PA_N), out = paCanvas(), ox = out.getContext("2d"), o = ox.createImageData(PA_N, PA_N);
+  for (let i = 0; i < d.data.length; i += 4) if (d.data[i + 3] > 127) { o.data[i] = paBandLevel(d.data[i], d.data[i + 1], d.data[i + 2]); o.data[i + 3] = 255; }
+  ox.putImageData(o, 0, 0); return out.toDataURL("image/png");
+}
+function paLevels() {   // the level picker
+  const n = (PA.doc && PA.doc.skinKey && PA.doc.skinKey.length) || PA_BAND.length; PA.lv = Math.min(PA.lv, n - 1);
+  $("paLv").innerHTML = PA_BAND.slice(0, n).map((c, i) => `<button data-lv="${i}" title="level ${i + 1}${PA.doc && PA.doc.skinKey ? " (painted " + rgb2hex(PA.doc.skinKey[i]) + ")" : ""}" style="width:30px;padding:2px 0;background:${c};color:${i > 2 ? "#222" : "#fff"};${i === PA.lv ? "outline:2px solid var(--accent)" : ""}">${i + 1}</button>`).join("");
+  $("paLv").querySelectorAll("[data-lv]").forEach(b => b.onclick = () => { PA.lv = +b.dataset.lv; paLevels(); });
 }
 function paSize() { const cv = $("paCv"), css = +$("paZoom").value, px = Math.round(css * (window.devicePixelRatio || 1));
   cv.style.width = css + "px"; if (cv.width !== px) { cv.width = px; cv.height = px; } }
@@ -1418,9 +1457,10 @@ function paDrawNow() {
   const cv = $("paCv"), x = cv.getContext("2d"), k = cv.width / PA_N, vw = PA.vw, order = PA.doc.views[PA.view].order;
   x.setTransform(1, 0, 0, 1, 0, 0); x.fillStyle = "#c4c6cc"; x.fillRect(0, 0, cv.width, cv.height);
   x.setTransform(k * vw.z, 0, 0, k * vw.z, k * vw.ox, k * vw.oy); x.imageSmoothingEnabled = vw.z < 2.5;
-  const top = $("paTop").checked && PA.sel;
-  for (const n of order) if (!PA.hidden.has(n) && !(top && n === PA.sel)) x.drawImage(PA.parts[paKey(PA.view, n)], 0, 0);
-  if (top && !PA.hidden.has(PA.sel)) x.drawImage(PA.parts[paKey(PA.view, PA.sel)], 0, 0);
+  const top = $("paTop").checked && PA.sel, bands = paBandsOn();
+  const part = n => { x.drawImage(PA.parts[paKey(PA.view, n)], 0, 0); const b = bands && PA.parts[paKey(PA.view, n) + "#b"]; if (b) x.drawImage(b, 0, 0); };
+  for (const n of order) if (!PA.hidden.has(n) && !(top && n === PA.sel)) part(n);
+  if (top && !PA.hidden.has(PA.sel)) part(PA.sel);
   if (PA.sel && $("paGhost").checked && PA.tmpl[paKey(PA.view, PA.sel)]) {   // the selected part's template shape, as a dashed ghost
     if (!PA.ghost || PA.ghost.key !== paKey(PA.view, PA.sel)) PA.ghost = { key: paKey(PA.view, PA.sel), c: paGhost(PA.tmpl[paKey(PA.view, PA.sel)]) };
     x.drawImage(PA.ghost.c, 0, 0);
@@ -1439,7 +1479,7 @@ function paGhost(t) {   // template shape -> a cyan edge (one-time per part)
 function paLayers() {
   const order = PA.doc.views[PA.view].order;
   $("paLayers").innerHTML = order.slice().reverse().map(n => `<div class="tpl ${n === PA.sel ? "on" : ""}" data-psel="${n}">
-    <input type="checkbox" data-ply="${n}" ${PA.hidden.has(n) ? "" : "checked"} style="width:auto;margin:0 6px 0 0">${n === "layer" && PA.layer ? `<b>${PA.layer.kind} layer</b>` : n.endsWith("@item") ? `&nbsp;&nbsp;<b style="color:var(--accent)">${PA.layer.item.replace(/^item\./, "")}</b>&nbsp;<span class="hint">on ${n.slice(0, -5)}</span>` : n}${paEditable(n) ? "" : ' <span class="hint">(context)</span>'}${PA.dirty[paKey(PA.view, n)] ? " •" : ""}</div>`).join("");
+    <input type="checkbox" data-ply="${n}" ${PA.hidden.has(n) ? "" : "checked"} style="width:auto;margin:0 6px 0 0">${n === "layer" && PA.layer ? `<b>${PA.layer.kind} layer</b>` : n.endsWith("@item") ? `&nbsp;&nbsp;<b style="color:var(--accent)">${PA.layer.item.replace(/^item\./, "")}</b>&nbsp;<span class="hint">on ${n.slice(0, -5)}</span>` : n}${paEditable(n) ? "" : ' <span class="hint">(context)</span>'}${PA.dirty[paKey(PA.view, n)] || PA.dirty[paKey(PA.view, n) + "#b"] ? " •" : ""}${!PA.layer && PA.doc.bandsEdited && PA.doc.bandsEdited.includes(`${PA.view}/${n}`) ? ' <span class="hint" title="bands edited by hand">✎</span>' : ""}</div>`).join("");
   $("paLayers").querySelectorAll("[data-ply]").forEach(c => c.onchange = () => { c.checked ? PA.hidden.delete(c.dataset.ply) : PA.hidden.add(c.dataset.ply); paDraw(); });
   $("paLayers").querySelectorAll("[data-psel]").forEach(r => r.onclick = e => { if (e.target.tagName === "INPUT") return; PA.sel = r.dataset.psel; paLayers(); paDraw(); });
 }
@@ -1450,6 +1490,10 @@ function paPos(e) { const r = $("paCv").getBoundingClientRect(), s = [(e.clientX
 function paPick(p) {   // the colour under the cursor, from the visible layers (selected on top)
   const order = PA.doc.views[PA.view].order.filter(n => !PA.hidden.has(n)), x = Math.round(p[0]), y = Math.round(p[1]);
   const seq = $("paTop").checked && PA.sel ? [...order.filter(n => n !== PA.sel), PA.sel] : order;
+  if (paBandsOn()) { for (const n of seq.reverse()) { const b = PA.parts[paKey(PA.view, n) + "#b"], c = PA.parts[paKey(PA.view, n)];
+      if (b && b.getContext("2d").getImageData(x, y, 1, 1).data[3] > 127) { const d = b.getContext("2d").getImageData(x, y, 1, 1).data; PA.lv = paBandLevel(d[0], d[1], d[2]); paLevels(); return; }
+      if (c.getContext("2d").getImageData(x, y, 1, 1).data[3] > 127) return; }   // not skin on top
+    return; }
   for (const n of seq.reverse()) { const d = PA.parts[paKey(PA.view, n)].getContext("2d").getImageData(x, y, 1, 1).data;
     if (d[3] > 127) { $("paColor").value = "#" + [d[0], d[1], d[2]].map(c => c.toString(16).padStart(2, "0")).join(""); return; } }
 }
@@ -1474,22 +1518,24 @@ function paMoveTo(dx, dy) {
   paStatus(` move ${st.dx}, ${st.dy} px`); paDraw();
 }
 function paNudge(dx, dy) {
-  if (!PA.sel || !paEditable(PA.sel) || PA.hidden.has(PA.sel)) return;
+  if (!PA.sel || !paEditable(PA.sel) || PA.hidden.has(PA.sel) || paBandsOn()) return;
   paMoveStart([0, 0]); paMoveTo(dx, dy); paEnd();
 }
 function paBegin(p) {
-  const key = paKey(PA.view, PA.sel), part = PA.parts[key];
+  const key = paEK(), part = PA.parts[key];
   PA.stroke = { key, last: p, before: part.getContext("2d").getImageData(0, 0, PA_N, PA_N), layer: paCanvas(), box: [p[0], p[1], p[0], p[1]] };
   paExtend(p);
 }
 function paExtend(p) {
   const st = PA.stroke, r = PA.tool === "outline" ? 2 : +$("paSize").value / 2, L = st.layer.getContext("2d");
-  L.fillStyle = PA.tool === "outline" ? PA_LINE : (PA.tool === "brush" ? $("paColor").value : "#fff");
+  L.fillStyle = PA.tool === "outline" ? PA_LINE : (PA.tool === "brush" ? (st.key.endsWith("#b") ? PA_BAND[PA.lv] : $("paColor").value) : "#fff");
   paStamp(L, st.last, p, r); st.last = p;
   st.box = [Math.min(st.box[0], p[0] - r), Math.min(st.box[1], p[1] - r), Math.max(st.box[2], p[0] + r), Math.max(st.box[3], p[1] + r)];
   paApplyPreview();
 }
-function paClampTo(layer, key) {   // keep a stroke inside the part's template shape (or what the part already covers)
+function paClampTo(layer, key) {   // keep a stroke inside the part's template shape (or what the part already covers); bands: its skin
+  if (key.endsWith("#b")) { const c = paCanvas(), x = c.getContext("2d"); x.drawImage(PA.bmask[key.slice(0, -2)], 0, 0);
+    x.globalCompositeOperation = "source-in"; x.drawImage(layer, 0, 0); return c; }
   if (!$("paClamp").checked || !PA.tmpl[key]) return layer;
   const c = paCanvas(), x = c.getContext("2d"); x.drawImage(PA.tmpl[key], 0, 0); x.drawImage(PA.parts[key], 0, 0);
   x.globalCompositeOperation = "source-in"; x.drawImage(layer, 0, 0);
@@ -1533,7 +1579,7 @@ function paHeal(st) {   // fill the stroke from the colours around it (diffusion
 function paEnd() {
   const st = PA.stroke; if (!st) return; PA.stroke = null;
   if (st.move && !st.dx && !st.dy) { paStatus(); return; }   // a click without a drag: nothing moved
-  if (PA.tool === "heal" && !st.move) { PA.parts[st.key].getContext("2d").putImageData(st.before, 0, 0); paHeal(st); }
+  if (PA.tool === "heal" && !st.move) { PA.parts[st.key].getContext("2d").putImageData(st.before, 0, 0); paHeal(st); if (st.key.endsWith("#b")) paBandSnap(st.key, st.box); }
   PA.undo.push({ key: st.key, before: st.before }); if (PA.undo.length > 25) PA.undo.shift(); PA.redo = [];
   PA.dirty[st.key] = true; paLayers(); paStatus(); paDraw();
 }
@@ -1554,6 +1600,7 @@ function paWire() {
     if (PA.tool === "mask") { PA.maskLast = p.w; paMaskStroke(p.w, p.w); return; }
     if (!PA.sel) { paStatus(" select a layer first (click its name)"); return; }
     if (!paEditable(PA.sel)) { paStatus(` only the ${PA.doc.kind} layer can be edited here (the puppet is context)`); return; }
+    if (paBandsOn() && !["brush", "heal"].includes(PA.tool)) { paStatus(" skin bands: Brush paints a level, Heal smooths, Eyedropper picks (turn Skin bands off to paint)"); return; }
     if (PA.tool === "move") { paMoveStart(p.w); return; }
     if (PA.hidden.has(PA.sel)) { paStatus(" the selected layer is hidden"); return; }
     paBegin(p.w); };
@@ -1574,6 +1621,7 @@ function paWire() {
     if (arrows[e.key] && PA.tool === "move") { e.preventDefault(); const st = e.shiftKey ? 10 : 1; paNudge(arrows[e.key][0] * st, arrows[e.key][1] * st); return; }
     const tools = { b: "brush", e: "eraser", h: "heal", o: "outline", i: "pick", m: "mask", v: "move" };
     if (tools[k]) paSetTool(tools[k]);
+    if (paBandsOn() && /^[1-9]$/.test(k) && +k <= PA_BAND.length) { PA.lv = +k - 1; paLevels(); }
     if (k === "[" || k === "]") { $("paSize").value = Math.max(1, Math.min(80, +$("paSize").value + (k === "]" ? 2 : -2))); $("paSizeV").textContent = $("paSize").value; paDraw(); }
   });
   window.addEventListener("keyup", e => { if (e.code === "Space") PA.space = false; });
@@ -1612,8 +1660,9 @@ async function openItemLayers(race, item, id) {   // touch up a fitted item: one
 async function openParts(build, id) {
   if (Object.values(PA.dirty).some(Boolean) && (build !== PA.build || id !== PA.id) && !confirm("Discard the unsaved part edits?")) return;
   PA.opening = true; await initParts(true);
-  PA.layer = null; PA.build = build; PA.id = id; PA.parts = {}; PA.tmpl = {}; PA.undo = []; PA.redo = []; PA.dirty = {}; PA.mask = null; PA.ghost = null;
-  PA.doc = await api("/api/ws/paint/parts", { build, id });
+  PA.layer = null; PA.build = build; PA.id = id; PA.parts = {}; PA.tmpl = {}; PA.bmask = {}; PA.undo = []; PA.redo = []; PA.dirty = {}; PA.mask = null; PA.ghost = null;
+  paStatus(" loading (a paint's skin bands are made the first time it opens, ~20 s)");
+  PA.doc = await api("/api/ws/paint/parts", { build, id }); paLevels();
   await paFillPickers();
   await paLoadView(PA.view);
   if (!PA.sel || !PA.doc.views[PA.view].order.includes(PA.sel)) PA.sel = "torso";
@@ -1643,16 +1692,24 @@ async function paSave() {
       PA.doc = await api("/api/ws/face/layer_save", { ...L, view: v, png: PA.parts[paKey(v, "layer")].toDataURL("image/png") }); n++; }
     PA.dirty = {}; paLayers(); paPreview(); paStatus(n ? " saved (levels and previews updated)" : " nothing to save"); FC.urls = {};
     return; }
-  const v = PA.view, parts = {};
-  for (const n of PA.doc.views[v].order) if (PA.dirty[paKey(v, n)]) parts[n] = PA.parts[paKey(v, n)].toDataURL("image/png");
-  const other = PA.doc.views[v === "front" ? "back" : "front"].order.filter(n => PA.dirty[paKey(v === "front" ? "back" : "front", n)]);
-  if (!Object.keys(parts).length && !other.length) { paStatus(" nothing to save"); return; }
-  if (Object.keys(parts).length) await api("/api/ws/paint/save", { build: PA.build, id: PA.id, view: v, parts });
-  if (other.length) { const ov = v === "front" ? "back" : "front", op = {};
-    for (const n of other) op[n] = PA.parts[paKey(ov, n)].toDataURL("image/png");
-    await api("/api/ws/paint/save", { build: PA.build, id: PA.id, view: ov, parts: op }); }
-  PA.dirty = {}; paLayers(); paStatus(" saved; the walk re-renders (queue)"); pollJobs();
+  // paint first (the server redoes those parts' bands), then hand-edited bands (they win)
+  let paint = 0, bands = 0;
+  for (const v of VIEWS_PA) {
+    const parts = {};
+    for (const n of PA.doc.views[v].order) if (PA.dirty[paKey(v, n)]) parts[n] = PA.parts[paKey(v, n)].toDataURL("image/png");
+    if (Object.keys(parts).length) { PA.doc = await api("/api/ws/paint/save", { build: PA.build, id: PA.id, view: v, parts }); paint += Object.keys(parts).length;
+      for (const n of Object.keys(parts)) if (!PA.dirty[paKey(v, n) + "#b"]) delete PA.parts[paKey(v, n) + "#b"]; }   // reload the redone bands
+  }
+  for (const v of VIEWS_PA) {
+    const b = {};
+    for (const n of PA.doc.views[v].order) if (PA.dirty[paKey(v, n) + "#b"]) b[n] = paBandPng(paKey(v, n) + "#b");
+    if (Object.keys(b).length) { PA.doc = await api("/api/ws/paint/bands_save", { build: PA.build, id: PA.id, view: v, bands: b }); bands += Object.keys(b).length; }
+  }
+  if (!paint && !bands) { paStatus(" nothing to save"); return; }
+  PA.dirty = {}; await paLoadView(PA.view); paLayers(); paDraw();
+  paStatus(` saved${paint ? `; the walk re-renders (queue)` : ""}${bands ? `; ${bands} part${bands > 1 ? "s'" : "'s"} bands` : ""}`); if (paint) pollJobs();
 }
+const VIEWS_PA = ["front", "back"];
 async function paFix() {
   if (PA.layer) throw new Error("The AI fix works on paint parts; for a face, hair or item layer, paint it or queue new candidates.");
   if (!PA.sel) throw new Error("Select the layer to fix first.");
@@ -1668,6 +1725,16 @@ async function initParts(quiet) {
   document.querySelectorAll("#paTools [data-tool]").forEach(b => b.onclick = () => paSetTool(b.dataset.tool));
   $("paSize").oninput = () => { $("paSizeV").textContent = $("paSize").value; paDraw(); };
   ["paClamp", "paTop", "paGhost"].forEach(id => $(id).onchange = paDraw);
+  $("paBands").onchange = () => { if ($("paBands").checked && !["brush", "heal", "pick"].includes(PA.tool)) paSetTool("brush"); paLevels(); paDraw(); };
+  $("paBandReset").onclick = guard(async e => {
+    if (PA.layer || !PA.doc) throw new Error("Skin bands belong to paint candidates.");
+    const all = e.shiftKey;
+    if (!all && !PA.sel) throw new Error("Select a part first.");
+    if (!confirm(all ? "Redo every part's bands from the paint (hand edits go, new skin key)?" : `Redo ${PA.sel} (${PA.view}) bands from its paint (its hand edits go)?`)) return;
+    paStatus(" redoing bands…");
+    PA.doc = await api("/api/ws/paint/bands_reset", all ? { build: PA.build, id: PA.id } : { build: PA.build, id: PA.id, view: PA.view, part: PA.sel });
+    for (const k of Object.keys(PA.parts)) if (k.endsWith("#b") && (all || k === paKey(PA.view, PA.sel) + "#b")) { delete PA.parts[k]; delete PA.dirty[k]; }
+    await paLoadView(PA.view); paLevels(); paLayers(); paDraw(); paStatus(" bands redone from the paint"); });
   $("paZoom").onchange = () => { paSize(); paDraw(); };
   $("paReset").onclick = () => { PA.vw = { z: 1, ox: 0, oy: 0 }; paDraw(); };
   $("paUndo").onclick = () => paUndo(PA.undo, PA.redo); $("paRedo").onclick = () => paUndo(PA.redo, PA.undo);
@@ -1675,6 +1742,7 @@ async function initParts(quiet) {
   $("paView").onchange = guard(async () => {
     if (PA.doc && !PA.doc.views[$("paView").value]) { $("paView").value = PA.view; throw new Error("A face layer has no back view."); }
     PA.view = $("paView").value; PA.ghost = null; await paLoadView(PA.view); paLayers(); paPreview(); paDraw(); });
+  paLevels();
   $("paFrame").oninput = paPreview;
   $("paSave").onclick = guard(paSave);
   $("paRevert").onclick = guard(async () => {

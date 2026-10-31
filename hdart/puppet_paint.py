@@ -493,8 +493,9 @@ def _paint_one(build, d, cid, sd, spec, rendered, lays, ramp, P, guide):
             (d / "template" / v).mkdir(parents=True, exist_ok=True)
             for name, (rgba, _, _) in rendered[v].items():
                 Image.fromarray(rgba).save(d / "template" / v / f"{name}.png")
-        _progress(d, 5, 5, "walk previews", sd)
+        _progress(d, 5, 5, "walk previews + skin bands", sd)
         render_previews(d, spec)
+        bake_bands(build, cid)
 
 
 def _spec_for(d):
@@ -537,23 +538,117 @@ def ramp_preview(build):
     out = {"build": build, "id": cid, "approved": bool(st["approved"]), "facings": {}}
     if not cid:
         return out
-    d = out_dir(build) / cid; spec = _spec_for(d); size = ws.palettes_doc().get("rampSize", 5)
-    comps = {}
+    d = out_dir(build) / cid; spec = _spec_for(d); key = ensure_bands(build, cid)
+    url = lambda im: "data:image/png;base64," + base64.b64encode((lambda b: (im.save(b, "PNG"), b.getvalue())[1])(io.BytesIO())).decode()
     for v in VIEWS:
         cv = Image.new("RGBA", (pp.PX * S, pp.PX * S))
         for n in spec["views"][v]["order"]:
             cv.alpha_composite(Image.open(d / "parts" / v / f"{n}.png").convert("RGBA"))
-        comps[v] = cv.resize((pp.PX, pp.PX), Image.LANCZOS)
+        lv = bands_composite(d, spec, v)
+        enc = np.zeros(lv.shape + (4,), np.uint8); enc[..., 0] = np.clip(lv, 0, 255); enc[..., 3] = np.where(lv >= 0, 255, 0)
+        out["facings"][v] = {"art": url(cv.resize((pp.PX, pp.PX), Image.LANCZOS)),
+                             "levels": url(Image.fromarray(enc).resize((pp.PX, pp.PX), Image.NEAREST)), "key": key}
+    return out
+
+
+# ----------------------------------------------------------------------------- skin bands
+# Each part's skin cel levels, worked out once from its paint (workshop.skin_cut) and editable in the Parts editor
+# ("Bands"): bands/<view>/<part>.png, R = level (NOT_SKIN = outline, clothes), A = the part's coverage, so parts drawn
+# over others hide their bands. The Ramps tab and the Unity export read them. The skin key (the levels' RGB centres,
+# measured on both views together) is meta.json "skin_key"; hand-edited bands are listed in "bands_edited" and only
+# redone on request (reset_bands).
+
+NOT_SKIN = 255
+
+
+def _band_key(d, spec, meta):
+    if meta.get("skin_key"):
+        return meta["skin_key"]
     both = Image.new("RGB", (pp.PX * 2, pp.PX), (255, 255, 255))
     for i, v in enumerate(VIEWS):
-        both.paste(comps[v], (i * pp.PX, 0), comps[v])
-    lev, cent = ws.skin_levels(both, size)
-    url = lambda im: "data:image/png;base64," + base64.b64encode((lambda b: (im.save(b, "PNG"), b.getvalue())[1])(io.BytesIO())).decode()
-    for i, v in enumerate(VIEWS):
-        lv = lev[:, i * pp.PX:(i + 1) * pp.PX]
-        enc = np.zeros(lv.shape + (4,), np.uint8); enc[..., 0] = np.clip(lv, 0, 255); enc[..., 3] = np.where(lv >= 0, 255, 0)
-        out["facings"][v] = {"art": url(comps[v]), "levels": url(Image.fromarray(enc)), "key": cent}
+        cv = Image.new("RGBA", (pp.PX * S, pp.PX * S))
+        for n in spec["views"][v]["order"]:
+            cv.alpha_composite(Image.open(d / "parts" / v / f"{n}.png").convert("RGBA"))
+        cv = cv.resize((pp.PX, pp.PX), Image.LANCZOS); both.paste(cv, (i * pp.PX, 0), cv)
+    key = ws.skin_key(both, ws.palettes_doc().get("rampSize", 5))
+    store.update_meta(d, skin_key=key)
+    return key
+
+
+def part_band(spec, view, name, im, key):
+    """A part's band image from its paint (RGBA array). The front head is measured with its painted face removed, as
+    the export draws it under a face layer."""
+    if name == "head" and view == "front":
+        from . import puppet_face as pf
+        im = pf.blank_face(im, pf.face_ellipse(spec, 1.2) & pf.inner_head(im))
+    a = im[..., 3] > 127
+    rgb = np.full(im.shape[:2] + (3,), 255, np.uint8); rgb[a] = im[a, :3]
+    m = ws.skin_mask(rgb) & a
+    out = np.zeros(im.shape[:2] + (4,), np.uint8)
+    out[..., 0] = np.where(m, ws.skin_cut(rgb, m, key).clip(0, 254), NOT_SKIN); out[..., 3] = np.where(a, 255, 0)
     return out
+
+
+def bake_bands(build, cid, view=None, names=None, force=False):
+    """(Re)make the bands of a candidate's parts (one view / some parts, else all) from their paint; hand-edited ones
+    are kept unless force (which also forgets they were edited; all of them = a new skin key too)."""
+    d = out_dir(build) / cid; spec = _spec_for(d); meta = store.read_meta(d)
+    if force and view is None and names is None:
+        meta.pop("skin_key", None); store.update_meta(d, skin_key=None)
+    key = _band_key(d, spec, meta); edited = set(meta.get("bands_edited", [])); done = []
+    for v in ([view] if view else VIEWS):
+        (d / "bands" / v).mkdir(parents=True, exist_ok=True)
+        for n in spec["views"][v]["order"]:
+            if (names is not None and n not in names) or (f"{v}/{n}" in edited and not force):
+                continue
+            im = np.asarray(Image.open(d / "parts" / v / f"{n}.png").convert("RGBA"))
+            Image.fromarray(part_band(spec, v, n, im, key)).save(d / "bands" / v / f"{n}.png")
+            done.append(f"{v}/{n}")
+    if force and done:
+        store.update_meta(d, bands_edited=sorted(edited - set(done)))
+    return key
+
+
+def ensure_bands(build, cid):
+    """The skin key, after making any band that's missing (candidates painted before bands existed)."""
+    d = out_dir(build) / cid; spec = _spec_for(d)
+    for v in VIEWS:
+        miss = [n for n in spec["views"][v]["order"] if not (d / "bands" / v / f"{n}.png").exists()]
+        if miss:
+            bake_bands(build, cid, v, miss)
+    return _band_key(d, spec, store.read_meta(d))
+
+
+def bands_composite(d, spec, view):
+    """A view's skin levels in the rest pose (1024 px, -1 = not skin), from the parts' bands."""
+    cv = Image.new("RGBA", (pp.PX * S, pp.PX * S))
+    for n in spec["views"][view]["order"]:
+        cv.alpha_composite(Image.open(d / "bands" / view / f"{n}.png").convert("RGBA"))
+    a = np.asarray(cv)
+    return np.where((a[..., 3] > 127) & (a[..., 0] != NOT_SKIN), a[..., 0].astype(np.int16), -1)
+
+
+def save_bands(build, cid, view, pngs):
+    """Hand-edited bands from the Parts editor (part name -> PNG data URL, R = level, A = coverage): only the levels of
+    the part's skin pixels change, its coverage and non-skin pixels stay."""
+    import base64, io
+    d = out_dir(build) / cid; order = set(_spec_for(d)["views"][view]["order"]); meta = store.read_meta(d)
+    for name, data in pngs.items():
+        if name not in order:
+            raise ValueError(f"Unknown part {name}.")
+        new = np.asarray(Image.open(io.BytesIO(base64.b64decode(data.split(",", 1)[-1]))).convert("RGBA"))
+        f = d / "bands" / view / f"{name}.png"; old = np.asarray(Image.open(f).convert("RGBA")).copy()
+        skin = (old[..., 3] > 127) & (old[..., 0] != NOT_SKIN) & (new[..., 3] > 127)
+        old[..., 0][skin] = np.minimum(new[..., 0][skin], len(meta.get("skin_key") or [0] * 5) - 1)
+        Image.fromarray(old).save(f)
+    store.update_meta(d, bands_edited=sorted(set(meta.get("bands_edited", [])) | {f"{view}/{n}" for n in pngs}))
+    return parts_doc(build, cid)
+
+
+def reset_bands(build, cid, view=None, name=None):
+    """Redo bands from the paint, dropping hand edits: one part, or every part (with a new skin key)."""
+    bake_bands(build, cid, view if name else None, [name] if name else None, force=True)
+    return parts_doc(build, cid)
 
 
 def approve(build, cid, on=True):
@@ -578,19 +673,23 @@ def archive(build, cid):
 # ----------------------------------------------------------------------------- Parts editor
 
 def parts_doc(build, cid):
-    """What the Parts editor needs: per view the draw order, part image paths, template shapes (for the clamp)."""
+    """What the Parts editor needs: per view the draw order, part image paths, template shapes (for the clamp), the skin
+    bands (made first if missing) with the skin key and which bands were edited by hand."""
     d = out_dir(build) / cid
     if not d.exists():
         raise ValueError(f"No paint candidate {cid} for {build}.")
+    key = ensure_bands(build, cid); meta = store.read_meta(d)
     spec = _spec_for(d); tdir = d / "template" if (d / "template").exists() else pt.out_dir()
     views = {}
     for v in VIEWS:
         order = spec["views"][v]["order"]
         views[v] = {"order": order, "parts": {n: ws.rel(d / "parts" / v / f"{n}.png") for n in order},
-                    "template": {n: ws.rel(tdir / v / f"{n}.png") for n in order if (tdir / v / f"{n}.png").exists()}}
-    stamp = int(max((f.stat().st_mtime for f in (d / "parts").rglob("*.png")), default=0))
+                    "template": {n: ws.rel(tdir / v / f"{n}.png") for n in order if (tdir / v / f"{n}.png").exists()},
+                    "bands": {n: ws.rel(d / "bands" / v / f"{n}.png") for n in order}}
+    stamp = int(max((f.stat().st_mtime for sub in ("parts", "bands") for f in (d / sub).rglob("*.png")), default=0))
     return {"build": build, "id": cid, "dir": ws.rel(d), "views": views, "stamp": stamp,
-            "edited": (d / "parts_orig").exists(), "files": sorted(f.name for f in d.glob("*.*"))}
+            "edited": (d / "parts_orig").exists(), "files": sorted(f.name for f in d.glob("*.*")),
+            "skinKey": key, "bandsEdited": meta.get("bands_edited", [])}
 
 
 def save_parts(build, cid, view, pngs):
@@ -610,6 +709,7 @@ def save_parts(build, cid, view, pngs):
         if im.size != (pp.PX * S, pp.PX * S):
             raise ValueError(f"{name}: expected {pp.PX * S} px, got {im.size}.")
         im.save(d / "parts" / view / f"{name}.png")
+    bake_bands(build, cid, view, list(pngs))   # the bands follow the paint (hand-edited ones stay)
     return parts_doc(build, cid)
 
 
@@ -618,6 +718,7 @@ def revert_parts(build, cid):
     d = out_dir(build) / cid
     if (d / "parts_orig").exists():
         shutil.rmtree(d / "parts"); shutil.move(str(d / "parts_orig"), str(d / "parts"))
+    bake_bands(build, cid, force=True)   # band edits go too
     render_previews(d, _spec_for(d))
     return parts_doc(build, cid)
 
@@ -671,6 +772,7 @@ def fix_region(build, cid, view, part, mask, prompt="", seed=3, denoise=0.75):
     new[y0:y0 + side, x0:x0 + side, :3] = np.clip(region * (1 - f_) + patch * f_, 0, 255).astype(np.uint8)
     new[..., 3] = np.where(m, 255, new[..., 3])          # filled gaps become part of the part
     Image.fromarray(new).save(d / "parts" / view / f"{part}.png")
+    bake_bands(build, cid, view, [part])
     render_previews(d, spec)
     return parts_doc(build, cid)["stamp"]
 

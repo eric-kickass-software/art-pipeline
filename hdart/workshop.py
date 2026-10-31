@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from . import ai_kit, comfy, config, jobs, store
+from . import ai_kit, comfy, config, jobs, levels, store
 
 ROOT = Path(__file__).resolve().parent.parent
 STATE = ai_kit.AI_DIR / "workshop.json"
@@ -489,25 +489,55 @@ def skin_mask(a):
     return m | (near & ~bg & (lum > 90) & ~grey)  # light anti-aliased skin edges count too
 
 
-def skin_levels(img, size=5, seed=0):
-    """Cel levels of the skin: k-means on the skin colours, sorted dark -> light. Returns (level map: -1 = not skin,
-    the level centres as RGB)."""
+LUMA = np.array([0.299, 0.587, 0.114])
+
+
+def _skin_val(a, m):
+    """Brightness of the skin pixels m, blurred inside the skin. The light anti-aliased rim (2 px) is left out of the
+    blur and takes its inner neighbours' value: it would otherwise become a pale outline band."""
+    core = m
+    for _ in range(2):
+        core = core & np.roll(core, 1, 0) & np.roll(core, -1, 0) & np.roll(core, 1, 1) & np.roll(core, -1, 1)
+    return levels.smooth_val(a.astype(float) @ LUMA, core if core.any() else m)
+
+
+def skin_cut(a, m, cent):
+    """Level map of the skin pixels m of RGB array a (-1 = not skin): the blurred brightness cut at the levels' (cent,
+    RGB) brightnesses, then small patches merged and band edges smoothed (hdart.levels). Hand-painted brushwork and
+    FLUX's soft gradients otherwise quantize into splotches once a ramp colours them."""
+    lev = np.full(m.shape, -1, np.int16)
+    if not len(cent) or not m.any():
+        return lev
+    vs = _skin_val(a, m); cl = np.asarray(cent, float) @ LUMA
+    L = np.zeros(m.shape + (4,), np.uint8)
+    L[..., 0][m] = np.abs(vs[m][:, None] - cl[None]).argmin(1); L[..., 3][m] = 255
+    island = max(1, int(levels.ISLAND * (m.shape[0] / 1024) ** 2))   # ISLAND is for a 1024 px tall canvas
+    lev[m] = levels.smooth_levels(L, island)[..., 0][m]
+    return lev
+
+
+def skin_key(img, size=5):
+    """The skin's cel level colours: k-means on the skin colours, sorted dark -> light (RGB centres; [] = no skin)."""
     a = np.asarray(img.convert("RGB"))
-    m = skin_mask(a)
-    px = a[m].astype(float)
+    px = a[skin_mask(a)].astype(float)
     if len(px) < size:
-        return np.full(m.shape, -1, np.int16), []
+        return []
     lum = px.sum(1); order0 = np.argsort(lum)  # start from evenly spread brightness percentiles (deterministic)
     cent = px[order0[(np.linspace(0.08, 0.92, size) * (len(px) - 1)).astype(int)]]
     for _ in range(30):
         lab = ((px[:, None] - cent[None]) ** 2).sum(-1).argmin(1)
         cent = np.array([px[lab == i].mean(0) if (lab == i).any() else cent[i] for i in range(size)])
-    order = np.argsort(cent.sum(1))
-    cent = cent[order]
-    lab = ((px[:, None] - cent[None]) ** 2).sum(-1).argmin(1)
-    lev = np.full(m.shape, -1, np.int16)
-    lev[m] = lab
-    return lev, [[int(round(c)) for c in cc] for cc in cent]
+    return [[int(round(c)) for c in cc] for cc in cent[np.argsort(cent.sum(1))]]
+
+
+def skin_levels(img, size=5, seed=0):
+    """Cel levels of the skin: the skin key (skin_key) and the level map cut from the blurred brightness and smoothed
+    (skin_cut). Returns (level map: -1 = not skin, the level centres as RGB)."""
+    a = np.asarray(img.convert("RGB"))
+    cent = skin_key(img, size)
+    if not cent:
+        return np.full(a.shape[:2], -1, np.int16), []
+    return skin_cut(a, skin_mask(a), cent), cent
 
 
 def ramp_preview(build):

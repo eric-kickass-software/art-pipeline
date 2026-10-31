@@ -93,6 +93,24 @@ except ValueError:
 ppt.revert_parts("human.female", c[0])
 assert not (d / "parts_orig").exists() and tuple(np.asarray(Image.open(d / "parts" / "front" / "torso.png"))[505, 505]) != (255, 0, 0, 255)
 
+# skin bands: one per part, kept in step with the paint; hand edits stay until reset
+assert doc["skinKey"] and all((d / "bands" / v / f"{n}.png").exists() for v in ppt.VIEWS for n in spec["views"][v]["order"])
+band = lambda: np.asarray(Image.open(d / "bands" / "front" / "torso.png"))
+b0 = band(); assert (b0[..., 3] > 0).any() and set(np.unique(b0[..., 0][b0[..., 3] > 0])) <= set(range(5)) | {ppt.NOT_SKIN}
+skin = (b0[..., 3] > 0) & (b0[..., 0] != ppt.NOT_SKIN)
+assert skin.any()   # the fake paint has skin
+ys, xs = np.nonzero(skin); y, x = ys[len(ys) // 2], xs[len(xs) // 2]; lv = (int(b0[y, x, 0]) + 2) % 5
+e = np.zeros_like(b0); e[skin, 0] = b0[skin, 0]; e[skin, 3] = 255; e[y, x, 0] = lv; e[0, 0] = (3, 0, 0, 255)   # [0, 0] isn't skin: ignored
+buf = io.BytesIO(); Image.fromarray(e).save(buf, "PNG")
+doc = ppt.save_bands("human.female", c[0], "front", {"torso": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()})
+assert band()[y, x, 0] == lv and band()[0, 0, 3] == b0[0, 0, 3] and "front/torso" in doc["bandsEdited"]
+buf = io.BytesIO(); Image.open(d / "parts" / "front" / "torso.png").save(buf, "PNG")
+ppt.save_parts("human.female", c[0], "front", {"torso": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()})
+assert band()[y, x, 0] == lv   # saving the paint keeps hand-edited bands
+doc = ppt.reset_bands("human.female", c[0], "front", "torso")
+assert band()[y, x, 0] == b0[y, x, 0] and "front/torso" not in doc["bandsEdited"]
+ppt.revert_parts("human.female", c[0])
+
 # AI fix: only the marked pixels of the part (inside its template shape) change
 mk = np.zeros((1024, 1024), np.uint8); t = np.asarray(Image.open(d / "template" / "front" / "armB.upper.png"))[..., 3] > 127
 ys, xs = np.nonzero(t); mk[ys.min():ys.min() + 30, :] = 255
