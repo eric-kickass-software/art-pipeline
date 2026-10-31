@@ -58,6 +58,34 @@ for v in ("front", "back"):
     assert {f.stem for f in (d / "plevels" / v).glob("*.png")} == parts
 assert (d / "prev_male_front.png").exists()
 
+# details sketch: saved with the zone (snapped to the palette, hard alpha; material strokes are zone in the UI), stamped on
+# the guide FLUX starts from; an empty sketch removes the file, reset removes both
+import base64, io
+pi.ZONES = tmp / "zones"
+_, sp, parts = pf.base("human.male")
+_, Z = pi.zones_for(sp, "front", parts["front"], "item.cloth_trousers", doc["items"]["item.cloth_trousers"])
+ys, xs = np.nonzero(Z); y0, xc = ys.min(), int(xs.mean())
+sk = np.zeros((pi.N, pi.N, 4), np.uint8)
+sk[y0 + 4:y0 + 24, xc - 40:xc + 40] = (*KEY["leather"].astype(np.uint8), 255)     # a leather belt
+sk[y0 + 24:y0 + 26, xc - 40:xc + 40] = (40, 30, 30, 200)                         # a line, slightly off the line colour
+sk[y0 + 40, xc] = (0, 255, 0, 60)                                                # faint: dropped
+u = lambda a: "data:image/png;base64," + base64.b64encode((lambda b: (Image.fromarray(a).save(b, "PNG"), b.getvalue())[1])(io.BytesIO())).decode()
+r = pi.save_zone("item.cloth_trousers", "front", u(np.dstack([np.where(Z, 255, 0).astype(np.uint8)] * 3)), sketch=u(sk))
+saved = np.asarray(Image.open(pi.sketch_path("item.cloth_trousers", "front")))
+assert r["sketch_px"] == 80 * 22 and set(np.unique(saved[..., 3])) == {0, 255}
+assert tuple(saved[y0 + 25, xc, :3]) == pi._rgb(pi.LINE) and saved[y0 + 40, xc, 3] == 0
+t2 = pi.generate("human", "item.cloth_trousers", seed=5)
+d2 = pi.out_dir("human", "item.cloth_trousers") / t2; meta2 = json.loads((d2 / "meta.json").read_text())
+assert meta2["sketch"] == ["front"], meta2.get("sketch")
+g = np.asarray(Image.open(d2 / "guide_front.png").convert("RGB")).astype(int)
+belt = g[y0 + 8:y0 + 20, xc - 30:xc + 30].reshape(-1, 3).mean(0)
+assert belt[2] > belt[1] + 60, belt                                               # blue (leather), not the green zone tint
+assert g[y0 + 25, xc].sum() < 150                                                 # the dark line
+pi.save_zone("item.cloth_trousers", "front", u(np.dstack([np.where(Z, 255, 0).astype(np.uint8)] * 3)), sketch=u(np.zeros_like(sk)))
+assert not pi.sketch_path("item.cloth_trousers", "front").exists() and pi.mask_path("item.cloth_trousers", "front").exists()
+pi.reset_zone("item.cloth_trousers", "front"); assert not pi.mask_path("item.cloth_trousers", "front").exists()
+pi.archive("human", "item.cloth_trousers", t2); pi.ZONES = ak.ROOT / "specs" / "item_zones"
+
 # held: the cut-out keyed per material (leather grip, metal blade) and framed
 paint_key["m"] = None
 s = pi.generate("human", "item.iron_sword", seed=3)

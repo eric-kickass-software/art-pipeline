@@ -33,6 +33,7 @@ S, N = ppt.S, pf.N
 VIEWS = ("front", "back")
 D_ITEM = 0.85
 GUIDE = 1.0      # the zones tinted in the key colour (weaker tints let FLUX shrink the item, e.g. a helmet smaller than the skull)
+LINE = "#221a18"  # the detail sketch's line colour (seams, edges, straps): a dark outline, never keyed
 GUIDE_IN = 2     # px the tint stays inside the zone edge, feathered
 LINE_W = 3       # the even outline drawn around every item silhouette (rims, sleeve ends and boot tops get no line from FLUX)
 LEVELS = 5
@@ -211,6 +212,35 @@ def mask_path(item_id, view, sex=None):
 def _mask_file(item_id, view, sex=None):
     f = mask_path(item_id, view, sex) if sex else None
     return f if f is not None and f.exists() else mask_path(item_id, view)
+
+
+def sketch_path(item_id, view, sex=None):
+    """The detail sketch painted over an item's zone (RGBA, rest-pose canvas): material key colours and dark lines that
+    are stamped onto the guide FLUX starts from (a belt, a trim, seams, a neckline)."""
+    return ZONES / (f"{item_id}.{sex}.{view}.sketch.png" if sex else f"{item_id}.{view}.sketch.png")
+
+
+def _sketch_file(item_id, view, sex=None):
+    f = sketch_path(item_id, view, sex) if sex else None
+    return f if f is not None and f.exists() else sketch_path(item_id, view)
+
+
+def sketch_guide(guide, comp, item_id, view, sex=None):
+    """`guide` (RGBA) with the item's detail sketch stamped on: the sketch's colours shaded by the puppet's brightness
+    (like the zone tint, so the form still reads), at full strength where drawn. Returns (guide, drawn?)."""
+    f = _sketch_file(item_id, view, sex)
+    if not f.exists():
+        return guide, False
+    sk = np.asarray(Image.open(f).convert("RGBA").resize((N, N), Image.NEAREST)).astype(float)
+    a = sk[..., 3:4] / 255.0
+    if not (a > 0).any():
+        return guide, False
+    ca = np.asarray(guide).copy(); lum = np.asarray(comp)[..., :3].astype(float).mean(-1, keepdims=True) / 200.0
+    shade = np.where(lum > 0, 0.72 + 0.35 * lum, 1.0)   # off the body (bulk), unshaded
+    ink = np.clip(sk[..., :3] * shade, 0, 255)
+    ca[..., :3] = np.clip(ca[..., :3] * (1 - a) + ink * a, 0, 255).astype(np.uint8)
+    ca[..., 3] = np.maximum(ca[..., 3], sk[..., 3].astype(np.uint8))
+    return Image.fromarray(ca), True
 
 
 def _flood(seed, allowed):
@@ -604,6 +634,10 @@ def generate(race, item_id, build=None, seed=1):
             zm, Z, body, region, comp, guide, before = _setup(doc, it, sp, v, parts[v], item_id, build.split(".")[1])
             if v == "back":   # like the back hair (AB2): the painted front turned around by a FLUX edit guides the back
                 guide, ref = _back_guide(doc, it, P, d, seed, comp, guide, before, region, Z)
+            guide, drawn = sketch_guide(guide, comp, item_id, v, build.split(".")[1])   # Eric's detail sketch, on top
+            if drawn:
+                meta.setdefault("sketch", []).append(v)
+            guide.save(d / f"guide_{v}.png")
             _, after, _, out = pf._crop_pass(guide, region, pf._figure_box(comp), P[v], seed, it.get("denoise", D_ITEM),
                                              f"item_{item_id}_{cid}_{v}", [ref] if ref else [])
             out.save(d / f"paint_{v}.png")
@@ -915,22 +949,37 @@ def zone_doc(race, item_id, build, view):
     sex's own zone when painted, else the shared one, else the preset zones)."""
     doc = spec(); it = doc["items"][item_id]; _, sp, parts = pf.base(build); sex = build.split(".")[1]
     _, Z = zones_for(sp, view, parts[view], item_id, it, sex)
-    own = mask_path(item_id, view, sex).exists()
+    own = mask_path(item_id, view, sex).exists(); sk = _sketch_file(item_id, view, sex)
+    mats = [{"name": m, "key": doc["materials"][m]["key"]} for m in it.get("materials", [])]
     return {"puppet": _url(pf.compose(sp, view, parts[view])), "mask": _url(Image.fromarray(np.where(Z, 255, 0).astype(np.uint8))),
+            "sketch": _url(Image.open(sk).convert("RGBA")) if sk.exists() else None, "materials": mats, "line": LINE,
             "source": "this sex" if own else ("painted" if mask_path(item_id, view).exists() else "preset")}
 
 
-def save_zone(item_id, view, png, sex=None):
+def save_zone(item_id, view, png, sex=None, sketch=None):
+    """The painted zone and (when given) the detail sketch; an empty sketch removes its file."""
     import base64, io
     ZONES.mkdir(parents=True, exist_ok=True)
-    im = Image.open(io.BytesIO(base64.b64decode(png.split(",", 1)[1]))).convert("L").resize((N, N), Image.NEAREST)
-    m = np.asarray(im) > 127
+    dec = lambda u: Image.open(io.BytesIO(base64.b64decode(u.split(",", 1)[1])))
+    m = np.asarray(dec(png).convert("L").resize((N, N), Image.NEAREST)) > 127
     Image.fromarray(np.where(m, 255, 0).astype(np.uint8)).convert("1").save(mask_path(item_id, view, sex))
-    return {"ok": True, "px": int(m.sum())}
+    out = {"ok": True, "px": int(m.sum())}
+    if sketch is not None:
+        sk = np.asarray(dec(sketch).convert("RGBA").resize((N, N), Image.NEAREST)).copy()
+        sk[sk[..., 3] < 128] = 0; on = sk[..., 3] > 0; sk[on, 3] = 255   # hard edges, and every pixel snapped to the
+        pal = np.array([_rgb(c["key"]) for c in spec()["materials"].values()] + [_rgb(LINE)], float)   # palette: pure keys
+        if on.any():
+            px = sk[on, :3].astype(float); sk[on, :3] = pal[((px[:, None] - pal[None]) ** 2).sum(-1).argmin(1)].astype(np.uint8)
+        f = sketch_path(item_id, view, sex); out["sketch_px"] = int((sk[..., 3] > 0).sum())
+        if out["sketch_px"]:
+            Image.fromarray(sk).save(f)
+        else:
+            f.unlink(missing_ok=True)
+    return out
 
 
 def reset_zone(item_id, view, sex=None):
-    mask_path(item_id, view, sex).unlink(missing_ok=True)
+    mask_path(item_id, view, sex).unlink(missing_ok=True); sketch_path(item_id, view, sex).unlink(missing_ok=True)
     return {"ok": True}
 
 
@@ -1302,7 +1351,7 @@ def api(action, b):
     if action == "zone/get":
         return zone_doc(race, b["item"], b["build"], b["view"])
     if action == "zone/save":
-        return save_zone(b["item"], b["view"], b["png"], b.get("sex"))
+        return save_zone(b["item"], b["view"], b["png"], b.get("sex"), b.get("sketch"))
     if action == "zone/reset":
         return reset_zone(b["item"], b["view"], b.get("sex"))
     if action == "approve":

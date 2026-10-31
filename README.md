@@ -471,7 +471,7 @@ Template, so an item fitted once is reused on every build of the race.
 - **Items tab:** the catalogue by slot (✓ = approved, ♂/♀ per sex; `→ x` = part of game item x); item settings (slot, game item, kind fitted/held, fit,
   description, materials, depth, bulk, clips hair, FLUX hidden pass; held: hand, length, tilt); the **zone editor**
   (brush / eraser / lasso add / lasso erase, size, view zoom, undo/redo, front/back, on the male or female puppet; keys
-  B E L K, Ctrl+Z/Y); Generate (fit on a build, n, seed) with the composed prompts shown and the shared prompt templates
+  B E L K, D = zone / details, Ctrl+Z/Y; a **Details** layer sketches the item in its material colours, see below); Generate (fit on a build, n, seed) with the composed prompts shown and the shared prompt templates
   editable underneath; candidates (FLUX's paint + the candidate on male/female front/back, Approve, Walk, Re-extract,
   Re-extract + FLUX hidden, Archive).
 - **Outfit tab:** a build wearing every approved item (its fit for that build), a ramp per material, a hair from the
@@ -511,6 +511,14 @@ Template, so an item fitted once is reused on every build of the race.
 - **Zones** (data, so an editor can draw them later): `part` (fnmatch, `arm*.upper`), `t` = range along the part's bone,
   `rows` / `ellipse` = fractions of the part's box, `seam` = above/below the waist, `view` = one view only. `bulk` = px
   the item may paint past its zones.
+- **Details sketch** (zone editor → Paint: Details, key D): an RGBA sketch per item and view
+  (`specs/item_zones/<item>[.<sex>].<view>.sketch.png`, saved with the zone; "this sex only" works as for zones) in the
+  item's material keys plus a dark line colour (`LINE`): a leather belt on a tunic, a metal trim, seams, a neckline.
+  Material strokes also add to the zone; lines don't. Saved with hard alpha, snapped to the palette. `generate` stamps it
+  on the guide (shaded by the puppet's brightness like the zone tint; on top of the back guide too) and saves
+  `guide_<view>.png`; `meta.sketch` lists the views that had one. Only new candidates use it (re-extract keeps the old
+  paint). Lines aren't keyed: they steer FLUX's shapes, the outline pass draws the final edges. Only the item's own
+  materials are offered: add leather to a tunic's materials to sketch a leather belt.
 - **Fitted item:** the zones tinted in the item's first material key (full strength; weaker tints let FLUX shrink the
   item) → one masked FLUX pass on the whole puppet at denoise 0.85 (the mask = the zones grown by `bulk`, on the zone
   parts only) → the item = key-coloured pixels + the dark line next to them, touching the zones, small holes filled
