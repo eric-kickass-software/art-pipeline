@@ -554,6 +554,8 @@
 <script>
 const $ = (id) => document.getElementById(id);
 let S = null, B = null, jobs = [];
+// the rest-pose canvas (hdart.puppet: PX = 576 rig px, painted at 2x; PAD = where the old 512 frame / the 512 px mannequins sit)
+const RIG = 576, RIG_PAD = [32, 64], CANVAS = 2 * RIG;
 const api = async (path, body) => {
   const r = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const j = await r.json(); if (j.error) throw new Error(j.error); return j;
@@ -1236,7 +1238,7 @@ function tpDraw(v) {
   x.setTransform(1, 0, 0, 1, 0, 0); x.fillStyle = "#c4c6cc"; x.fillRect(0, 0, cv.width, cv.height);
   T(x);
   const aop = +$("tpArt").value, pop = +$("tpParts").value;
-  if (TP.art[v] && aop > 0 && tpShown("art")) { x.globalAlpha = aop; x.imageSmoothingEnabled = z < 3; if (TP.art[v].naturalWidth === RIG) x.drawImage(TP.art[v], 0, 0, RIG, RIG); else x.drawImage(TP.art[v], RIG_PAD[0], RIG_PAD[1], 512, 512);   // a 512 px mannequin sits at PAD x.globalAlpha = 1; }
+  if (TP.art[v] && aop > 0 && tpShown("art")) { x.globalAlpha = aop; x.imageSmoothingEnabled = z < 3; if (TP.art[v].naturalWidth === RIG) x.drawImage(TP.art[v], 0, 0, RIG, RIG); else x.drawImage(TP.art[v], RIG_PAD[0], RIG_PAD[1], 512, 512); x.globalAlpha = 1; }   // a 512 px mannequin sits at PAD
   if (pop > 0) {   // parts drawn opaque off-screen in draw order (each one fill + its own outline), then laid over the art
     const off = document.createElement("canvas"); off.width = cv.width; off.height = cv.height; const o = off.getContext("2d"); T(o);
     for (const name of V.order) { if (!tpShown(name)) continue;
@@ -1401,8 +1403,6 @@ setInterval(() => {   // when a template job finishes: new preview (and, after a
 // ------------------------------------------------------------------ Parts editor (touch up a painted candidate)
 const PA = { build: null, id: null, doc: null, view: "front", parts: {}, tmpl: {}, bmask: {}, lv: 2, sel: null, hidden: new Set(), tool: "brush",
   vw: { z: 1, ox: 0, oy: 0 }, undo: [], redo: [], dirty: {}, mask: null, stroke: null, pan: null, space: false, inited: false, fixJob: null };
-// the rest-pose canvas (hdart.puppet: PX = 576 rig px, painted at 2x; PAD = where the old 512 frame / the 512 px mannequins sit)
-const RIG = 576, RIG_PAD = [32, 64], CANVAS = 2 * RIG;
 const PA_N = CANVAS, PA_LINE = "#28201e";
 const PA_BAND = ["#3b2a6b", "#8a3f8f", "#d4606a", "#f2a65a", "#fbeaa0"];   // band display colours, darkest level first
 const PA_BAND_RGB = PA_BAND.map(h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)));
