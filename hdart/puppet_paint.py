@@ -672,6 +672,20 @@ def archive(build, cid):
 
 # ----------------------------------------------------------------------------- Parts editor
 
+def walk_pose(spec, frames=8, clip="walk"):
+    """Per view, per frame, per bone: [p0x, p0y, p1x, p1y, theta] in paint px (the rig's rigid transforms, as the walk
+    renders them: rotate by theta about the rest pivot p0, then move p0 to p1). The editor poses its layers with these."""
+    k = float(S); out = {}   # the paint is S x the rig
+    for v in VIEWS:
+        B = pt.rig_from_spec(spec, v); fr = []
+        for i in range(frames):
+            T, _ = pp.pose(B, v, i / frames, clip)
+            fr.append({b: [round(float(p0[0]) * k, 3), round(float(p0[1]) * k, 3), round(float(p1[0]) * k, 3), round(float(p1[1]) * k, 3),
+                           round(float(th), 5)] for b, (p0, p1, th) in T.items()})
+        out[v] = fr
+    return out
+
+
 def parts_doc(build, cid):
     """What the Parts editor needs: per view the draw order, part image paths, template shapes (for the clamp), the skin
     bands (made first if missing) with the skin key and which bands were edited by hand."""
@@ -687,7 +701,7 @@ def parts_doc(build, cid):
                     "template": {n: ws.rel(tdir / v / f"{n}.png") for n in order if (tdir / v / f"{n}.png").exists()},
                     "bands": {n: ws.rel(d / "bands" / v / f"{n}.png") for n in order}}
     stamp = int(max((f.stat().st_mtime for sub in ("parts", "bands") for f in (d / sub).rglob("*.png")), default=0))
-    return {"build": build, "id": cid, "dir": ws.rel(d), "views": views, "stamp": stamp,
+    return {"build": build, "id": cid, "dir": ws.rel(d), "views": views, "stamp": stamp, "pose": walk_pose(spec),
             "edited": (d / "parts_orig").exists(), "files": sorted(f.name for f in d.glob("*.*")),
             "skinKey": key, "bandsEdited": meta.get("bands_edited", [])}
 
