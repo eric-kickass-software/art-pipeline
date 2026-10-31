@@ -26,7 +26,7 @@ import numpy as np
 from PIL import Image, ImageFilter
 
 from .levels import ISLAND, VAL_BLUR, _components_of, _mode, _spread, smooth_levels, smooth_val
-from . import ai_kit, comfy, jobs, store, puppet as pp, puppet_template as pt, puppet_paint as ppt, puppet_face as pf
+from . import ai_kit, comfy, jobs, memo, store, puppet as pp, puppet_template as pt, puppet_paint as ppt, puppet_face as pf
 
 SPEC = ai_kit.ROOT / "specs" / "items.json"
 S, N = ppt.S, pf.N
@@ -694,7 +694,13 @@ def colour(lev, ramps, doc=None):
 def item_layers(race, item_id, cid, sp, view, parts, ramps=None, painted=False, grips=None):
     """{part: RGBA} of one item candidate on a build's parts (coloured by `ramps`, or as painted). Held items sit on
     their hand's grip (`grips` = grip_assets of the build, if it has an approved grip hand)."""
-    doc = spec(); it = doc["items"][item_id]; d = out_dir(race, item_id) / cid
+    doc = spec()
+    return {n: (L if painted else colour(lev, ramps, doc)) for n, (L, lev) in item_raw(race, item_id, cid, sp, view, parts, grips, doc).items()}
+
+
+def item_raw(race, item_id, cid, sp, view, parts, grips=None, doc=None):
+    """{part: (painted RGBA, levels RGBA)} of one item candidate on a build's parts, before colouring."""
+    doc = doc or spec(); it = doc["items"][item_id]; d = out_dir(race, item_id) / cid
     if it.get("kind") == "held":
         img = np.asarray(Image.open(d / "held.png").convert("RGBA")); lev = np.asarray(Image.open(d / "held_levels.png").convert("RGBA"))
         if view == "back":
@@ -707,7 +713,36 @@ def item_layers(race, item_id, cid, sp, view, parts, ramps=None, painted=False, 
         for f in sorted((d / "plevels" / view).glob("*.png")):
             lay[f.stem] = (np.asarray(Image.open(d / "parts" / view / f.name).convert("RGBA")),
                            np.asarray(Image.open(f).convert("RGBA")))
-    return {n: (L if painted else colour(lev, ramps, doc)) for n, (L, lev) in lay.items()}
+    return lay
+
+
+_LAYERS = memo.LRU(96)   # item_raw() of worn items, cropped to their pixels (a few hundred KB each)
+
+
+def _crop(L, lev):
+    """(y, x, painted crop, levels crop) of a layer cut to the box of its pixels."""
+    ys, xs = np.nonzero((L[..., 3] > 0) | (lev[..., 3] > 0))
+    if not len(xs):
+        return (0, 0, memo.frozen(L[:0, :0].copy()), memo.frozen(lev[:0, :0].copy()))
+    box = (slice(ys.min(), ys.max() + 1), slice(xs.min(), xs.max() + 1))
+    return (int(ys.min()), int(xs.min()), memo.frozen(L[box].copy()), memo.frozen(lev[box].copy()))
+
+
+def _uncrop(y, x, a):
+    L = np.zeros((N, N, 4), np.uint8); L[y:y + a.shape[0], x:x + a.shape[1]] = a
+    return L
+
+
+def _layers_key(race, build, bkey, item_id, cid, view, doc):
+    """What item_raw() of one worn item depends on: the build's paint, the item's settings and files, its grip hand."""
+    it = doc["items"][item_id]; d = out_dir(race, item_id) / cid
+    files = (d / "held.png", d / "held_levels.png") if it.get("kind") == "held" else (d / "parts" / view, d / "plevels" / view)
+    grip = None
+    if it.get("kind") == "held":
+        gid = load_state(race).get("grip", {}).get(build)
+        grip = (gid, memo.stamp(grip_dir(race, build) / gid)) if gid else None
+    return (bkey, item_id, cid, view, json.dumps(it, sort_keys=True), json.dumps(doc["materials"], sort_keys=True),
+            grip, memo.stamp(*files))
 
 
 def dressed(build, worn, view, hair=None, painted=False):
@@ -716,8 +751,12 @@ def dressed(build, worn, view, hair=None, painted=False):
     race = build.split(".")[0]; doc = spec()
     _, sp, parts = pf.base(build); parts = {n: p.copy() for n, p in parts[view].items()}
     worn = sorted(worn, key=lambda w: doc["items"][w[0]].get("depth", 0))
-    grips = grip_assets(race, build, view)
-    lays = [(w[0], item_layers(race, w[0], w[1], sp, view, parts, w[2], painted, grips)) for w in worn]
+    grips = grip_assets(race, build, view); bkey = pf.base_key(build); lays = []
+    for iid, cid, ramps in worn:   # cached before colouring: a new colour recolours only the item's crop
+        k = _layers_key(race, build, bkey, iid, cid, view, doc); hit = _LAYERS.get(k)
+        if hit is None:
+            hit = _LAYERS.put(k, {n: _crop(L, lev) for n, (L, lev) in item_raw(race, iid, cid, sp, view, parts, grips, doc).items()})
+        lays.append((iid, {n: _uncrop(y, x, Lc if painted else colour(lv, ramps, doc)) for n, (y, x, Lc, lv) in hit.items()}))
     if hair is not None:
         h = hair.copy()
         for iid, lay in lays:
@@ -801,13 +840,7 @@ SEXES = ("male", "female")
 
 def _builds(race):
     """The race's builds that have a painted puppet (male / female)."""
-    out = []
-    for sx in SEXES:
-        try:
-            pf.base(f"{race}.{sx}"); out.append(f"{race}.{sx}")
-        except Exception:
-            pass
-    return out
+    return [f"{race}.{sx}" for sx in SEXES if pf.base_cid(f"{race}.{sx}")]   # no image loading: just "has a paint"
 
 
 def _state(race):
@@ -1000,29 +1033,57 @@ def archive(race, item_id, cid):
     return {"ok": True}
 
 
-def outfit(race, build, items, ramps=None, hair=None, hair_ramp=None, walk=True, cids=None):
-    """Previews of a build wearing `items` (each item's approved fit for that build, or `cids[item]`): rest PNGs and
-    walk GIFs per view as data URLs. hair = a hair candidate id of the race's hair set (clipped by items that clip it)."""
-    import base64, io
+OUTFIT_V = 1                                         # bump when render() changes how a preview looks
+OUTFIT_KEEP = 400                                    # rendered previews kept on disk (newest)
+
+
+def _outfit_cache():
+    from . import config
+    return config.data_dir() / "work" / "cache" / "outfit"
+
+
+def outfit(race, build, items, ramps=None, hair=None, hair_ramp=None, walk=True, cids=None, part=None):
+    """Previews of a build wearing `items` (each item's approved fit for that build, or `cids[item]`) as data URLs:
+    part "rest" = rest PNGs per view, "walk" = walk GIFs per view (walk_front, walk_back), None = rest + (if walk) walk.
+    hair = a hair candidate id of the race's hair set (clipped by items that clip it). Results are cached on disk
+    (work/cache/outfit), keyed by everything they're drawn from: the paint, each item's files and settings, ramps, hair."""
+    import base64, hashlib, io
+    from . import workshop as ws
+    part = part or ("all" if walk else "rest")
     doc = spec(); st = load_state(race); worn = []
     for i in items:
         c = (cids or {}).get(i) or resolve(race, i, build, st, doc)
         if c:
             worn.append((i, c, (ramps or {}).get(i, {})))
+    hd = pf.out_dir(race, "hair") / hair if hair else None
+    bkey = pf.base_key(build)
+    key = repr((OUTFIT_V, part, bkey, [(_layers_key(race, build, bkey, i, c, v, doc), json.dumps(r, sort_keys=True)) for i, c, r in worn for v in VIEWS],
+                hair, memo.stamp(hd) if hd else None, hair_ramp, json.dumps(ws.palettes_doc(), sort_keys=True)))
+    cf = _outfit_cache() / (hashlib.sha1(key.encode()).hexdigest() + ".json")
+    if cf.exists():
+        try:
+            out = json.loads(cf.read_text(encoding="utf-8")); out["cached"] = True; cf.touch()
+            return out
+        except ValueError:
+            pass
     hfn = None
-    if hair:
-        hd = pf.out_dir(race, "hair") / hair
+    if hd:
         def hfn(v):
             f = hd / f"levels_{v}.png"
             return pf.colour_levels(np.asarray(Image.open(f).convert("RGBA")), pf.hair_ramp(hair_ramp)) if f.exists() else None
-    r = render(build, worn, hair_fn=hfn, frames=8 if walk else 0)
+    r = render(build, worn, hair_fn=hfn, frames=8 if part != "rest" else 0)
     out = {"worn": [[i, c] for i, c, _ in worn]}
     for v in VIEWS:
-        out[v] = _url(r[v][0])
-        if walk:
+        if part != "walk":
+            out[v] = _url(r[v][0])
+        if part != "rest":
             b = io.BytesIO(); fr = [f.convert("RGB").resize((320, 320), Image.LANCZOS) for f in r[v][1]]
             fr[0].save(b, "GIF", save_all=True, append_images=fr[1:], duration=120, loop=0)
             out[f"walk_{v}"] = "data:image/gif;base64," + base64.b64encode(b.getvalue()).decode()
+    store.write_json(cf, out, indent=None)
+    old = sorted(cf.parent.glob("*.json"), key=lambda f: f.stat().st_mtime)[:-OUTFIT_KEEP]
+    for f in old:
+        f.unlink(missing_ok=True)
     return out
 
 
@@ -1393,7 +1454,7 @@ def api(action, b):
         return ie.export(b.get("items") or None, race)
     if action == "outfit":
         return outfit(race, b["build"], b.get("items", []), b.get("ramps"), b.get("hair"), b.get("hair_ramp"),
-                      b.get("walk", True), b.get("cids"))
+                      b.get("walk", True), b.get("cids"), b.get("part"))
     raise ValueError(f"unknown items action {action}")
 
 

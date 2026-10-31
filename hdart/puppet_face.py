@@ -14,13 +14,13 @@ parts' canvas) and ride on the head bone.
 Candidates: sprites/ai/face/<race>/<kind>/<id>/ (layer_<view>.png, prev_<sex>_<view>.png, meta.json). A race's hair
 set and face set (state: builds["<race>.unisex"]["face_sets"]) are the candidates added to them, like skin tone sets.
 """
-import json, math, shutil
+import copy, json, math, shutil
 from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-from . import ai_kit, comfy, jobs, store, workshop as ws, puppet as pp, puppet_template as pt, puppet_paint as ppt
+from . import ai_kit, comfy, jobs, memo, store, workshop as ws, puppet as pp, puppet_template as pt, puppet_paint as ppt
 
 SPEC = ai_kit.ROOT / "specs" / "face.json"
 KINDS = ("hair", "face")
@@ -79,18 +79,40 @@ def composed(race, sex, doc=None):
 
 # ----------------------------------------------------------------------------- the painted puppet to work on
 
-def base(build):
-    """(candidate id, its template spec, {view: (composite RGBA, parts dict)}) of a build's approved paint (else newest)."""
+def base_cid(build):
+    """The paint a build's items and faces sit on: its approved paint candidate, else the newest finished one, else None."""
     st = ppt.state(build)
     cands = sorted((c for c in st["candidates"] if not c["progress"]), key=lambda c: c["meta"].get("made", 0))
-    cid = st["approved"] or (cands[-1]["id"] if cands else None)
+    return st["approved"] or (cands[-1]["id"] if cands else None)
+
+
+_BASE = memo.LRU(4)   # build -> (key, (cid, spec, parts)); ~75 MB per build
+
+
+def base_key(build, cid=None):
+    """What base(build) depends on: the paint id and its part files / template (changes when they're edited or re-saved)."""
+    cid = cid or base_cid(build)
+    if not cid:
+        return None
+    d = ppt.out_dir(build) / cid
+    return (build, cid, memo.stamp(d / "parts" / "front", d / "parts" / "back", d / "template.json", pt.SPEC))
+
+
+def base(build):
+    """(candidate id, its template spec, {view: {part: RGBA}}) of a build's approved paint (else newest). Cached in memory
+    until the paint changes; the arrays are read-only (copy before drawing on one) and the dicts are the caller's own."""
+    cid = base_cid(build)
     if not cid:
         raise ValueError(f"{build} has no paint yet: paint it first (Race → Paint).")
-    d = ppt.out_dir(build) / cid; sp = ppt._spec_for(d); out = {}
-    for v in ("front", "back"):
-        parts = {n: np.asarray(Image.open(d / "parts" / v / f"{n}.png").convert("RGBA")) for n in sp["views"][v]["order"]}
-        out[v] = parts
-    return cid, sp, out
+    key = base_key(build, cid); hit = _BASE.get(build)
+    if not hit or hit[0] != key:
+        d = ppt.out_dir(build) / cid; sp = ppt._spec_for(d); out = {}
+        for v in ("front", "back"):
+            out[v] = {n: memo.frozen(np.asarray(Image.open(d / "parts" / v / f"{n}.png").convert("RGBA")))
+                      for n in sp["views"][v]["order"]}
+        hit = _BASE.put(build, (key, (cid, sp, out)))
+    cid, sp, out = hit[1]
+    return cid, copy.deepcopy(sp), {v: dict(p) for v, p in out.items()}
 
 
 def compose(sp, view, parts, layers=(), blank=False):
