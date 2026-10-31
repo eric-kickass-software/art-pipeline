@@ -102,19 +102,21 @@ def base_key(build, cid=None):
     return (build, cid, memo.stamp(d / "parts" / "front", d / "parts" / "back", d / "template.json", pt.SPEC))
 
 
-def base(build):
-    """(candidate id, its template spec, {view: {part: RGBA}}) of a build's approved paint (else newest). Cached in memory
-    until the paint changes; the arrays are read-only (copy before drawing on one) and the dicts are the caller's own."""
-    cid = base_cid(build)
+def base(build, cid=None):
+    """(candidate id, its template spec, {view: {part: RGBA}}) of a build's approved paint (else newest; `cid` = another
+    paint, e.g. the Workshop Editor's). Cached in memory until the paint changes; the arrays are read-only (copy before
+    drawing on one) and the dicts are the caller's own."""
+    default = base_cid(build); cid = cid or default
     if not cid:
         raise ValueError(f"{build} has no paint yet: paint it first (Race → Paint).")
-    key = base_key(build, cid); hit = _BASE.get(build)
+    slot = build if cid == default else f"{build}|{cid}"
+    key = base_key(build, cid); hit = _BASE.get(slot)
     if not hit or hit[0] != key:
         d = ppt.out_dir(build) / cid; sp = ppt._spec_for(d); out = {}
         for v in ("front", "back"):
             out[v] = {n: memo.frozen(np.asarray(Image.open(d / "parts" / v / f"{n}.png").convert("RGBA")))
                       for n in sp["views"][v]["order"]}
-        hit = _BASE.put(build, (key, (cid, sp, out)))
+        hit = _BASE.put(slot, (key, (cid, sp, out)))
     cid, sp, out = hit[1]
     return cid, copy.deepcopy(sp), {v: dict(p) for v, p in out.items()}
 
@@ -775,6 +777,8 @@ def layer_doc(race, kind, fid):
         views[v] = {"order": order, "parts": paths, "template": {}}
         if kind == "hair" and (d / f"levels_{v}.png").exists():   # its cel levels, editable as bands
             views[v]["levels"] = {"layer": ws.rel(d / f"levels_{v}.png")}
+        if kind == "face" and (d / f"levels_{v}.png").exists():   # the iris levels: only for the eye-ramp preview
+            views[v]["ramp"] = {"layer": ws.rel(d / f"levels_{v}.png")}
     files = sorted(f.name for f in d.glob("*.*"))
     stamp = int(max((f.stat().st_mtime for f in d.glob("*.*")), default=0))
     prev = [f for f in ("prev_male_front.png", "prev_male_back.png", "prev_female_front.png", "prev_female_back.png") if f in files]

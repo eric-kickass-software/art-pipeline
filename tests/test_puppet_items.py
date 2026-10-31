@@ -131,5 +131,12 @@ ld = pi.bands_reset("human", "item.cloth_trousers", t, "front", lk); assert ld["
 assert not (np.asarray(Image.open(fl))[..., 0][band] == 4).all()
 pi.layer_revert("human", "item.cloth_trousers", t)
 assert np.array_equal(np.asarray(Image.open(fl)), lv0) and "bands_edited" not in json.loads((d / "meta.json").read_text())
+# the Workshop Editor's walk: a paint candidate wearing items as painted (ramps None) or in a ramp, with a skin ramp
+pc = pf.base_cid("human.male")
+strip = lambda **kw: np.asarray(Image.open(io.BytesIO(base64.b64decode(pi.editor_walk("human", "human.male", pc, "front", **kw)["strip"].split(",", 1)[1]))))
+plain = strip(items=[]); assert plain.shape == (256, 256 * 8, 3)
+painted = strip(items=[["item.cloth_trousers", t, None]]); ramped = strip(items=[["item.cloth_trousers", t, {"cloth": "red"}]])
+assert np.any(painted != plain) and np.any(ramped != painted)
+assert np.any(strip(items=[], skin="tan") != plain)
 fake.stop(); shutil.rmtree(tmp)
 print("ok")

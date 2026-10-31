@@ -30,6 +30,11 @@
   .pfield { display:flex; flex-direction:column; gap:1px; width:118px; } .pfield.wide { width:200px; }
   .pfield label { color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.6px; }
   .pfield select { padding:3px 4px; font-size:12px; }
+  #paItemsBox { margin-top:12px; width:300px; }
+  #paItems .irow { display:grid; grid-template-columns:58px 1fr 92px; gap:5px; align-items:center; margin:3px 0; }
+  #paItems .irow label { color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.6px; }
+  #paItems select { padding:3px 4px; font-size:12px; min-width:0; } #paItems select.ramp:disabled { opacity:.35; }
+  #paWalk.busy { opacity:.6; transition:opacity .2s; }
   #paLayerCol { width:240px; flex:none; max-height:calc(100vh - 170px); overflow:auto; }
   #paStage { position:relative; line-height:0; border-radius:10px; overflow:hidden; box-shadow:0 4px 24px #0006; }
   #paStage canvas { display:block; }
@@ -74,6 +79,11 @@
   .ltree .lroot button.mini { margin-left:auto; padding:0 5px; font-size:11px; } .ltree .lroot button.mini + button.mini { margin-left:2px; }
   .ltree .fold { display:inline-block; width:14px; color:var(--muted); text-align:center; flex:none; }
   .ltree .tpl.empty { opacity:.5; }
+  .ltree .tpl .ldel { margin-left:auto; width:22px; height:20px; padding:0; display:grid; place-items:center; background:none; border:1px solid transparent;
+                      border-radius:4px; color:var(--muted); opacity:0; }
+  .ltree .tpl:hover .ldel, .ltree .tpl.on .ldel { opacity:1; } .ltree .tpl .ldel:hover { color:var(--bad); border-color:#e8786a66; background:#e8786a14; }
+  .ltree .tpl .ldel svg { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  #paStage { touch-action:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
 
   main { padding:14px; }
   section { display:none; } section.on { display:block; }
@@ -345,6 +355,7 @@
         <symbol id="i-zin" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6"/><path d="M8 11h6"/></symbol>
         <symbol id="i-zout" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M8 11h6"/></symbol>
         <symbol id="i-fit" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/></symbol>
+        <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></symbol>
         <symbol id="i-size" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="8" stroke-dasharray="2 3"/></symbol>
       </defs>
     </svg>
@@ -353,9 +364,8 @@
         <div class="pfield"><label>Race</label><select id="paRace"></select></div>
         <div class="pfield"><label>Gender</label><select id="paSex"><option>male</option><option>female</option><option>unisex</option></select></div>
         <div class="pfield wide"><label>Candidate</label><select id="paCand"></select></div>
-        <div class="pfield"><label>View</label><select id="paView"><option>front</option><option>back</option></select></div></div></div>
-      <div class="pgrp grow"><h3>Items <span class="hint" title="Held weapons and shields are edited in their Grip card. 'on ♀' / 'on ♂' = fitted on the other build: shown, but it may not line up.">ⓘ</span></h3>
-        <div class="pfields" id="paItems"></div></div>
+        <div class="pfield"><label>View</label><select id="paView"><option>front</option><option>back</option></select></div>
+        <div class="pfield"><label>Skin ramp</label><select id="paSkin" title="Preview the skin in a ramp (from its bands); none = as painted"><option value="">none</option></select></div></div></div>
     </div>
     <div class="row" style="align-items:flex-start;flex-wrap:nowrap;gap:12px;margin:0">
       <div id="paLayerCol"><div class="row" style="margin:0 0 4px"><b>Layers</b><button id="paAll" style="padding:1px 8px" title="Show every layer">show all</button></div>
@@ -410,10 +420,11 @@
           <div class="row"><textarea id="paFixBase" rows="3" style="flex:1"></textarea></div>
           <div class="row"><button id="paFixSave">Save wording</button><span class="hint" id="paFixStatus"></span></div></details>
       </div>
-      <div style="min-width:270px"><b>Walk</b> <span class="hint">(the puppet's saved paint; drag to scrub)</span>
+      <div style="min-width:270px"><b>Walk</b> <span class="hint" id="paWalkNote">(saved layers; drag to scrub)</span>
         <div id="paWalk" style="width:256px;height:256px;background-size:2048px 256px;background-color:#c4c6cc;border-radius:6px;margin-top:4px"></div>
         <input id="paFrame" type="range" min="0" max="7" value="0" style="width:256px">
-        <div id="paWorn" style="margin-top:10px"></div></div>
+        <div class="pgrp" id="paItemsBox"><h3>Items <span class="hint" title="Right: a ramp to preview it in (none = as painted; the Ramp tool shows the bands instead). Held weapons and shields are edited in their Grip card. 'on ♀' / 'on ♂' = fitted on the other build: shown, but it may not line up.">ⓘ</span></h3>
+          <div id="paItems"></div></div></div>
     </div>
   </section>
 
@@ -1547,7 +1558,8 @@ setInterval(() => {   // when a template job finishes: new preview (and, after a
 // (an item's layer right after its body part, hair and face right after the head); the Layers panel lists each group as its own tree.
 const PA = { race: null, sex: null, build: null, id: null, view: "front", groups: [], parts: {}, tmpl: {}, bmask: {}, empty: {}, lv: 2, sel: null,
   hidden: new Set(), ghide: new Set(), fold: new Set(), allParts: new Set(), tool: "brush",
-  vw: { z: 1, ox: 0, oy: 0 }, undo: [], redo: [], dirty: {}, mask: null, stroke: null, pan: null, space: false, inited: false, its: null, fcs: null };
+  vw: { z: 1, ox: 0, oy: 0 }, undo: [], redo: [], dirty: {}, mask: null, stroke: null, pan: null, space: false, inited: false, its: null, fcs: null,
+  ramps: {}, rampCols: null, chan: {}, flev: {}, rc: {}, walkUrl: null };
 const PA_N = CANVAS, PA_LINE = "#28201e", PA_LEVELS = 5, PA_HELD = ["mainhand", "offhand"];
 const PA_BAND = ["#3b2a6b", "#8a3f8f", "#d4606a", "#f2a65a", "#fbeaa0"];   // band display colours, darkest level first
 const PA_BAND_RGB = PA_BAND.map(h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)));
@@ -1569,7 +1581,7 @@ function paInfo(g, v) {   // a group's layers in one view: names, image path, ba
   if (g.kind === "paint") return { names: vd.order, src: n => vd.parts[n], band: n => vd.bands && vd.bands[n], tmpl: n => vd.template[n] };
   if (g.kind === "item") return { names: vd.order.filter(n => n.endsWith("@item")).map(n => n.slice(0, -5)),
     src: n => vd.parts[n + "@item"], band: n => vd.levels && vd.levels[n + "@item"], tmpl: () => null };
-  return { names: ["layer"], src: () => vd.parts.layer, band: () => vd.levels && vd.levels.layer, tmpl: () => null };
+  return { names: ["layer"], src: () => vd.parts.layer, band: () => vd.levels && vd.levels.layer, tmpl: () => null, flev: () => vd.ramp && vd.ramp.layer };
 }
 function paIsEmpty(c) { const d = c.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, PA_N, PA_N).data;
   for (let i = 3; i < d.length; i += 4) if (d[i]) return false; return true; }
@@ -1579,11 +1591,20 @@ async function paLoadView(v) {   // every group's layer images (editable canvase
       if (!PA.parts[k]) { const c = paCanvas(); c.getContext("2d").drawImage(await paLoadImg(img(I.src(n)) + t), 0, 0); PA.parts[k] = c;
         if (g.kind === "item") PA.empty[k] = paIsEmpty(c); }
       const tp = I.tmpl(n); if (tp && !PA.tmpl[k]) { const c = paCanvas(); c.getContext("2d").drawImage(await paLoadImg(img(tp)), 0, 0); PA.tmpl[k] = c; }
-      const b = I.band(n); if (b && !PA.parts[k + "#b"]) paBandCanvas(k, await paLoadImg(img(b) + t)); }); }));
+      const b = I.band(n); if (b && !PA.parts[k + "#b"]) paBandCanvas(k, await paLoadImg(img(b) + t), g.kind === "item" || g.kind === "hair");
+      const fl = I.flev && I.flev(n); if (fl && !PA.flev[k]) paFaceLevels(k, await paLoadImg(img(fl) + t)); }); }));
 }
-function paBandCanvas(k, im) {   // a levels map (R = level, 254 outline, 255 not skin) -> a display canvas (banded pixels only) + its mask
+function paFaceLevels(k, im) {   // a face's iris levels (R, 254+ = not iris) for its eye-ramp preview
+  const c = paCanvas(), x = c.getContext("2d", { willReadFrequently: true }); x.drawImage(im, 0, 0);
+  const d = x.getImageData(0, 0, PA_N, PA_N).data, f = new Uint8Array(PA_N * PA_N).fill(255);
+  for (let p = 0, i = 0; p < f.length; p++, i += 4) if (d[i + 3] > 127) f[p] = d[i];
+  PA.flev[k] = f;
+}
+function paBandCanvas(k, im, chan) {   // a levels map (R = level, 254 outline, 255 not skin) -> a display canvas (banded pixels only) + its mask
   const src = paCanvas(), sx = src.getContext("2d", { willReadFrequently: true }); sx.drawImage(im, 0, 0);
   const d = sx.getImageData(0, 0, PA_N, PA_N), out = paCanvas(), ox = out.getContext("2d"), o = ox.createImageData(PA_N, PA_N);
+  if (chan) { const ch = new Uint8Array(PA_N * PA_N);   // per pixel: an item's material channel; 255 = outline, 254 = no levels (items, hair)
+    for (let p = 0; p < ch.length; p++) ch[p] = d.data[p * 4 + 3] <= 127 ? 254 : d.data[p * 4] === 254 ? 255 : d.data[p * 4 + 1]; PA.chan[k] = ch; }
   const mask = paCanvas(), mx = mask.getContext("2d"), m = mx.createImageData(PA_N, PA_N); let any = false;
   for (let i = 0; i < d.data.length; i += 4) if (d.data[i + 3] > 127 && d.data[i] < 254) { any = true;
     const c = PA_BAND_RGB[Math.min(PA_BAND_RGB.length - 1, d.data[i])];
@@ -1649,8 +1670,9 @@ function paDrawNow() {
   if (!paG("puppet")) return;
   x.setTransform(k * vw.z, 0, 0, k * vw.z, k * vw.ox, k * vw.oy); x.imageSmoothingEnabled = vw.z < 2.5;
   const top = $("paTop").checked && PA.sel, bands = paBandsOn();
-  const layer = (gid, n) => { const key = paKey(PA.view, gid, n), c = PA.parts[key]; if (!c) return; x.drawImage(c, 0, 0);
-    const b = bands && PA.parts[key + "#b"]; if (b) x.drawImage(b, 0, 0); };
+  const layer = (gid, n) => { const key = paKey(PA.view, gid, n), c = PA.parts[key]; if (!c) return;
+    const b = bands && PA.parts[key + "#b"]; if (b) { x.drawImage(c, 0, 0); x.drawImage(b, 0, 0); return; }
+    const fn = !bands && paRampFn(paG(gid)); x.drawImage(fn ? paRecolor(key, fn) : c, 0, 0); };
   for (const [gid, n] of paOrder(PA.view)) if (paVisible(gid, n) && !(top && `${gid}|${n}` === PA.sel)) layer(gid, n);
   if (top) { const [gid, n] = PA.sel.split("|"); if (paVisible(gid, n)) layer(gid, n); }
   const sk = paSelKey();
@@ -1662,6 +1684,38 @@ function paDrawNow() {
   if (PA.cursor) { const r = PA.tool === "outline" ? 2 : +$("paSize").value / 2;
     x.strokeStyle = "#000"; x.lineWidth = 1 / vw.z; x.beginPath(); x.arc(PA.cursor[0], PA.cursor[1], Math.max(r, 1), 0, 7); x.stroke();
     x.strokeStyle = "#fff"; x.beginPath(); x.arc(PA.cursor[0], PA.cursor[1], Math.max(r, 1) + 1 / vw.z, 0, 7); x.stroke(); }
+}
+// ---- ramp previews: a layer's banded pixels in the chosen ramp (from its bands, so unsaved band edits show too)
+const PA_LUT = new Int16Array(256).fill(-1); PA_BAND_RGB.forEach((c, i) => PA_LUT[c[0]] = i);
+function paRampFn(g) {   // material channel -> ramp colours (dark first) for a group's preview, or null (as painted)
+  const C = PA.rampCols, r = g && PA.ramps[g.gid]; if (!C || !r) return null;
+  if (g.kind === "paint") return () => C.skin && C.skin[r];
+  if (g.kind === "hair") return () => C.hair && C.hair[r];
+  if (g.kind === "face") return () => C.eyes && C.eyes[r];
+  if (g.kind !== "item" || !PA.its) return null;
+  const mats = PA.its.spec.materials, by = {};
+  for (const m of g.doc.materials || []) { const e = mats[m]; if (!e || !C[e.group]) continue;
+    by[e.channel] = C[e.group][r[m]] || Object.values(C[e.group])[0]; }   // a material without a choice: its group's first (as the game's default)
+  return ch => by[ch];
+}
+function paTouch(key) { delete PA.rc[key.replace(/#b$/, "")]; }
+function paRecolor(k, fn) {
+  if (PA.rc[k]) return PA.rc[k];
+  const c = PA.parts[k], b = PA.parts[k + "#b"], fl = PA.flev[k], ch = PA.chan[k]; if (!b && !fl) return c;
+  const out = paCanvas(), ox = out.getContext("2d", { willReadFrequently: true }); ox.drawImage(c, 0, 0);
+  const im = ox.getImageData(0, 0, PA_N, PA_N), d = im.data, bd = b ? b.getContext("2d").getImageData(0, 0, PA_N, PA_N).data : null;
+  for (let p = 0, i = 0; p < PA_N * PA_N; p++, i += 4) {
+    if (!d[i + 3]) continue;   // erased / deleted paint: its old bands don't show
+    if (ch && ch[p] === 255 && d[i + 3] > 0) { d[i] = 40; d[i + 1] = 32; d[i + 2] = 30; continue; }   // outline: the line colour, as the game draws it
+    if (ch && ch[p] === 254 && d[i + 3] > 0 && !(bd && bd[i + 3] > 127)) { d[i + 3] = Math.min(d[i + 3], 80); continue; }   // painted but not keyed: faded (the game won't draw it; save to key new paint)
+    let lv = -1;
+    if (bd) { if (bd[i + 3] > 127) { lv = PA_LUT[bd[i]]; if (lv < 0) lv = paBandLevel(bd[i], bd[i + 1], bd[i + 2]); } }
+    else if (fl[p] < 254 && d[i + 3] > 0) lv = fl[p];
+    if (lv < 0) continue;
+    const cols = fn(ch ? ch[p] : 0); if (!cols) continue; const col = cols[Math.min(lv, cols.length - 1)];
+    d[i] = col[0]; d[i + 1] = col[1]; d[i + 2] = col[2]; d[i + 3] = 255;
+  }
+  ox.putImageData(im, 0, 0); return PA.rc[k] = out;
 }
 function paGhost(t) {   // template shape -> a cyan edge (one-time per part)
   const src = t.getContext("2d").getImageData(0, 0, PA_N, PA_N).data, out = paCanvas(), ctx = out.getContext("2d"), im = ctx.createImageData(PA_N, PA_N), d = im.data;
@@ -1712,13 +1766,14 @@ function paLayers() {
   $("paLayers").innerHTML = html.join("") || `<div class="hint">nothing loaded</div>`;
   const L = $("paLayers"), redraw = () => { paSaveUi(); paLayers(); paDraw(); };
   L.querySelectorAll("[data-ply]").forEach(c => c.onchange = () => { c.checked ? PA.hidden.delete(c.dataset.ply) : PA.hidden.add(c.dataset.ply); redraw(); });
-  L.querySelectorAll("[data-gvis]").forEach(c => { c.onclick = e => e.stopPropagation(); c.onchange = () => { c.checked ? PA.ghide.delete(c.dataset.gvis) : PA.ghide.add(c.dataset.gvis); redraw(); }; });
+  L.querySelectorAll("[data-gvis]").forEach(c => { c.onclick = e => e.stopPropagation(); c.onchange = () => { c.checked ? PA.ghide.delete(c.dataset.gvis) : PA.ghide.add(c.dataset.gvis); redraw(); paWornSoon(); }; });
   L.querySelectorAll("[data-gfold]").forEach(r => r.onclick = () => { const k = r.dataset.gfold; PA.fold.has(k) ? PA.fold.delete(k) : PA.fold.add(k); redraw(); });
   L.querySelectorAll("[data-nfold]").forEach(f => f.onclick = e => { e.stopPropagation(); const k = f.dataset.nfold; PA.fold.has(k) ? PA.fold.delete(k) : PA.fold.add(k); redraw(); });
   L.querySelectorAll("[data-gall]").forEach(b => b.onclick = e => { e.stopPropagation(); const k = b.dataset.gall; PA.allParts.has(k) ? PA.allParts.delete(k) : PA.allParts.add(k); redraw(); });
   L.querySelectorAll("[data-gx]").forEach(b => b.onclick = guard(async e => { e.stopPropagation(); const g = paG(b.dataset.gx);
     if (g.kind === "item") await paSetItem(g.slot, ""); else await paSetLayer(g.kind, ""); }));
-  L.querySelectorAll("[data-psel]").forEach(r => r.onclick = e => { if (e.target.tagName === "INPUT" || e.target.dataset.nfold) return;
+  L.querySelectorAll("[data-pdel]").forEach(b => b.onclick = e => { e.stopPropagation(); paClearLayer(b.dataset.pdel); });
+  L.querySelectorAll("[data-psel]").forEach(r => r.onclick = e => { if (e.target.tagName === "INPUT" || e.target.dataset.nfold || e.target.closest("[data-pdel]")) return;
     PA.sel = r.dataset.psel; paLevels(); paLayers(); paDraw(); });
 }
 function paRow(g, n, depth, kids) {
@@ -1728,7 +1783,8 @@ function paRow(g, n, depth, kids) {
   return `<div class="tpl ${id === PA.sel ? "on" : ""} ${empty ? "empty" : ""}" data-psel="${id}" style="padding-left:${depth * 14}px">`
     + `<span class="fold" ${kids ? `data-nfold="${id}"` : ""}>${kids ? (folded ? "▸" : "▾") : ""}</span>`
     + `<input type="checkbox" data-ply="${id}" ${PA.hidden.has(id) ? "" : "checked"} style="width:auto;margin:0 6px 0 0">${label}`
-    + `${PA.dirty[k] || PA.dirty[k + "#b"] ? " •" : ""}${PA.parts[k + "#b"] ? ' <span class="hint" title="has ramp bands">≡</span>' : ""}${edited ? ' <span class="hint" title="bands edited by hand">✎</span>' : ""}${empty ? ' <span class="hint">(empty)</span>' : ""}</div>`;
+    + `${PA.dirty[k] || PA.dirty[k + "#b"] ? " •" : ""}${PA.parts[k + "#b"] ? ' <span class="hint" title="has ramp bands">≡</span>' : ""}${edited ? ' <span class="hint" title="bands edited by hand">✎</span>' : ""}${empty ? ' <span class="hint">(empty)</span>' : ""}`
+    + (g.kind === "item" && !PA.empty[k] ? `<button class="ldel" data-pdel="${id}" title="Delete this layer (${PA.view} view; Del key). Save removes it, Ctrl+Z brings it back"><svg><use href="#i-trash"/></svg></button>` : "") + `</div>`;
 }
 function paStatus(t) { const n = Object.values(PA.dirty).filter(Boolean).length, msg = (t || (n ? `${n} unsaved layer${n > 1 ? "s" : ""}` : "")).trim();
   $("paStatus").textContent = msg; $("paStatusBox").classList.toggle("off", !msg);
@@ -1763,7 +1819,7 @@ function paMoveTo(dx, dy) {
   const st = PA.stroke; st.dx = Math.round(dx); st.dy = Math.round(dy);
   const ctx = PA.parts[st.key].getContext("2d"); ctx.clearRect(0, 0, PA_N, PA_N); ctx.drawImage(st.base, 0, 0); ctx.drawImage(st.lifted, st.dx, st.dy);
   if (st.maskCopy) { const m = PA.mask.getContext("2d"); m.clearRect(0, 0, PA_N, PA_N); m.drawImage(st.maskCopy, st.dx, st.dy); }
-  paStatus(` move ${st.dx}, ${st.dy} px`); paDraw();
+  paTouch(st.key); paStatus(` move ${st.dx}, ${st.dy} px`); paDraw();
 }
 function paNudge(dx, dy) {
   if (!PA.sel || !PA.parts[paSelKey()] || PA.hidden.has(PA.sel) || paBandsOn()) return;
@@ -1794,7 +1850,7 @@ function paApplyPreview() {   // live result of the stroke so far (from the snap
   ctx.putImageData(st.before, 0, 0);
   if (PA.tool === "eraser") { ctx.globalCompositeOperation = "destination-out"; ctx.drawImage(st.layer, 0, 0); ctx.globalCompositeOperation = "source-over"; }
   else if (PA.tool === "brush" || PA.tool === "ramp" || PA.tool === "outline") ctx.drawImage(paClampTo(st.layer, st.key), 0, 0);
-  paDraw();
+  paTouch(st.key); paDraw();
 }
 function paHeal(st) {   // fill the stroke from the colours around it (diffusion from the layer's own pixels outside the stroke)
   const ctx = PA.parts[st.key].getContext("2d"), pad = 6;
@@ -1829,13 +1885,26 @@ function paEnd() {
   if (st.move && !st.dx && !st.dy) { paStatus(); return; }   // a click without a drag: nothing moved
   if (PA.tool === "heal" && !st.move) { PA.parts[st.key].getContext("2d").putImageData(st.before, 0, 0); paHeal(st); if (st.key.endsWith("#b")) paBandSnap(st.key, st.box); }
   PA.undo.push({ key: st.key, before: st.before }); if (PA.undo.length > 25) PA.undo.shift(); PA.redo = [];
-  PA.dirty[st.key] = true; if (st.key in PA.empty) PA.empty[st.key] = paIsEmpty(PA.parts[st.key]);
+  paTouch(st.key); PA.dirty[st.key] = true; if (st.key in PA.empty) PA.empty[st.key] = paIsEmpty(PA.parts[st.key]);
   paLayers(); paStatus(); paDraw();
 }
 function paUndo(from, to) {
-  const u = from.pop(); if (!u || !PA.parts[u.key]) return; const ctx = PA.parts[u.key].getContext("2d");
-  to.push({ key: u.key, before: ctx.getImageData(0, 0, PA_N, PA_N) }); ctx.putImageData(u.before, 0, 0);
-  PA.dirty[u.key] = true; paLayers(); paStatus(); paDraw();
+  const u = from.pop(); if (!u) return; const back = [];
+  for (const e of u.multi || [u]) { if (!PA.parts[e.key]) continue; const ctx = PA.parts[e.key].getContext("2d");
+    back.push({ key: e.key, before: ctx.getImageData(0, 0, PA_N, PA_N) }); ctx.putImageData(e.before, 0, 0); paTouch(e.key);
+    if (e.key in PA.empty) PA.empty[e.key] = paIsEmpty(PA.parts[e.key]);
+    if (!(u.multi && e.key.endsWith("#b"))) PA.dirty[e.key] = true; }   // a cleared layer's bands come back with it (not saved separately)
+  if (back.length) to.push(u.multi ? { multi: back } : back[0]);
+  paLayers(); paStatus(); paDraw();
+}
+function paClearLayer(id) {   // an item's layer on one part emptied in this view (Save removes its files); Ctrl+Z brings it back
+  const k = `${PA.view}|${id}`; if (!PA.parts[k]) return;
+  const keys = [k, ...(PA.parts[k + "#b"] ? [k + "#b"] : [])];
+  PA.undo.push({ multi: keys.map(key => ({ key, before: PA.parts[key].getContext("2d").getImageData(0, 0, PA_N, PA_N) })) });
+  if (PA.undo.length > 25) PA.undo.shift(); PA.redo = [];
+  keys.forEach(key => { PA.parts[key].getContext("2d").clearRect(0, 0, PA_N, PA_N); paTouch(key); });
+  PA.dirty[k] = true; PA.empty[k] = true;
+  paLayers(); paStatus(` ${id.replace("|", " · ")} deleted (${PA.view} view): Save removes it, Ctrl+Z brings it back`); paDraw();
 }
 function paMaskStroke(a, b) { if (!PA.mask) PA.mask = paCanvas(); const m = PA.mask.getContext("2d"); m.fillStyle = "#ff2060"; paStamp(m, a, b, +$("paSize").value / 2); paDraw(); }
 function paWire() {
@@ -1843,7 +1912,33 @@ function paWire() {
   cv.oncontextmenu = e => e.preventDefault();
   cv.onwheel = e => { e.preventDefault(); const vw = PA.vw, s = paPos(e).s, z = Math.min(8, Math.max(1, vw.z * Math.exp(-e.deltaY * 0.0015)));
     if (z === 1) { vw.ox = vw.oy = 0; } else { vw.ox = s[0] - (s[0] - vw.ox) * z / vw.z; vw.oy = s[1] - (s[1] - vw.oy) * z / vw.z; } vw.z = z; paDraw(); };
-  cv.onmousedown = e => { if (!paG("puppet")) return; e.preventDefault(); const p = paPos(e);
+  cv.style.touchAction = "none";   // no browser scrolling / zooming on the canvas (iPad): the pointer events come here
+  const fingers = new Map();
+  const pinchState = () => { const [a, b] = [...fingers.values()]; return { d: Math.hypot(a[0] - b[0], a[1] - b[1]), m: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] }; };
+  cv.onpointerdown = e => {
+    try { cv.setPointerCapture(e.pointerId); } catch (_) { }
+    if (e.pointerType === "touch") { e.preventDefault(); if (PA.stroke) return;   // a palm on the screen while the pen paints
+      const s = paPos(e).s; fingers.set(e.pointerId, s);
+      if (fingers.size === 1) PA.pan = { s, ox: PA.vw.ox, oy: PA.vw.oy };
+      else if (fingers.size === 2) { const q = pinchState(); PA.pan = null; PA.pinch = { ...q, z: PA.vw.z, ox: PA.vw.ox, oy: PA.vw.oy }; }
+      return; }
+    paDown(e); };
+  cv.onpointermove = e => {
+    if (e.pointerType === "touch") { if (!fingers.has(e.pointerId)) return; fingers.set(e.pointerId, paPos(e).s);
+      if (PA.pinch && fingers.size >= 2) { const q = pinchState(), P0 = PA.pinch, vw = PA.vw, z = Math.min(8, Math.max(1, P0.z * q.d / Math.max(1, P0.d)));
+        const wx = (P0.m[0] - P0.ox) / P0.z, wy = (P0.m[1] - P0.oy) / P0.z;   // the canvas point under the fingers stays under them
+        vw.z = z; if (z === 1) { vw.ox = vw.oy = 0; } else { vw.ox = q.m[0] - wx * z; vw.oy = q.m[1] - wy * z; } paDraw(); }
+      else if (PA.pan) { const s = fingers.get(e.pointerId); PA.vw.ox = PA.pan.ox + s[0] - PA.pan.s[0]; PA.vw.oy = PA.pan.oy + s[1] - PA.pan.s[1]; paDraw(); }
+      return; }
+    const evs = PA.stroke && e.getCoalescedEvents ? e.getCoalescedEvents() : [];   // every pen sample between frames: smooth strokes
+    (evs.length ? evs : [e]).forEach(paMove); };
+  const lift = e => { if (e.pointerType === "touch") { fingers.delete(e.pointerId); if (fingers.size < 2) PA.pinch = null;
+      if (fingers.size === 1) { const s = [...fingers.values()][0]; PA.pan = { s, ox: PA.vw.ox, oy: PA.vw.oy }; } else if (!fingers.size) PA.pan = null; return; }
+    PA.pan = null; PA.maskLast = null; if (PA.stroke) paEnd();
+    if (e.pointerType === "pen") { PA.cursor = null; paDraw(); } };
+  cv.onpointerup = lift; cv.onpointercancel = lift;
+  cv.onpointerleave = e => { if (e.pointerType !== "touch" && !PA.stroke) { PA.cursor = null; paDraw(); } };
+  const paDown = e => { if (!paG("puppet")) return; e.preventDefault(); const p = paPos(e);
     if (e.button === 1 || e.button === 2 || PA.space) { PA.pan = { s: p.s, ox: PA.vw.ox, oy: PA.vw.oy }; return; }
     if (PA.tool === "pick" || e.altKey) { paPick(p.w); return; }
     if (PA.tool === "mask") { PA.maskLast = p.w; paMaskStroke(p.w, p.w); return; }
@@ -1853,19 +1948,19 @@ function paWire() {
     if (PA.tool === "move") { paMoveStart(p.w); return; }
     if (PA.hidden.has(PA.sel) || PA.ghide.has(paSelG().gid)) { paStatus(" the selected layer is hidden"); return; }
     paBegin(p.w); };
-  cv.onmousemove = e => { const p = paPos(e); PA.cursor = p.w;
+  const paMove = e => { const p = paPos(e); PA.cursor = p.w;
     if (PA.pan) { PA.vw.ox = PA.pan.ox + p.s[0] - PA.pan.s[0]; PA.vw.oy = PA.pan.oy + p.s[1] - PA.pan.s[1]; paDraw(); return; }
     if (PA.maskLast && e.buttons & 1) { paMaskStroke(PA.maskLast, p.w); PA.maskLast = p.w; return; }
     if (PA.stroke && PA.stroke.move && e.buttons & 1) { paMoveTo(p.w[0] - PA.stroke.start[0], p.w[1] - PA.stroke.start[1]); return; }
     if (PA.stroke && e.buttons & 1) paExtend(p.w); else paDraw(); };
-  cv.onmouseleave = () => { PA.cursor = null; paDraw(); };
-  window.addEventListener("mouseup", () => { PA.pan = null; PA.maskLast = null; if (PA.stroke) paEnd(); });
+  window.addEventListener("pointerup", e => { if (e.pointerType === "touch") return; PA.pan = null; PA.maskLast = null; if (PA.stroke) paEnd(); });
   window.addEventListener("keydown", e => {
     if (!$("parts").classList.contains("on") || ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
     const k = e.key.toLowerCase();
     if ((e.ctrlKey || e.metaKey) && k === "z") { e.preventDefault(); paUndo(PA.undo, PA.redo); return; }
     if ((e.ctrlKey || e.metaKey) && k === "y") { e.preventDefault(); paUndo(PA.redo, PA.undo); return; }
     if (e.code === "Space") { e.preventDefault(); PA.space = true; return; }
+    if ((e.key === "Delete" || e.key === "Backspace") && PA.sel && paSelG() && paSelG().kind === "item") { e.preventDefault(); paClearLayer(PA.sel); return; }
     const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
     if (arrows[e.key] && PA.tool === "move") { e.preventDefault(); const st = e.shiftKey ? 10 : 1; paNudge(arrows[e.key][0] * st, arrows[e.key][1] * st); return; }
     const tools = { b: "brush", e: "eraser", h: "heal", o: "outline", i: "pick", m: "mask", v: "move", r: "ramp" };
@@ -1875,34 +1970,37 @@ function paWire() {
   });
   window.addEventListener("keyup", e => { if (e.code === "Space") PA.space = false; });
 }
-// ---- previews: the puppet's walk (its saved paint) and, with items or hair on, the outfit (saved layers on the build's approved paint)
+// ---- the walk: the puppet's paint with the items, hair and face shown in Layers, in the chosen ramps (saved layers, rendered by the server)
 function paPreview() {
   const P = paG("puppet"); if (!P) { $("paWalk").style.backgroundImage = "none"; return; }
   const d = P.doc, t = `&t=${d.stamp}`, strip = `walkstrip_${PA.view}.png`;
-  $("paWalk").style.backgroundImage = d.files.includes(strip) ? `url("${img(d.dir + "/" + strip)}${t}")` : "none";
+  $("paWalk").style.backgroundImage = PA.walkUrl ? `url("${PA.walkUrl}")` : d.files.includes(strip) ? `url("${img(d.dir + "/" + strip)}${t}")` : "none";
   $("paWalk").style.backgroundPosition = `-${+$("paFrame").value * 256}px 0`;
 }
-let paWornTimer = 0;
-function paWornSoon() { clearTimeout(paWornTimer); paWornTimer = setTimeout(() => paWorn().catch(e => { $("paWorn").innerHTML = `<span class="err">${e.message}</span>`; }), 250); }
-async function paWorn() {
-  const items = PA.groups.filter(g => g.kind === "item"), hair = paG("hair");
-  if (!items.length && !hair) { $("paWorn").innerHTML = ""; return; }
-  $("paWorn").innerHTML = `<b>Worn</b> <span class="hint">rendering…</span>`;
-  const r = await api("/api/ws/items/outfit", { race: PA.race, build: PA.build, items: items.map(g => g.item),
-    cids: Object.fromEntries(items.map(g => [g.item, g.id])), hair: hair ? hair.id : null, walk: true });
-  $("paWorn").innerHTML = `<b>Worn</b> <span class="hint">(saved layers on the build's approved paint)</span><div class="row" style="align-items:flex-start">`
-    + VIEWS_PA.map(v => r[v] ? `<img src="${r[v]}" title="${v}" style="width:126px;background:#c4c6cc;border-radius:3px">` : "").join("") + `</div>`
-    + (r[`walk_${PA.view}`] ? `<img src="${r[`walk_${PA.view}`]}" style="width:256px;border-radius:3px">` : "");
+let paWornTimer = 0, paWalkSeq = 0;
+function paWornSoon() { clearTimeout(paWornTimer); paWornTimer = setTimeout(() => paWalkRender().catch(e => { $("paWalk").classList.remove("busy"); $("paWalkNote").textContent = e.message; }), 200); }
+async function paWalkRender() {
+  const P = paG("puppet"); if (!P) return;
+  const shown = g => g && !PA.ghide.has(g.gid), items = PA.groups.filter(g => g.kind === "item" && shown(g));
+  const lay = k => { const g = paG(k); return shown(g) ? { id: g.id, ramp: PA.ramps[k] || null } : null; };
+  const body = { race: PA.race, build: P.build, pcid: P.id, view: PA.view, skin: PA.ramps.puppet || null, hair: lay("hair"), face: lay("face"),
+    items: items.map(g => [g.item, g.id, PA.ramps[g.gid] && Object.keys(PA.ramps[g.gid]).length ? PA.ramps[g.gid] : null]) };
+  if (!items.length && !body.hair && !body.face && !body.skin) { PA.walkUrl = null; $("paWalkNote").textContent = "(the puppet's saved paint; drag to scrub)"; paPreview(); return; }
+  const seq = ++paWalkSeq; $("paWalk").classList.add("busy");
+  const r = await api("/api/ws/items/editor_walk", body);
+  if (seq !== paWalkSeq) return;   // a newer request is on its way
+  PA.walkUrl = r.strip; $("paWalk").classList.remove("busy");
+  $("paWalkNote").textContent = "(saved layers as shown in Layers; drag to scrub)"; paPreview();
 }
 // ---- loading: the puppet, the items and the hair / face (each its own group)
 function paDropCache(gid) {
   const m = `|${gid}|`;
-  for (const o of [PA.parts, PA.tmpl, PA.bmask, PA.empty, PA.dirty]) for (const k of Object.keys(o)) if (k.includes(m)) delete o[k];
+  for (const o of [PA.parts, PA.tmpl, PA.bmask, PA.empty, PA.dirty, PA.chan, PA.flev, PA.rc]) for (const k of Object.keys(o)) if (k.includes(m)) delete o[k];
   PA.undo = PA.undo.filter(u => !u.key.includes(m)); PA.redo = PA.redo.filter(u => !u.key.includes(m)); PA.ghost = null;
 }
 function paPut(g) { const i = PA.groups.findIndex(x => x.gid === g.gid); paDropCache(g.gid); if (i >= 0) PA.groups[i] = g; else PA.groups.push(g); }
 function paRemember() { try { localStorage.setItem("paLast", JSON.stringify({ race: PA.race, sex: PA.sex, view: PA.view })); } catch (e) { } }
-async function paRefreshAll() { await paLoadView(PA.view);
+async function paRefreshAll() { PA.rc = {}; await paLoadView(PA.view);
   if (PA.sel && (!paSelG() || !PA.parts[paSelKey()])) PA.sel = paG("puppet") ? "puppet|torso" : null;
   paLevels(); paLayers(); paPreview(); paStatus(); paDraw(); }
 async function paFillPickers() {
@@ -1914,29 +2012,41 @@ async function paFillPickers() {
     || `<option value="">(no paint candidates)</option>`;
   if (!PA.its || PA.its.race !== PA.race) { PA.its = await api("/api/ws/items/state", { race: PA.race }); PA.its.race = PA.race; }
   if (!PA.fcs || PA.fcs.race !== PA.race) PA.fcs = await api("/api/ws/face/state", { race: PA.race });
+  if (!PA.rampCols) PA.rampCols = await api("/api/ws/items/ramp_colours", { race: PA.race });
+  $("paSkin").innerHTML = `<option value="">none</option>` + Object.keys(PA.rampCols.skin || {}).map(n => `<option ${PA.ramps.puppet === n ? "selected" : ""}>${n}</option>`).join("");
   paItemPickers();
 }
 function paItemPickers() {   // the item selection group: hair, face, then one dropdown per (worn) item slot
   const S = PA.its, F = PA.fcs, sx = b => b ? ({ male: "♂", female: "♀", unisex: "⚥" }[b.split(".")[1]] || b) : "?";
-  const field = (label, sel) => `<div class="pfield"><label>${label}</label>${sel}</div>`, rows = [];
+  const C = PA.rampCols || {}, rsel = (gid, opts, on) => `<select class="ramp" data-pramp="${gid}" ${on ? "" : "disabled"} title="ramp preview (none = as painted)"><option value="">ramp: none</option>${opts}</select>`;
+  const names = (grp, cur) => Object.keys(C[grp] || {}).map(n => `<option ${cur === n ? "selected" : ""}>${n}</option>`).join("");
+  const field = (label, sel, ramp) => `<div class="irow"><label>${label}</label>${sel}${ramp}</div>`, rows = [];
   for (const kind of ["hair", "face"]) {
     const lst = (F.kinds[kind] || []).filter(c => c.files.includes("layer_front.png")).reverse(), g = paG(kind);
     rows.push(field(kind, lst.length ? `<select data-pfk="${kind}"><option value="">none</option>${lst.map(c => `<option value="${c.id}" ${g && g.id === c.id ? "selected" : ""}>${c.id}${c.in_set ? " ✓" : ""}${c.meta.edited ? " · edited" : ""}${c.meta.on && c.meta.on !== PA.build ? ` · on ${sx(c.meta.on)}` : ""}</option>`).join("")}</select>`
-      : `<select disabled><option>(none made yet)</option></select>`));
+      : `<select disabled><option>(none made yet)</option></select>`, rsel(kind, names(kind === "hair" ? "hair" : "eyes", PA.ramps[kind]), !!g)));
   }
   for (const s of S.vocab.artSlots.filter(s => !PA_HELD.includes(s))) {
     const items = Object.entries(S.spec.items).filter(([, it]) => it.slot === s && it.kind !== "held"), g = paG(`item:${s}`);
-    if (!items.length) { rows.push(field(s, `<select disabled><option>(no items)</option></select>`)); continue; }
+    if (!items.length) { rows.push(field(s, `<select disabled><option>(no items)</option></select>`, rsel("", "", false))); continue; }
     const opts = items.map(([iid]) => { const cs = (S.candidates[iid] || []).slice().sort((a, b) => (b.on === PA.build) - (a.on === PA.build));
       if (!cs.length) return `<option disabled>${paShort(iid)} (no candidates)</option>`;
       return `<optgroup label="${paShort(iid)}">` + cs.map(c => { const ap = Object.entries(S.approved[iid] || {}).filter(([, v]) => v === c.id).map(([k]) => SEXSYM[k] || k).join("");
         return `<option value="${iid}|${c.id}" ${g && g.item === iid && g.id === c.id ? "selected" : ""}>${c.id}${ap ? " " + ap : ""}${c.edited ? " · edited" : ""}${c.on !== PA.build ? ` · on ${sx(c.on)}` : ""}</option>`; }).join("") + `</optgroup>`; }).join("");
-    rows.push(field(s, `<select data-pslot="${s}"><option value="">none</option>${opts}</select>`));
+    const mats = g ? (S.spec.items[g.item].materials || []) : [], cur = PA.ramps[`item:${s}`] || {};
+    const ropts = mats.map(m => { const grp = S.spec.materials[m] && S.spec.materials[m].group;
+      return Object.keys(C[grp] || {}).map(n => `<option value="${m}=${n}" ${cur[m] === n ? "selected" : ""}>${mats.length > 1 ? m + ": " : ""}${n}</option>`).join(""); }).join("");
+    rows.push(field(s, `<select data-pslot="${s}"><option value="">none</option>${opts}</select>`, rsel(`item:${s}`, ropts, !!g)));
   }
   $("paItems").innerHTML = rows.join("");
   $("paItems").querySelectorAll("[data-pfk]").forEach(el => el.onchange = guard(() => paSetLayer(el.dataset.pfk, el.value)));
   $("paItems").querySelectorAll("[data-pslot]").forEach(el => el.onchange = guard(() => { const [iid, cid] = el.value ? el.value.split("|") : ["", ""]; return paSetItem(el.dataset.pslot, iid, cid); }));
+  $("paItems").querySelectorAll("[data-pramp]").forEach(el => el.onchange = () => { const gid = el.dataset.pramp;
+    if (gid.startsWith("item:")) { if (!el.value) delete PA.ramps[gid]; else { const [m, n] = el.value.split("="); PA.ramps[gid] = { [m]: n }; } }
+    else if (el.value) PA.ramps[gid] = el.value; else delete PA.ramps[gid];
+    paRampChanged(gid); });
 }
+function paRampChanged(gid) { for (const k of Object.keys(PA.rc)) if (k.includes(`|${gid}|`)) delete PA.rc[k]; paDraw(); paWornSoon(); }
 function paDefaultCand(st) { return st.approved || (st.candidates.length ? st.candidates[st.candidates.length - 1].id : null); }
 async function paSetPuppet(race, sex, id, plain) {   // the base model; another race (or plain) takes the items, hair and face off
   const others = PA.groups.filter(g => g.gid !== "puppet"), drop = plain || race !== PA.race;
@@ -2071,6 +2181,7 @@ async function initParts() {
   $("paAll").onclick = () => { PA.hidden.clear(); PA.ghide.clear(); paSaveUi(); paLayers(); paDraw(); };
   $("paView").onchange = guard(async () => { PA.view = $("paView").value; PA.ghost = null; paRemember(); await paRefreshAll(); paWornSoon(); });
   $("paRace").onchange = guard(() => paSetPuppet($("paRace").value, PA.sex || "male", null));
+  $("paSkin").onchange = () => { if ($("paSkin").value) PA.ramps.puppet = $("paSkin").value; else delete PA.ramps.puppet; paRampChanged("puppet"); };
   $("paSex").onchange = guard(() => paSetPuppet(PA.race, $("paSex").value, null));
   $("paCand").onchange = guard(async () => { if ($("paCand").value) await paSetPuppet(PA.race, PA.sex, $("paCand").value); });
   paLevels();

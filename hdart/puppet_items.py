@@ -745,18 +745,40 @@ def _layers_key(race, build, bkey, item_id, cid, view, doc):
             grip, memo.stamp(*files))
 
 
-def dressed(build, worn, view, hair=None, painted=False):
-    """The build's parts with items stacked on (`worn` = [(item_id, cid, ramps)], by depth), plus an optional hair
-    layer (RGBA, rest pose) on the head that items with clips: [hair] cut away where they cover it."""
+def _skin(build, pcid, view, parts, colours):
+    """The parts with their skin recoloured from the paint's skin bands (bands/<view>/<part>.png, R = level) by a ramp."""
+    d = ppt.out_dir(build) / pcid / "bands" / view; pal = np.array(colours, np.uint8); out = dict(parts)
+    for n, im in parts.items():
+        f = d / f"{n}.png"
+        if not f.exists():
+            continue
+        b = np.asarray(Image.open(f).convert("RGBA")); sel = (b[..., 3] > 127) & (b[..., 0] < 254) & (im[..., 3] > 127)
+        if sel.any():
+            a = im.copy(); a[sel, :3] = pal[np.clip(b[..., 0][sel], 0, len(pal) - 1)]; out[n] = a
+    return out
+
+
+def dressed(build, worn, view, hair=None, painted=False, pcid=None, skin=None, face=None):
+    """The build's parts with items stacked on (`worn` = [(item_id, cid, ramps)], by depth; ramps None = as painted), plus
+    an optional hair layer (RGBA, rest pose) on the head that items with clips: [hair] cut away where they cover it.
+    pcid = another paint than the build's approved one; skin = ramp colours for its skin bands; face = a face layer (RGBA)
+    drawn on the head with its painted face removed."""
     race = build.split(".")[0]; doc = spec()
-    _, sp, parts = pf.base(build); parts = dict(parts[view])   # read-only arrays: layers below replace entries, never draw in place
+    _, sp, parts = pf.base(build, pcid); parts = dict(parts[view])   # read-only arrays: layers below replace entries, never draw in place
+    if skin is not None:
+        parts = _skin(build, pcid or pf.base_cid(build), view, parts, skin)
+    if face is not None and "head" in parts:
+        h = np.array(parts["head"])
+        if view == "front":
+            h = pf.blank_face(h, pf.face_ellipse(sp, 1.2) & pf.inner_head(h))
+        hi = Image.fromarray(np.ascontiguousarray(h)); hi.alpha_composite(Image.fromarray(face)); parts["head"] = np.asarray(hi).copy()
     worn = sorted(worn, key=lambda w: doc["items"][w[0]].get("depth", 0))
-    grips = grip_assets(race, build, view); bkey = pf.base_key(build); lays = []
+    grips = grip_assets(race, build, view); bkey = pf.base_key(build, pcid); lays = []
     for iid, cid, ramps in worn:   # cached before colouring: a new colour recolours only the item's crop
         k = _layers_key(race, build, bkey, iid, cid, view, doc); hit = _LAYERS.get(k)
         if hit is None:
             hit = _LAYERS.put(k, {n: _crop(L, lev) for n, (L, lev) in item_raw(race, iid, cid, sp, view, parts, grips, doc).items()})
-        lays.append((iid, {n: _uncrop(y, x, Lc if painted else colour(lv, ramps, doc)) for n, (y, x, Lc, lv) in hit.items()}))
+        lays.append((iid, {n: _uncrop(y, x, Lc if (painted or ramps is None) else colour(lv, ramps, doc)) for n, (y, x, Lc, lv) in hit.items()}))
     if hair is not None:
         h = hair.copy()
         for iid, lay in lays:
@@ -794,6 +816,41 @@ def render(build, worn, hair_fn=None, frames=8, painted=False):
             walk = [pp.on_bg(pp.render(B2, v, i / frames)) for i in range(frames)]
         out[v] = (rest, walk)
     return out
+
+
+def editor_walk(race, build, pcid, view, items, hair=None, face=None, skin=None, frames=8, size=256):
+    """The Workshop Editor's walk: one view of a paint candidate wearing `items` ([[item, cid, ramps or None]]), a hair
+    and a face ({"id", "ramp" or None}; None ramp = as painted) and a skin ramp (None = as painted), as an 8-frame strip
+    (data URL, `size` px per frame), drawn from the saved files."""
+    if view not in VIEWS:
+        raise ValueError("Unknown view.")
+
+    def layer(kind, e):
+        if not e or not e.get("id"):
+            return None
+        d = pf.out_dir(race, kind) / e["id"]; f, fl = d / f"layer_{view}.png", d / f"levels_{view}.png"
+        if not f.exists():
+            return None
+        if kind == "hair":
+            if e.get("ramp") and fl.exists():
+                return pf.colour_levels(np.asarray(Image.open(fl).convert("RGBA")), pf.hair_ramp(e["ramp"]))
+            return np.asarray(Image.open(f).convert("RGBA"))
+        L = np.asarray(Image.open(f).convert("RGBA")).copy()
+        if e.get("ramp") and fl.exists():   # the irises in the eye ramp
+            lv = np.asarray(Image.open(fl).convert("RGBA")); ir = pf.colour_levels(lv, pf.group_ramp("eyes", e["ramp"]))
+            m = (lv[..., 3] > 127) & (lv[..., 0] < 254); L[m, :3] = ir[m, :3]
+        return L
+
+    worn = [(i, c, r) for i, c, r in items]
+    sp, parts = dressed(build, worn, view, layer("hair", hair), pcid=pcid, skin=pf.group_ramp("skin", skin) if skin else None,
+                        face=layer("face", face))
+    order = sp["views"][view]["order"]; tup = ppt._parts_tuple(sp, view, parts)
+    B2, pieces = pt.rig_from(pt.rig_from_spec(sp, view), tup); B2["rigid"] = (pieces, order)
+    strip = Image.new("RGB", (size * frames, size))
+    for i in range(frames):
+        fr = pp.on_bg(pp.render(B2, view, i / frames)).resize((size, size), Image.LANCZOS)
+        strip.paste(fr, (i * size, 0))
+    return {"strip": _url(strip), "view": view}
 
 
 def held_stage(race, item_id, build, cid=None, unsaved=None, ramps=None):
@@ -1524,6 +1581,11 @@ def api(action, b):
         return bands_save(race, b["item"], b["id"], b["view"], b["bands"])
     if action == "bands_reset":
         return bands_reset(race, b["item"], b["id"], b.get("view"), b.get("part"))
+    if action == "editor_walk":   # Workshop Editor: the walk of a paint with the shown items, hair, face and ramps
+        return editor_walk(race, b["build"], b["pcid"], b.get("view", "front"), b.get("items", []), b.get("hair"), b.get("face"), b.get("skin"))
+    if action == "ramp_colours":   # every palettes group's ramps as colours (the editor's ramp previews)
+        from . import workshop as ws
+        return {g: {n: [list(c) for c in pf.group_ramp(g, n)] for n in ramps} for g, ramps in ws.palettes_doc()["groups"].items()}
     if action == "export":   # pack + layers (+ intake for new ids) of game items into the game (R-003, R-004)
         from . import item_export as ie
         return ie.export(b.get("items") or None, race)
