@@ -34,6 +34,18 @@
   .ltree .lslot { display:grid; grid-template-columns:1fr 104px; gap:4px; padding:0 4px 4px 22px; background:var(--panel); border-radius:0 0 4px 4px; margin-top:-2px; }
   .ltree .lslot select { padding:2px 4px; font-size:12px; min-width:0; } .ltree .lslot select.ramp:disabled { opacity:.35; }
   .ltree .lgrp.off .lroot { background:#ffffff08; } .ltree .lgrp.off .lslot { background:#ffffff08; }
+  .ltree .lslot .rcell { display:flex; gap:3px; min-width:0; }
+  .ltree .lslot.pup { grid-template-columns:1fr 1fr 1fr; } .ltree .lslot.pup .wide { grid-column:span 2; }
+  button.rchip { flex:1; min-width:22px; height:24px; padding:0; border-radius:4px; border:1px solid #0008; box-shadow:inset 0 0 0 1px #ffffff22; cursor:pointer; }
+  button.rchip:hover { border-color:var(--accent); } button.rchip:disabled { opacity:.3; cursor:default; border-color:#0008; }
+  button.rchip.none, .rpop .ropt.none i { background:repeating-linear-gradient(135deg, #3a3346 0 4px, #2a2433 4px 8px); }
+  .rpop { position:fixed; z-index:50; background:rgba(24,20,31,.96); border:1px solid #ffffff22; border-radius:10px; padding:8px; box-shadow:0 8px 28px #000a;
+          width:250px; max-height:60vh; overflow:auto; scrollbar-width:thin; scrollbar-color:#ffffff30 transparent; }
+  .rpop[hidden] { display:none; } .rpop h4 { margin:0 0 6px; font-size:10px; text-transform:uppercase; letter-spacing:1px; color:var(--accent); font-weight:600; }
+  .rpop .ropts { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+  .rpop .ropt { display:flex; flex-direction:column; gap:2px; padding:3px; border-radius:6px; border:1px solid transparent; cursor:pointer; background:none; font-size:10px; color:var(--muted); text-align:left; }
+  .rpop .ropt i { display:block; height:18px; border-radius:3px; box-shadow:inset 0 0 0 1px #0006; }
+  .rpop .ropt:hover { border-color:#ffffff33; color:var(--text); } .rpop .ropt.on { border-color:var(--accent); color:var(--text); }
   .ltree .lroot .slot { color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.6px; }
   #paStage { position:relative; line-height:0; border-radius:10px; overflow:hidden; box-shadow:0 4px 24px #0006; }
   #paStage canvas { display:block; }
@@ -364,17 +376,15 @@
         <symbol id="i-size" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="8" stroke-dasharray="2 3"/></symbol>
       </defs>
     </svg>
-    <div class="ptop">
-      <div class="pgrp"><h3>Puppet</h3><div class="pfields">
-        <div class="pfield"><label>Race</label><select id="paRace"></select></div>
-        <div class="pfield"><label>Gender</label><select id="paSex"><option>male</option><option>female</option><option>unisex</option></select></div>
-        <div class="pfield wide"><label>Candidate</label><select id="paCand"></select></div>
-        <div class="pfield"><label>View</label><select id="paView"><option>front</option><option>back</option></select></div>
-        <div class="pfield"><label>Skin ramp</label><select id="paSkin" title="Preview the skin in a ramp (from its bands); none = as painted"><option value="">none</option></select></div></div></div>
-    </div>
     <div class="row" style="align-items:flex-start;flex-wrap:nowrap;gap:12px;margin:0">
       <div id="paLayerCol"><div class="row" style="margin:0 0 4px"><b>Layers</b><span class="hint" title="Under the puppet: hair, face and one header per worn slot. Pick what it wears in the left dropdown (its layers fold out below), a ramp to preview it in on the right (none = as painted; the Ramp tool shows the bands instead). Held weapons and shields are edited in their Grip card. 'on ♀' / 'on ♂' = fitted on the other build: shown, but it may not line up." style="cursor:help">ⓘ</span><button id="paAll" style="padding:1px 8px" title="Show every layer">show all</button></div>
+        <div class="ltree"><div class="lgrp" id="paPupHead" style="margin-bottom:0"><div class="lroot" id="paPupRoot"><span class="fold" id="paPupFold">▾</span>
+          <input type="checkbox" id="paPupVis" checked title="show / hide all of it"><span class="slot">puppet</span><span id="paPupNote" class="hint"></span></div>
+          <div class="lslot pup"><select id="paRace" title="Race"></select><select id="paSex" title="Gender"><option>male</option><option>female</option><option>unisex</option></select>
+            <select id="paView" title="View"><option>front</option><option>back</option></select>
+            <select id="paCand" class="wide" title="Paint candidate"></select><span class="rcell" id="paSkinCell"></span></div></div></div>
         <div id="paLayers" class="ltree"></div></div>
+        <div class="rpop" id="paRampPop" hidden></div>
       <div>
         <div id="paStage">
           <canvas id="paCv" width="760" height="760" style="width:760px;cursor:crosshair"></canvas>
@@ -1786,33 +1796,58 @@ function paSlots() {   // the Layers roots: the puppet, hair, face, every worn s
   PA.groups.forEach(g => { if (!out.some(o => o.gid === g.gid)) out.push({ gid: g.gid, slot: g.slot }); });
   return out;
 }
+// ---- ramp choices as colour: a chip shows the chosen ramp's bands (dark to light); clicking it opens every ramp of its group
+const paRgb = c => `rgb(${c[0]},${c[1]},${c[2]})`;
+function paStrip(cols) { if (!cols || !cols.length) return ""; const n = cols.length;
+  return "linear-gradient(90deg," + cols.map((c, i) => `${paRgb(c)} ${i * 100 / n}% ${(i + 1) * 100 / n}%`).join(",") + ")"; }
+function paRampNow(gid, m, grp) {   // the ramp a chip shows: null = as painted
+  const r = PA.ramps[gid], C = (PA.rampCols || {})[grp] || {};
+  if (!m) return r || null;
+  if (!r || !Object.keys(r).length) return null;
+  return r[m] || Object.keys(C)[0] || null;   // a material without a choice: its group's first (as the preview and the game)
+}
+function paChip(gid, m, grp, on) {   // gid, material (items) or "", palette group
+  const n = on ? paRampNow(gid, m, grp) : null, cols = n && ((PA.rampCols || {})[grp] || {})[n];
+  const tip = `${m ? m + ": " : ""}${n || "as painted"}${on ? " (click to change)" : ""}`;
+  return `<button class="rchip ${cols ? "" : "none"}" ${on ? "" : "disabled"} data-rchip="${gid}|${m}|${grp}" title="${tip}" ${cols ? `style="background:${paStrip(cols)}"` : ""}></button>`;
+}
+function paRampPop(btn) {
+  const pop = $("paRampPop"), [gid, m, grp] = btn.dataset.rchip.split("|"), C = (PA.rampCols || {})[grp] || {}, cur = paRampNow(gid, m, grp);
+  const opt = (n, cols) => `<button class="ropt ${n ? "" : "none"} ${cur === n ? "on" : ""}" data-ropt="${n || ""}"><i ${cols ? `style="background:${paStrip(cols)}"` : ""}></i>${n || "as painted"}</button>`;
+  pop.innerHTML = `<h4>${m ? `${m} · ` : ""}${grp} ramps</h4><div class="ropts">${opt(null)}${Object.entries(C).map(([n, c]) => opt(n, c)).join("")}</div>`;
+  const r = btn.getBoundingClientRect(); pop.hidden = false;
+  const h = pop.offsetHeight; pop.style.left = Math.min(innerWidth - 260, r.left) + "px"; pop.style.top = (r.bottom + h + 8 > innerHeight ? Math.max(8, r.top - h - 4) : r.bottom + 4) + "px";
+  pop.querySelectorAll("[data-ropt]").forEach(b => b.onclick = () => { const n = b.dataset.ropt;
+    if (m) { const o = { ...(PA.ramps[gid] || {}) }; if (n) o[m] = n; else delete o[m]; if (Object.keys(o).length) PA.ramps[gid] = o; else delete PA.ramps[gid]; }
+    else if (n) PA.ramps[gid] = n; else delete PA.ramps[gid];
+    pop.hidden = true; paRampChanged(gid); paLayers(); });
+}
 function paPickers(o) {   // a slot header's two dropdowns: what it wears, and the ramp to preview it in
   const S = PA.its, F = PA.fcs, C = PA.rampCols || {}, g = paG(o.gid), sx = b => b ? ({ male: "♂", female: "♀", unisex: "⚥" }[b.split(".")[1]] || b) : "?";
-  const rsel = (gid, opts, on) => `<select class="ramp" data-pramp="${gid}" ${on ? "" : "disabled"} title="ramp preview (none = as painted)"><option value="">ramp: none</option>${opts}</select>`;
-  const names = (grp, cur) => Object.keys(C[grp] || {}).map(n => `<option ${cur === n ? "selected" : ""}>${n}</option>`).join("");
+  const cell = chips => `<span class="rcell">${chips}</span>`;
   if (o.kind === "hair" || o.kind === "face") {
     const lst = F ? (F.kinds[o.kind] || []).filter(c => c.files.includes("layer_front.png")).reverse() : [];
     return (lst.length ? `<select data-pfk="${o.kind}" title="the ${o.kind} it wears"><option value="">none</option>${lst.map(c => `<option value="${c.id}" ${g && g.id === c.id ? "selected" : ""}>${c.id}${c.in_set ? " ✓" : ""}${c.meta.edited ? " · edited" : ""}${c.meta.on && c.meta.on !== PA.build ? ` · on ${sx(c.meta.on)}` : ""}</option>`).join("")}</select>`
-      : `<select disabled><option>(none made yet)</option></select>`) + rsel(o.kind, names(o.kind === "hair" ? "hair" : "eyes", PA.ramps[o.kind]), !!g);
+      : `<select disabled><option>(none made yet)</option></select>`) + cell(paChip(o.kind, "", o.kind === "hair" ? "hair" : "eyes", !!g));
   }
   if (!S || !o.slot || PA_HELD.includes(o.slot)) return "";
   const items = Object.entries(S.spec.items).filter(([, it]) => it.slot === o.slot && it.kind !== "held");
-  if (!items.length) return `<select disabled><option>(no items)</option></select>` + rsel("", "", false);
+  if (!items.length) return `<select disabled><option>(no items)</option></select>` + cell(paChip("", "", "", false));
   const opts = items.map(([iid]) => { const cs = (S.candidates[iid] || []).slice().sort((a, b) => (b.on === PA.build) - (a.on === PA.build));
     if (!cs.length) return `<option disabled>${paShort(iid)} (no candidates)</option>`;
     return `<optgroup label="${paShort(iid)}">` + cs.map(c => { const ap = Object.entries(S.approved[iid] || {}).filter(([, v]) => v === c.id).map(([k]) => SEXSYM[k] || k).join("");
       return `<option value="${iid}|${c.id}" ${g && g.item === iid && g.id === c.id ? "selected" : ""}>${c.id}${ap ? " " + ap : ""}${c.edited ? " · edited" : ""}${c.on !== PA.build ? ` · on ${sx(c.on)}` : ""}</option>`; }).join("") + `</optgroup>`; }).join("");
-  const mats = g ? (S.spec.items[g.item].materials || []) : [], cur = PA.ramps[o.gid] || {};
-  const ropts = mats.map(m => { const grp = S.spec.materials[m] && S.spec.materials[m].group;
-    return Object.keys(C[grp] || {}).map(n => `<option value="${m}=${n}" ${cur[m] === n ? "selected" : ""}>${mats.length > 1 ? m + ": " : ""}${n}</option>`).join(""); }).join("");
-  return `<select data-pslot="${o.slot}" title="the item it wears"><option value="">none</option>${opts}</select>` + rsel(o.gid, ropts, !!g);
+  const mats = g ? (S.spec.items[g.item].materials || []).filter(m => S.spec.materials[m] && C[S.spec.materials[m].group]) : [];
+  return `<select data-pslot="${o.slot}" title="the item it wears"><option value="">none</option>${opts}</select>`
+    + cell(mats.length ? mats.map(m => paChip(o.gid, m, S.spec.materials[m].group, true)).join("") : paChip("", "", "", false));
 }
 function paLayers() {
   const v = PA.view, html = [];
   for (const o of paSlots()) {
     const g = paG(o.gid), gid = o.gid, folded = PA.fold.has(gid), pick = o.gid === "puppet" ? "" : paPickers(o);
-    if (!g && o.gid === "puppet") continue;
+    if (o.gid === "puppet" && !g) continue;
     const I = g && paInfo(g, v), gd = g && paGroupDirty(gid), name = o.slot || o.kind || "";
+    if (o.gid === "puppet") html.push(`<div class="lgrp">`); else
     html.push(`<div class="lgrp ${g ? "" : "off"}"><div class="lroot" ${g ? `data-gfold="${gid}"` : ""}><span class="fold">${g ? (folded ? "▸" : "▾") : ""}</span>`
       + (g ? `<input type="checkbox" data-gvis="${gid}" ${PA.ghide.has(gid) ? "" : "checked"} title="show / hide all of it">` : "")
       + (g && g.kind === "paint" ? `<b>${g.label}</b>${gd ? " •" : ""}<span class="hint"> puppet${g.doc.edited ? " · edited" : ""}</span>`
@@ -1848,10 +1883,13 @@ function paLayers() {
     PA.sel = r.dataset.psel; paLevels(); paLayers(); paDraw(); });
   L.querySelectorAll("[data-pfk]").forEach(el => el.onchange = guard(() => paSetLayer(el.dataset.pfk, el.value)));
   L.querySelectorAll("[data-pslot]").forEach(el => el.onchange = guard(() => { const [iid, cid] = el.value ? el.value.split("|") : ["", ""]; return paSetItem(el.dataset.pslot, iid, cid); }));
-  L.querySelectorAll("[data-pramp]").forEach(el => el.onchange = () => { const gid = el.dataset.pramp;
-    if (gid.startsWith("item:")) { if (!el.value) delete PA.ramps[gid]; else { const [m, n] = el.value.split("="); PA.ramps[gid] = { [m]: n }; } }
-    else if (el.value) PA.ramps[gid] = el.value; else delete PA.ramps[gid];
-    paRampChanged(gid); });
+  paPupHead();
+}
+function paPupHead() {   // the puppet's header (static: its selects keep their handlers); its tree is the first group in #paLayers
+  const g = paG("puppet");
+  $("paPupFold").textContent = PA.fold.has("puppet") ? "▸" : "▾"; $("paPupVis").checked = !PA.ghide.has("puppet");
+  $("paPupNote").textContent = g ? `${paGroupDirty("puppet") ? " •" : ""}${g.doc.edited ? " · edited" : ""}` : "";
+  $("paSkinCell").innerHTML = paChip("puppet", "", "skin", !!g && !!(PA.rampCols && PA.rampCols.skin));
 }
 function paRow(g, n, depth, kids) {
   const id = `${g.gid}|${n}`, k = paKey(PA.view, g.gid, n), folded = PA.fold.has(id);
@@ -2088,7 +2126,6 @@ async function paFillPickers() {
   if (!PA.its || PA.its.race !== PA.race) { PA.its = await api("/api/ws/items/state", { race: PA.race }); PA.its.race = PA.race; }
   if (!PA.fcs || PA.fcs.race !== PA.race) PA.fcs = await api("/api/ws/face/state", { race: PA.race });
   if (!PA.rampCols) PA.rampCols = await api("/api/ws/items/ramp_colours", { race: PA.race });
-  $("paSkin").innerHTML = `<option value="">none</option>` + Object.keys(PA.rampCols.skin || {}).map(n => `<option ${PA.ramps.puppet === n ? "selected" : ""}>${n}</option>`).join("");
   paLayers();
 }
 function paRampChanged(gid) { for (const k of Object.keys(PA.rc)) if (k.includes(`|${gid}|`)) delete PA.rc[k]; paDraw(); }
@@ -2226,7 +2263,12 @@ async function initParts() {
   $("paAll").onclick = () => { PA.hidden.clear(); PA.ghide.clear(); paSaveUi(); paLayers(); paDraw(); };
   $("paView").onchange = guard(async () => { PA.view = $("paView").value; PA.ghost = null; paRemember(); await paRefreshAll(); });
   $("paRace").onchange = guard(() => paSetPuppet($("paRace").value, PA.sex || "male", null));
-  $("paSkin").onchange = () => { if ($("paSkin").value) PA.ramps.puppet = $("paSkin").value; else delete PA.ramps.puppet; paRampChanged("puppet"); };
+  $("paPupRoot").onclick = e => { if (e.target.id === "paPupVis") return; PA.fold.has("puppet") ? PA.fold.delete("puppet") : PA.fold.add("puppet"); paSaveUi(); paLayers(); };
+  $("paPupVis").onchange = () => { $("paPupVis").checked ? PA.ghide.delete("puppet") : PA.ghide.add("puppet"); paSaveUi(); paLayers(); paDraw(); };
+  document.addEventListener("click", e => { const c = e.target.closest("[data-rchip]"), pop = $("paRampPop");   // ramp chips (Layers) and their popover
+    if (c && !c.disabled) { if (!pop.hidden && pop.dataset.for === c.dataset.rchip) { pop.hidden = true; return; } pop.dataset.for = c.dataset.rchip; paRampPop(c); return; }
+    if (!pop.hidden && !e.target.closest("#paRampPop")) pop.hidden = true; });
+  document.getElementById("paLayerCol").addEventListener("scroll", () => $("paRampPop").hidden = true);
   $("paSex").onchange = guard(() => paSetPuppet(PA.race, $("paSex").value, null));
   $("paCand").onchange = guard(async () => { if ($("paCand").value) await paSetPuppet(PA.race, PA.sex, $("paCand").value); });
   paLevels();
