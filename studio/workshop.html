@@ -1664,6 +1664,7 @@ function paOrder(v) {   // the draw order, bottom first: [group, layer]
 let paRaf = 0;
 function paDraw() { if (!paRaf) paRaf = requestAnimationFrame(() => { paRaf = 0; paDrawNow(); }); }
 function paDrawNow() {
+  paFlush();   // a stroke in progress: its new stamps onto the layer, once per frame
   const cv = $("paCv"), x = cv.getContext("2d"), k = cv.width / PA_N, vw = PA.vw;
   x.setTransform(1, 0, 0, 1, 0, 0); x.fillStyle = "#c4c6cc"; x.fillRect(0, 0, cv.width, cv.height);
   $("paZv").textContent = Math.round(vw.z * 100) + "%";
@@ -1698,13 +1699,24 @@ function paRampFn(g) {   // material channel -> ramp colours (dark first) for a 
     by[e.channel] = C[e.group][r[m]] || Object.values(C[e.group])[0]; }   // a material without a choice: its group's first (as the game's default)
   return ch => by[ch];
 }
-function paTouch(key) { delete PA.rc[key.replace(/#b$/, "")]; }
+function paTouch(key, box) {   // a layer changed: drop its ramp preview, or (box = [x0, y0, x1, y1]) mark only that region stale
+  const k = key.replace(/#b$/, ""), c = PA.rc[k]; if (!c) return;
+  if (!box) { delete PA.rc[k]; return; }
+  const d = c._dirty; c._dirty = d ? [Math.min(d[0], box[0]), Math.min(d[1], box[1]), Math.max(d[2], box[2]), Math.max(d[3], box[3])] : box.slice();
+}
 function paRecolor(k, fn) {
-  if (PA.rc[k]) return PA.rc[k];
-  const c = PA.parts[k], b = PA.parts[k + "#b"], fl = PA.flev[k], ch = PA.chan[k]; if (!b && !fl) return c;
-  const out = paCanvas(), ox = out.getContext("2d", { willReadFrequently: true }); ox.drawImage(c, 0, 0);
-  const im = ox.getImageData(0, 0, PA_N, PA_N), d = im.data, bd = b ? b.getContext("2d").getImageData(0, 0, PA_N, PA_N).data : null;
-  for (let p = 0, i = 0; p < PA_N * PA_N; p++, i += 4) {
+  const c = PA.parts[k], b = PA.parts[k + "#b"], fl = PA.flev[k]; if (!b && !fl) return c;
+  let out = PA.rc[k];
+  if (out && !out._dirty) return out;
+  if (out) { const [x0, y0, x1, y1] = out._dirty; out._dirty = null; paRecolorBox(out, k, fn, x0, y0, x1 - x0, y1 - y0); return out; }   // a stroke: only what it touched
+  out = paCanvas(); paRecolorBox(out, k, fn, 0, 0, PA_N, PA_N); return PA.rc[k] = out;
+}
+function paRecolorBox(out, k, fn, x0, y0, W, H) {   // the ramp preview of one region of a layer, into out
+  if (W < 1 || H < 1) return;
+  const c = PA.parts[k], b = PA.parts[k + "#b"], fl = PA.flev[k], ch = PA.chan[k];
+  const ox = out.getContext("2d", { willReadFrequently: true }); ox.clearRect(x0, y0, W, H); ox.drawImage(c, x0, y0, W, H, x0, y0, W, H);
+  const im = ox.getImageData(x0, y0, W, H), d = im.data, bd = b ? b.getContext("2d").getImageData(x0, y0, W, H).data : null;
+  for (let yy = 0, i = 0; yy < H; yy++) for (let xx = 0; xx < W; xx++, i += 4) { const p = (y0 + yy) * PA_N + x0 + xx;
     if (!d[i + 3]) continue;   // erased / deleted paint: its old bands don't show
     if (ch && ch[p] === 255 && d[i + 3] > 0) { d[i] = 40; d[i + 1] = 32; d[i + 2] = 30; continue; }   // outline: the line colour, as the game draws it
     if (ch && ch[p] === 254 && d[i + 3] > 0 && !(bd && bd[i + 3] > 127)) { d[i + 3] = Math.min(d[i + 3], 80); continue; }   // painted but not keyed: faded (the game won't draw it; save to key new paint)
@@ -1715,7 +1727,7 @@ function paRecolor(k, fn) {
     const cols = fn(ch ? ch[p] : 0); if (!cols) continue; const col = cols[Math.min(lv, cols.length - 1)];
     d[i] = col[0]; d[i + 1] = col[1]; d[i + 2] = col[2]; d[i + 3] = 255;
   }
-  ox.putImageData(im, 0, 0); return PA.rc[k] = out;
+  ox.putImageData(im, x0, y0);
 }
 function paGhost(t) {   // template shape -> a cyan edge (one-time per part)
   const src = t.getContext("2d").getImageData(0, 0, PA_N, PA_N).data, out = paCanvas(), ctx = out.getContext("2d"), im = ctx.createImageData(PA_N, PA_N), d = im.data;
@@ -1825,32 +1837,44 @@ function paNudge(dx, dy) {
   if (!PA.sel || !PA.parts[paSelKey()] || PA.hidden.has(PA.sel) || paBandsOn()) return;
   paMoveStart([0, 0]); paMoveTo(dx, dy); paEnd();
 }
+// A stroke: pen samples only stamp into st.layer (cheap); once per frame (paFlush, from paDrawNow) the layer is rebuilt in the
+// region the new stamps touched: the start-of-stroke copy (st.base) put back there, the stroke drawn on top. No full-canvas work per sample.
 function paBegin(p) {
-  const key = paEK(), part = PA.parts[key];
-  PA.stroke = { key, last: p, before: part.getContext("2d").getImageData(0, 0, PA_N, PA_N), layer: paCanvas(), box: [p[0], p[1], p[0], p[1]] };
+  const key = paEK(), part = PA.parts[key], base = paCanvas(); base.getContext("2d").drawImage(part, 0, 0);
+  PA.stroke = { key, last: p, base, layer: paCanvas(), clip: paClip(key, base), scratch: paCanvas(), box: [p[0], p[1], p[0], p[1]], dirty: null };
   paExtend(p);
 }
 function paExtend(p) {
   const st = PA.stroke, r = PA.tool === "outline" ? 2 : +$("paSize").value / 2, L = st.layer.getContext("2d");
   L.fillStyle = PA.tool === "outline" ? PA_LINE : (PA.tool === "brush" || PA.tool === "ramp" ? (st.key.endsWith("#b") ? PA_BAND[PA.lv] : $("paColor").value) : "#fff");
-  paStamp(L, st.last, p, r); st.last = p;
-  st.box = [Math.min(st.box[0], p[0] - r), Math.min(st.box[1], p[1] - r), Math.max(st.box[2], p[0] + r), Math.max(st.box[3], p[1] + r)];
-  paApplyPreview();
+  paStamp(L, st.last, p, r);
+  const seg = [Math.min(st.last[0], p[0]) - r, Math.min(st.last[1], p[1]) - r, Math.max(st.last[0], p[0]) + r, Math.max(st.last[1], p[1]) + r];
+  st.last = p;
+  st.box = [Math.min(st.box[0], seg[0]), Math.min(st.box[1], seg[1]), Math.max(st.box[2], seg[2]), Math.max(st.box[3], seg[3])];
+  const d = st.dirty; st.dirty = d ? [Math.min(d[0], seg[0]), Math.min(d[1], seg[1]), Math.max(d[2], seg[2]), Math.max(d[3], seg[3])] : seg;
+  paDraw();
 }
-function paClampTo(layer, key) {   // keep a stroke inside the part's template shape (or what the part already covers); bands: the banded area
-  if (key.endsWith("#b")) { const c = paCanvas(), x = c.getContext("2d"); x.drawImage(PA.bmask[key.slice(0, -2)], 0, 0);
-    x.globalCompositeOperation = "source-in"; x.drawImage(layer, 0, 0); return c; }
-  if (!$("paClamp").checked || !PA.tmpl[key]) return layer;
-  const c = paCanvas(), x = c.getContext("2d"); x.drawImage(PA.tmpl[key], 0, 0); x.drawImage(PA.parts[key], 0, 0);
-  x.globalCompositeOperation = "source-in"; x.drawImage(layer, 0, 0);
-  return c;
+function paClip(key, base) {   // where a stroke may land: the part's template shape plus what it already covers; bands: the banded area; null = anywhere
+  if (key.endsWith("#b")) return PA.bmask[key.slice(0, -2)];
+  if (!$("paClamp").checked || !PA.tmpl[key]) return null;
+  const c = paCanvas(), x = c.getContext("2d"); x.drawImage(PA.tmpl[key], 0, 0); x.drawImage(base, 0, 0); return c;
 }
-function paApplyPreview() {   // live result of the stroke so far (from the snapshot taken at mousedown)
-  const st = PA.stroke, part = PA.parts[st.key], ctx = part.getContext("2d");
-  ctx.putImageData(st.before, 0, 0);
-  if (PA.tool === "eraser") { ctx.globalCompositeOperation = "destination-out"; ctx.drawImage(st.layer, 0, 0); ctx.globalCompositeOperation = "source-over"; }
-  else if (PA.tool === "brush" || PA.tool === "ramp" || PA.tool === "outline") ctx.drawImage(paClampTo(st.layer, st.key), 0, 0);
-  paTouch(st.key); paDraw();
+function paFlush() {   // the stroke so far onto its layer, in the region changed since the last frame
+  const st = PA.stroke; if (!st || !st.dirty || st.move) return;
+  const pad = 2, x0 = Math.max(0, Math.floor(st.dirty[0]) - pad), y0 = Math.max(0, Math.floor(st.dirty[1]) - pad);
+  const x1 = Math.min(PA_N, Math.ceil(st.dirty[2]) + pad), y1 = Math.min(PA_N, Math.ceil(st.dirty[3]) + pad), W = x1 - x0, H = y1 - y0;
+  st.dirty = null; if (W < 1 || H < 1 || PA.tool === "heal") return;   // heal shows its result when the pen lifts
+  const ctx = PA.parts[st.key].getContext("2d");
+  ctx.clearRect(x0, y0, W, H); ctx.drawImage(st.base, x0, y0, W, H, x0, y0, W, H);
+  if (PA.tool === "eraser") { ctx.globalCompositeOperation = "destination-out"; ctx.drawImage(st.layer, x0, y0, W, H, x0, y0, W, H); ctx.globalCompositeOperation = "source-over"; }
+  else if (PA.tool === "brush" || PA.tool === "ramp" || PA.tool === "outline") {
+    let src = st.layer;
+    if (st.clip) { const sx = st.scratch.getContext("2d"); sx.globalCompositeOperation = "source-over"; sx.clearRect(x0, y0, W, H);
+      sx.drawImage(st.clip, x0, y0, W, H, x0, y0, W, H); sx.globalCompositeOperation = "source-in";
+      sx.drawImage(st.layer, x0, y0, W, H, x0, y0, W, H); sx.globalCompositeOperation = "source-over"; src = st.scratch; }
+    ctx.drawImage(src, x0, y0, W, H, x0, y0, W, H);
+  }
+  paTouch(st.key, [x0, y0, x1, y1]);
 }
 function paHeal(st) {   // fill the stroke from the colours around it (diffusion from the layer's own pixels outside the stroke)
   const ctx = PA.parts[st.key].getContext("2d"), pad = 6;
@@ -1881,8 +1905,9 @@ function paHeal(st) {   // fill the stroke from the colours around it (diffusion
   ctx.putImageData(im, x0, y0);
 }
 function paEnd() {
-  const st = PA.stroke; if (!st) return; PA.stroke = null;
+  const st = PA.stroke; if (!st) return; paFlush(); PA.stroke = null;
   if (st.move && !st.dx && !st.dy) { paStatus(); return; }   // a click without a drag: nothing moved
+  if (!st.before) st.before = st.base.getContext("2d").getImageData(0, 0, PA_N, PA_N);   // the undo snapshot, read once at pen-up (not at pen-down)
   if (PA.tool === "heal" && !st.move) { PA.parts[st.key].getContext("2d").putImageData(st.before, 0, 0); paHeal(st); if (st.key.endsWith("#b")) paBandSnap(st.key, st.box); }
   PA.undo.push({ key: st.key, before: st.before }); if (PA.undo.length > 25) PA.undo.shift(); PA.redo = [];
   paTouch(st.key); PA.dirty[st.key] = true; if (st.key in PA.empty) PA.empty[st.key] = paIsEmpty(PA.parts[st.key]);
