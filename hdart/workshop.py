@@ -511,7 +511,7 @@ def skin_cut(a, m, cent):
     vs = _skin_val(a, m); cl = np.asarray(cent, float) @ LUMA
     L = np.zeros(m.shape + (4,), np.uint8)
     L[..., 0][m] = np.abs(vs[m][:, None] - cl[None]).argmin(1); L[..., 3][m] = 255
-    island = max(1, int(levels.ISLAND * (m.shape[0] / 1024) ** 2))   # ISLAND is for a 1024 px tall canvas
+    island = max(1, int(levels.ISLAND * (m.shape[0] / levels.CANVAS) ** 2))   # ISLAND is for the rest-pose canvas
     lev[m] = levels.smooth_levels(L, island)[..., 0][m]
     return lev
 

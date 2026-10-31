@@ -7,8 +7,10 @@ from PIL import Image
 import hdart.ai_kit as ak
 import hdart.workshop as ws
 import hdart.puppet_paint as ppt
+import hdart.puppet as pp
+N = pp.PX * ppt.S   # the rest-pose canvas
 
-tmp = Path(tempfile.mkdtemp())
+tmp =Path(tempfile.mkdtemp())
 ak.AI_DIR = tmp / "ai"; ws.CAND = ak.AI_DIR / "candidates"; ws.STATE = ak.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "archive"
 from hdart.fake_comfy import FakeComfy, default_respond, info
 calls = []
@@ -49,7 +51,7 @@ spec = json.loads((d / "template.json").read_text())
 for v in ("front", "back"):
     for n in spec["views"][v]["order"]:
         im = np.asarray(Image.open(d / "parts" / v / f"{n}.png"))
-        assert im.shape == (1024, 1024, 4) and (im[..., 3] > 127).sum() > 200, (v, n)
+        assert im.shape == (N, N, 4) and (im[..., 3] > 127).sum() > 200, (v, n)
 head = np.asarray(Image.open(d / "parts" / "front" / "head.png"))
 assert ((head[..., :3].astype(int).sum(-1) < 160) & (head[..., 3] > 0)).sum() > 100   # face marks + outline are in
 
@@ -112,7 +114,7 @@ assert band()[y, x, 0] == b0[y, x, 0] and "front/torso" not in doc["bandsEdited"
 ppt.revert_parts("human.female", c[0])
 
 # AI fix: only the marked pixels of the part (inside its template shape) change
-mk = np.zeros((1024, 1024), np.uint8); t = np.asarray(Image.open(d / "template" / "front" / "armB.upper.png"))[..., 3] > 127
+mk = np.zeros((N, N), np.uint8); t = np.asarray(Image.open(d / "template" / "front" / "armB.upper.png"))[..., 3] > 127
 ys, xs = np.nonzero(t); mk[ys.min():ys.min() + 30, :] = 255
 buf = io.BytesIO(); Image.fromarray(mk).save(buf, "PNG")
 before = np.asarray(Image.open(d / "parts" / "front" / "armB.upper.png")).copy()

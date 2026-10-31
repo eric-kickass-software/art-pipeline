@@ -108,7 +108,7 @@ def info(gid, doc=None, v=None, game=None):
 # ----------------------------------------------------------------------------- one pack
 
 def _idx(lev, size):
-    """A levels map (1024) as the pack's index map at `size`: R level / 254, G channel, A mask."""
+    """A levels map (rest-pose canvas) as the pack's index map at `size`: R level / 254, G channel, A mask."""
     lv = ue._small(np.ascontiguousarray(lev), size, nearest=True).copy()
     m = lv[..., 3] > 127; lv[..., 2] = 0; lv[..., 3] = np.where(m, 255, 0); lv[~m] = 0
     return lv
@@ -129,10 +129,10 @@ def _held_upright(d, rel, cd, ramps, doc):
     return [int(art.shape[1]), int(art.shape[0])]
 
 
-def export_item(gid, race="human", size=512, doc=None, v=None, game=None, st=None):
+def export_item(gid, race="human", size=None, doc=None, v=None, game=None, st=None):
     """Write one game item's pack (and its intake file when the game doesn't have it). Returns a report dict; raises
     ValueError when nothing can be exported."""
-    doc = doc or pi.spec(); v = v or contract.vocab(); st = st or pi.load_state(race)
+    doc = doc or pi.spec(); v = v or contract.vocab(); st = st or pi.load_state(race); size = size or ue.CANVAS
     inf = info(gid, doc, v, game)
     if inf["problems"]:
         raise ValueError(f"{gid}: " + "; ".join(inf["problems"]))
@@ -240,7 +240,7 @@ def write_index():
     return len(packs)
 
 
-def export(ids=None, race="human", size=512):
+def export(ids=None, race="human", size=None):
     """Export game items (default: every game item with approved art). Returns {exported: {id: report}, skipped:
     {id: reason}, index: pack count}."""
     doc = pi.spec(); v = contract.vocab(); game = contract.game_items(); st = pi.load_state(race)

@@ -231,8 +231,8 @@
       <div class="row" style="align-items:flex-start;flex-wrap:nowrap">
         <div style="min-width:190px"><div class="row" style="margin:0 0 4px"><b>Layers</b><button id="tpAll" style="padding:1px 8px">all</button><button id="tpNone" style="padding:1px 8px" title="hide every part">no parts</button></div>
           <div id="tpLayers"></div></div>
-        <div class="row" style="align-items:flex-start;margin:0"><canvas id="tpCv_front" width="512" height="512" style="width:560px;cursor:crosshair;border-radius:4px"></canvas>
-        <canvas id="tpCv_back" width="512" height="512" style="width:560px;cursor:crosshair;border-radius:4px"></canvas></div></div>
+        <div class="row" style="align-items:flex-start;margin:0"><canvas id="tpCv_front" width="576" height="576" style="width:560px;cursor:crosshair;border-radius:4px"></canvas>
+        <canvas id="tpCv_back" width="576" height="576" style="width:560px;cursor:crosshair;border-radius:4px"></canvas></div></div>
       <p class="hint">Drag: <b style="color:#2a50ff">shoulder/hip</b>, <b style="color:#ff2a2a">elbow/knee</b>, <b style="color:#ff9a00">wrist/ankle</b>,
         <b style="color:#22b14c">fingertip/toe</b>, <b style="color:#a24bd6">neck/pelvis/crotch</b>, <b style="color:#e1288f">waistband</b>, <b style="color:#ff8c00">face guides</b> (front head: eyes, mouth, centre line).
         Click a part (or its layer) to select it in both views, then drag its <b style="color:#20c0c0">outline points</b>
@@ -404,7 +404,7 @@
             <label>Depth</label><div class="row" style="margin:0"><input id="itDepth" type="number" style="width:70px">
               <span class="hint">stacking: higher draws over lower (trousers 1, boots 2, shirt 3, armour 4, shoulders 5, head 7)</span></div>
             <label class="itfit">Bulk</label><div class="row itfit" style="margin:0"><input id="itBulk" type="number" style="width:70px">
-              <span class="hint">px (1024 canvas) FLUX may paint past the zone</span>
+              <span class="hint">px (1152 canvas) FLUX may paint past the zone</span>
               <label><input type="checkbox" id="itClipHair" style="width:auto"> clips the hair</label>
               <label><input type="checkbox" id="itComplete" style="width:auto"> FLUX pass for hidden joint areas</label></div>
             <label class="itheld">Held</label><div class="row itheld" style="margin:0"><label>as</label><select id="itHeldAs" style="width:110px" title="picks the held prompt (Prompts below) and the default grip point">
@@ -431,7 +431,7 @@
             <label>Size</label><input id="zeSize" type="range" min="4" max="160" value="40" style="width:120px">
             <label>View</label><input id="zeZoom" type="range" min="400" max="1100" value="640" style="width:120px">
             <button id="zeUndo">Undo</button><button id="zeRedo">Redo</button><button id="zeClear">Clear</button></div>
-          <canvas id="zeCv" width="1024" height="1024" style="width:640px;cursor:crosshair;border-radius:4px;background:#c4c6cc;touch-action:none"></canvas>
+          <canvas id="zeCv" width="1152" height="1152" style="width:640px;cursor:crosshair;border-radius:4px;background:#c4c6cc;touch-action:none"></canvas>
           <div class="row"><label><input type="checkbox" id="zeSexOnly" style="width:auto"> this sex only</label>
             <button class="primary" id="zeSave">Save zone</button><button id="zeReset">Back to the shared / preset zone</button>
             <span class="hint" id="zeStatus"></span></div>
@@ -1231,12 +1231,12 @@ function tpSize(v) {   // canvas pixels = CSS size x device pixels, so zoomed-in
   cv.style.width = css + "px"; if (cv.width !== px) { cv.width = px; cv.height = px; }
 }
 function tpDraw(v) {
-  const cv = $(`tpCv_${v}`), x = cv.getContext("2d"), V = TP.spec.views[v], vw = TP.vw[v], k = cv.width / 512, z = vw.z;
+  const cv = $(`tpCv_${v}`), x = cv.getContext("2d"), V = TP.spec.views[v], vw = TP.vw[v], k = cv.width / RIG, z = vw.z;
   const T = (c) => c.setTransform(k * z, 0, 0, k * z, k * vw.ox, k * vw.oy);
   x.setTransform(1, 0, 0, 1, 0, 0); x.fillStyle = "#c4c6cc"; x.fillRect(0, 0, cv.width, cv.height);
   T(x);
   const aop = +$("tpArt").value, pop = +$("tpParts").value;
-  if (TP.art[v] && aop > 0 && tpShown("art")) { x.globalAlpha = aop; x.imageSmoothingEnabled = z < 3; x.drawImage(TP.art[v], 0, 0, 512, 512); x.globalAlpha = 1; }
+  if (TP.art[v] && aop > 0 && tpShown("art")) { x.globalAlpha = aop; x.imageSmoothingEnabled = z < 3; if (TP.art[v].naturalWidth === RIG) x.drawImage(TP.art[v], 0, 0, RIG, RIG); else x.drawImage(TP.art[v], RIG_PAD[0], RIG_PAD[1], 512, 512);   // a 512 px mannequin sits at PAD x.globalAlpha = 1; }
   if (pop > 0) {   // parts drawn opaque off-screen in draw order (each one fill + its own outline), then laid over the art
     const off = document.createElement("canvas"); off.width = cv.width; off.height = cv.height; const o = off.getContext("2d"); T(o);
     for (const name of V.order) { if (!tpShown(name)) continue;
@@ -1312,7 +1312,7 @@ function tpHit(v, V, p) {   // the handle under the cursor (selected part's hand
 }
 function tpWire(v) {
   const cv = $(`tpCv_${v}`);
-  const scr = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * 512 / r.width, (e.clientY - r.top) * 512 / r.height]; };
+  const scr = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * RIG / r.width, (e.clientY - r.top) * RIG / r.height]; };
   const pos = e => { const s = scr(e), vw = TP.vw[v]; return [(s[0] - vw.ox) / vw.z, (s[1] - vw.oy) / vw.z]; };
   cv.oncontextmenu = e => e.preventDefault();
   cv.onwheel = e => { e.preventDefault(); const vw = TP.vw[v], s = scr(e);
@@ -1401,7 +1401,9 @@ setInterval(() => {   // when a template job finishes: new preview (and, after a
 // ------------------------------------------------------------------ Parts editor (touch up a painted candidate)
 const PA = { build: null, id: null, doc: null, view: "front", parts: {}, tmpl: {}, bmask: {}, lv: 2, sel: null, hidden: new Set(), tool: "brush",
   vw: { z: 1, ox: 0, oy: 0 }, undo: [], redo: [], dirty: {}, mask: null, stroke: null, pan: null, space: false, inited: false, fixJob: null };
-const PA_N = 1024, PA_LINE = "#28201e";
+// the rest-pose canvas (hdart.puppet: PX = 576 rig px, painted at 2x; PAD = where the old 512 frame / the 512 px mannequins sit)
+const RIG = 576, RIG_PAD = [32, 64], CANVAS = 2 * RIG;
+const PA_N = CANVAS, PA_LINE = "#28201e";
 const PA_BAND = ["#3b2a6b", "#8a3f8f", "#d4606a", "#f2a65a", "#fbeaa0"];   // band display colours, darkest level first
 const PA_BAND_RGB = PA_BAND.map(h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)));
 const paBandsOn = () => $("paBands").checked && !PA.layer && PA.doc && PA.doc.views[PA.view].bands;
@@ -1801,7 +1803,7 @@ function fcCard(kind) {
     const keyed = c.meta.keyed || {}, nokey = Object.values(keyed).some(n => n === 0);
     return `<div class="pcand ${c.in_set ? "on" : ""}" style="width:auto">
       <div class="row" style="gap:3px;margin:0;flex-wrap:nowrap">${files.filter(f => c.files.includes(f)).map(f => `<img loading="lazy" src="${u(f)}" style="width:${kind === "hair" ? 120 : 170}px;height:${kind === "hair" ? 120 : 170}px;background:#c4c6cc;border-radius:3px" title="${f}">`).join("")}</div>
-      <div class="hint">${c.meta.from_paint ? `from paint ${c.meta.paint} (${c.meta.on})` : `seed ${c.meta.seed ?? "?"} · on ${c.meta.on || "?"}`}${nokey ? ` · <span style="color:var(--warn)">${kind === "hair" ? "hair" : "irises"} not keyed: can't be recoloured</span>` : ""}</div>
+      <div class="hint">${c.meta.from_paint ? `from paint ${c.meta.paint} (${c.meta.on})` : `seed ${c.meta.seed ?? "?"} · on ${c.meta.on || "?"}`}${nokey ? ` · <span style="color:var(--warn)">${kind === "hair" ? "hair" : "irises"} not keyed: can't be recoloured</span>` : ""}${(c.meta.clipped || []).length ? ` · <span style="color:var(--warn)">cut flat by the canvas top (${c.meta.clipped.join(", ")})</span>` : ""}</div>
       <div class="row" style="gap:4px;margin:0"><button data-fcset="${c.id}" data-kind="${kind}" data-on="${c.in_set ? 0 : 1}" style="flex:1">${c.in_set ? "✓ in the set" : "Add to the set"}</button>
         <button data-fcedit="${c.id}" data-kind="${kind}" title="Edit the layer in the Parts editor">Edit</button>
         ${c.in_set ? "" : `<button data-fcarc="${c.id}" data-kind="${kind}" title="Archive (moves to archive/workshop/face/)" style="width:auto;padding:2px 8px">✕</button>`}</div></div>`; }).join("");
@@ -2041,7 +2043,7 @@ function itRenderCands() {
 
 // ---- zone editor
 const ZE = { view: "front", tool: "brush", mask: null, puppet: null, undo: [], redo: [], lasso: null, down: false, last: null, cursor: null, dirty: false, loaded: null };
-const zeCanvas = () => { const c = document.createElement("canvas"); c.width = 1024; c.height = 1024; return c; };
+const zeCanvas = () => { const c = document.createElement("canvas"); c.width = CANVAS; c.height = CANVAS; return c; };
 async function zeLoad() {
   if (!IT.sel || itHeld() || !$("zeBuild").value) return;
   const key = `${IT.sel}|${$("zeBuild").value}|${ZE.view}`; if (ZE.loaded === key) return;
@@ -2049,25 +2051,25 @@ async function zeLoad() {
   const d = await itApi("zone/get", { item: IT.sel, build: $("zeBuild").value, view: ZE.view });
   const [pi, mi] = await Promise.all([paLoadImg(d.puppet), paLoadImg(d.mask)]);
   ZE.puppet = pi; ZE.mask = zeCanvas(); const mx = ZE.mask.getContext("2d"); mx.drawImage(mi, 0, 0);
-  const id = mx.getImageData(0, 0, 1024, 1024), p = id.data;
+  const id = mx.getImageData(0, 0, CANVAS, CANVAS), p = id.data;
   for (let i = 0; i < p.length; i += 4) { const on = p[i] > 127; p[i] = p[i + 1] = p[i + 2] = 255; p[i + 3] = on ? 255 : 0; }
   mx.putImageData(id, 0, 0);
   ZE.undo = []; ZE.redo = []; ZE.dirty = false; ZE.loaded = key;
   $("zeSource").textContent = `zone from: ${d.source}`; $("zeStatus").textContent = ""; zeDraw();
 }
 function zeDraw() {
-  const cv = $("zeCv"), x = cv.getContext("2d"); x.clearRect(0, 0, 1024, 1024);
+  const cv = $("zeCv"), x = cv.getContext("2d"); x.clearRect(0, 0, CANVAS, CANVAS);
   if (ZE.puppet) x.drawImage(ZE.puppet, 0, 0);
   if (ZE.mask) { const t = zeCanvas(), tx = t.getContext("2d"); tx.drawImage(ZE.mask, 0, 0);
-    tx.globalCompositeOperation = "source-in"; tx.fillStyle = "#18c4d4"; tx.fillRect(0, 0, 1024, 1024);
+    tx.globalCompositeOperation = "source-in"; tx.fillStyle = "#18c4d4"; tx.fillRect(0, 0, CANVAS, CANVAS);
     x.globalAlpha = 0.5; x.drawImage(t, 0, 0); x.globalAlpha = 1; }
   if (ZE.lasso && ZE.lasso.length > 1) { x.strokeStyle = ZE.tool === "lasso" ? "#18c4d4" : "#e8786a"; x.lineWidth = 2; x.beginPath();
     ZE.lasso.forEach((p, i) => i ? x.lineTo(p[0], p[1]) : x.moveTo(p[0], p[1])); x.stroke(); }
   if (ZE.cursor && (ZE.tool === "brush" || ZE.tool === "erase")) { x.strokeStyle = "#000"; x.lineWidth = 1.5; x.beginPath();
     x.arc(ZE.cursor[0], ZE.cursor[1], +$("zeSize").value / 2, 0, 7); x.stroke(); }
 }
-function zePos(e) { const r = $("zeCv").getBoundingClientRect(); return [(e.clientX - r.left) * 1024 / r.width, (e.clientY - r.top) * 1024 / r.height]; }
-function zePush() { ZE.undo.push(ZE.mask.getContext("2d").getImageData(0, 0, 1024, 1024)); if (ZE.undo.length > 25) ZE.undo.shift(); ZE.redo = []; }
+function zePos(e) { const r = $("zeCv").getBoundingClientRect(); return [(e.clientX - r.left) * CANVAS / r.width, (e.clientY - r.top) * CANVAS / r.height]; }
+function zePush() { ZE.undo.push(ZE.mask.getContext("2d").getImageData(0, 0, CANVAS, CANVAS)); if (ZE.undo.length > 25) ZE.undo.shift(); ZE.redo = []; }
 function zeSetDirty() { ZE.dirty = true; $("zeStatus").textContent = "unsaved changes"; }
 function zeStamp(a, b) {
   const m = ZE.mask.getContext("2d"), r = +$("zeSize").value / 2;
@@ -2092,12 +2094,12 @@ document.querySelectorAll("[data-zv]").forEach(b => b.onclick = guard(async () =
 function confirmLeave() { $("zeStatus").textContent = "unsaved changes: save or undo them first"; return false; }
 $("zeBuild").onchange = guard(async () => { ZE.loaded = null; await zeLoad(); });
 $("zeZoom").oninput = () => $("zeCv").style.width = $("zeZoom").value + "px";
-$("zeUndo").onclick = () => { if (!ZE.undo.length) return; const m = ZE.mask.getContext("2d"); ZE.redo.push(m.getImageData(0, 0, 1024, 1024)); m.putImageData(ZE.undo.pop(), 0, 0);
+$("zeUndo").onclick = () => { if (!ZE.undo.length) return; const m = ZE.mask.getContext("2d"); ZE.redo.push(m.getImageData(0, 0, CANVAS, CANVAS)); m.putImageData(ZE.undo.pop(), 0, 0);
   if (ZE.undo.length) zeSetDirty(); else { ZE.dirty = false; $("zeStatus").textContent = ""; } zeDraw(); };   // back to what was loaded
-$("zeRedo").onclick = () => { if (!ZE.redo.length) return; const m = ZE.mask.getContext("2d"); ZE.undo.push(m.getImageData(0, 0, 1024, 1024)); m.putImageData(ZE.redo.pop(), 0, 0); zeSetDirty(); zeDraw(); };
-$("zeClear").onclick = () => { if (!ZE.mask) return; zePush(); ZE.mask.getContext("2d").clearRect(0, 0, 1024, 1024); zeSetDirty(); zeDraw(); };
+$("zeRedo").onclick = () => { if (!ZE.redo.length) return; const m = ZE.mask.getContext("2d"); ZE.undo.push(m.getImageData(0, 0, CANVAS, CANVAS)); m.putImageData(ZE.redo.pop(), 0, 0); zeSetDirty(); zeDraw(); };
+$("zeClear").onclick = () => { if (!ZE.mask) return; zePush(); ZE.mask.getContext("2d").clearRect(0, 0, CANVAS, CANVAS); zeSetDirty(); zeDraw(); };
 $("zeSave").onclick = guard(async () => {
-  const out = zeCanvas(), x = out.getContext("2d"); x.fillStyle = "#000"; x.fillRect(0, 0, 1024, 1024); x.drawImage(ZE.mask, 0, 0);
+  const out = zeCanvas(), x = out.getContext("2d"); x.fillStyle = "#000"; x.fillRect(0, 0, CANVAS, CANVAS); x.drawImage(ZE.mask, 0, 0);
   const sex = $("zeSexOnly").checked ? $("zeBuild").value.split(".")[1] : null;
   const r = await itApi("zone/save", { item: IT.sel, view: ZE.view, png: out.toDataURL("image/png"), sex });
   ZE.dirty = false; ZE.loaded = null; $("zeStatus").textContent = `saved (${r.px} px)${sex ? " for " + sex : ""}`; await zeLoad();
@@ -2187,7 +2189,7 @@ async function gripStageLoad() {
   } catch (e) { GS.key = null; $("gripStageMsg").textContent = e.message; return; }
   gripStageDraw();
 }
-function gsView(v) {   // canvas transform of view v: the whole 1024 canvas, or 2x around the hand's grip point
+function gsView(v) {   // canvas transform of view v: the whole rest-pose canvas, or 2x around the hand's grip point
   const o = GS.data.views[v], cv = $("gripStage_" + v), k = cv.width / GS.data.N;
   if (!$("gripZoom").checked) return { k, ox: 0, oy: 0 };
   const z = 2 * k; return { k: z, ox: cv.width / 2 - o.c[0] * z, oy: cv.height / 2 - o.c[1] * z };

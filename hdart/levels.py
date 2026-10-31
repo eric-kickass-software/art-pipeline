@@ -7,7 +7,8 @@ Levels maps are RGBA: R = level (254 = outline), G = channel / material, A = mas
 import numpy as np
 from PIL import Image, ImageFilter
 
-ISLAND = 400   # level patches smaller than this (px, 1024 canvas) merge into their surroundings: no splotchy highlights
+CANVAS = 1152  # the rest-pose canvas ISLAND is measured on
+ISLAND = 400   # level patches smaller than this (px, the 1152 px rest-pose canvas: 2 px per rig px) merge into their surroundings: no splotchy highlights
 VAL_BLUR = 3   # px: the brightness is blurred (inside the item, outline excluded) before it's cut into cel levels
 
 
