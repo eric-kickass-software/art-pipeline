@@ -292,6 +292,28 @@
           "#ff9a4a",
           "#ffe08a"
         ]
+      },
+      "light_brown": {
+        "base": "#b45b13",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#511000",
+          "#832a00",
+          "#b45b13",
+          "#d37d33",
+          "#f2a35a"
+        ]
       }
     },
     "cloth": {
