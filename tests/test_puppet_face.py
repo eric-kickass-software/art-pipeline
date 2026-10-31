@@ -91,6 +91,22 @@ assert np.array_equal(np.asarray(Image.open(fd / "layer_front.png")), L0) and no
 hl = pf.levels_from_layer("hair", np.asarray(Image.open(d / "layer_front.png")))
 assert (hl[..., 3] > 0).sum() > 500 and set(np.unique(hl[..., 0][hl[..., 3] > 0])) <= set(range(5)) | {254}
 
+# hair bands (Workshop Editor): edited by hand, kept by a repaint, redone on request
+hd = pf.out_dir("human", "hair") / h
+hdoc = pf.layer_doc("human", "hair", h); assert hdoc["views"]["front"]["levels"]["layer"].endswith("levels_front.png") and hdoc["bandsEdited"] == []
+lv0 = np.asarray(Image.open(hd / "levels_front.png")).copy(); band = (lv0[..., 3] > 127) & (lv0[..., 0] < 254)
+paint4 = np.zeros_like(lv0); paint4[..., 0] = 4; paint4[..., 3] = 255   # every band pixel to the lightest level
+buf = io.BytesIO(); Image.fromarray(paint4).save(buf, "PNG"); url4 = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+hdoc = pf.save_bands("human", "hair", h, "front", url4)
+lv1 = np.asarray(Image.open(hd / "levels_front.png"))
+assert (lv1[..., 0][band] == 4).all() and np.array_equal(lv1[..., 0][~band], lv0[..., 0][~band]) and hdoc["bandsEdited"] == ["front/layer"]
+buf = io.BytesIO(); Image.open(hd / "layer_front.png").save(buf, "PNG")   # a repaint (unchanged) keeps the hand bands
+pf.save_layer("human", "hair", h, "front", "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode())
+assert (np.asarray(Image.open(hd / "levels_front.png"))[..., 0][band] == 4).all()
+hdoc = pf.reset_bands("human", "hair", h, "front"); assert hdoc["bandsEdited"] == []
+assert not (np.asarray(Image.open(hd / "levels_front.png"))[..., 0][band] == 4).all()
+pf.revert_layer("human", "hair", h); assert "bands_edited" not in json.loads((hd / "meta.json").read_text())
+
 # Ramps: the puppet wears the set's hair + the newest face; three level maps
 rp = pf.ramp_preview("human.male")
 assert rp["hair"] == h and rp["face"] == f and {"art", "levels", "hair", "eyes"} <= set(rp["facings"]["front"]) and "hair" in rp["facings"]["back"]

@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter
 
-from .levels import ISLAND, VAL_BLUR, _components_of, _mode, _spread, smooth_levels, smooth_val
+from .levels import ISLAND, VAL_BLUR, _components_of, _mode, _spread, keep_bands, smooth_levels, smooth_val, write_bands
 from . import ai_kit, comfy, jobs, memo, store, puppet as pp, puppet_template as pt, puppet_paint as ppt, puppet_face as pf
 
 SPEC = ai_kit.ROOT / "specs" / "items.json"
@@ -1334,19 +1334,23 @@ def layer_doc(race, item_id, cid):
     meta = _meta(d); build = meta["on"]; pcid = pf.base(build)[0]; pd = ppt.out_dir(build) / pcid; sp = ppt._spec_for(pd)
     views = {}; editable = []
     for v in VIEWS:
-        order = []; paths = {}
+        order = []; paths = {}; levels = {}
         for n in sp["views"][v]["order"]:
             order += [n, n + LAYER_SEP]
             paths[n] = ws.rel(pd / "parts" / v / f"{n}.png")
             f = d / "parts" / v / f"{n}.png"
             paths[n + LAYER_SEP] = ws.rel(f if f.exists() else _blank())
+            if (d / "plevels" / v / f"{n}.png").exists():   # its cel levels, editable as bands
+                levels[n + LAYER_SEP] = ws.rel(d / "plevels" / v / f"{n}.png")
             editable.append(n + LAYER_SEP)
-        views[v] = {"order": order, "parts": paths, "template": {}}
+        views[v] = {"order": order, "parts": paths, "template": {}, "levels": levels}
     files = sorted(f.name for f in d.glob("*.*"))
     stamp = int(max((f.stat().st_mtime for f in d.rglob("*.png")), default=0))
     prev = [f for f in ("prev_male_front.png", "prev_male_back.png", "prev_female_front.png", "prev_female_back.png") if f in files]
     return {"race": race, "kind": "item", "item": item_id, "id": cid, "dir": ws.rel(d), "on": build, "views": views,
-            "editable": sorted(set(editable)), "files": files, "previews": prev, "stamp": stamp, "edited": (d / "parts_orig").exists()}
+            "editable": sorted(set(editable)), "files": files, "previews": prev, "stamp": stamp, "edited": (d / "parts_orig").exists(),
+            "slot": it.get("slot"), "depth": it.get("depth", 0), "materials": it.get("materials", []),
+            "bandsEdited": [f"{b.split('/')[0]}/{b.split('/')[1]}{LAYER_SEP}" for b in meta.get("bands_edited", [])]}
 
 
 def levels_from_edit(doc, it, L, cents):
@@ -1376,12 +1380,7 @@ def layer_save(race, item_id, cid, view, layers):
     import base64, io, shutil
     doc = spec(); it = doc["items"][item_id]; d = out_dir(race, item_id) / cid; meta = _meta(d)
     cents = {int(k): np.array(v) for k, v in meta.get("cents", {}).items()}
-    if not (d / "parts_orig").exists():
-        for sub in ("parts", "plevels"):
-            if (d / sub).exists():
-                shutil.copytree(d / sub, d / f"{sub}_orig")
-            else:
-                (d / f"{sub}_orig").mkdir(parents=True)
+    _keep_orig(d); edited = set(meta.get("bands_edited", []))
     for name, png in layers.items():
         n = name[:-len(LAYER_SEP)] if name.endswith(LAYER_SEP) else name
         if not all(c.isalnum() or c in "._" for c in n):
@@ -1394,8 +1393,67 @@ def layer_save(race, item_id, cid, view, layers):
         if not (L[..., 3] > 0).any():
             fp.unlink(missing_ok=True); fl.unlink(missing_ok=True); continue
         fp.parent.mkdir(parents=True, exist_ok=True); fl.parent.mkdir(parents=True, exist_ok=True)
-        Image.fromarray(L).save(fp); Image.fromarray(levels_from_edit(doc, it, L, cents)).save(fl)
+        lev = levels_from_edit(doc, it, L, cents)
+        if f"{view}/{n}" in edited and fl.exists():   # hand-edited bands stay where the material is unchanged
+            lev = keep_bands(np.asarray(Image.open(fl).convert("RGBA")), lev)
+        Image.fromarray(L).save(fp); Image.fromarray(lev).save(fl)
     store.update_meta(d, edited=True)
+    previews(race, item_id, cid)
+    return layer_doc(race, item_id, cid)
+
+
+def _keep_orig(d):
+    """The first edit of a candidate keeps its originals (parts_orig/, plevels_orig/) for Revert."""
+    import shutil
+    if not (d / "parts_orig").exists():
+        for sub in ("parts", "plevels"):
+            if (d / sub).exists():
+                shutil.copytree(d / sub, d / f"{sub}_orig")
+            else:
+                (d / f"{sub}_orig").mkdir(parents=True)
+
+
+def _part_name(name):
+    n = name[:-len(LAYER_SEP)] if name.endswith(LAYER_SEP) else name
+    if not n or not all(c.isalnum() or c in "._" for c in n):
+        raise ValueError(f"bad layer {name}")
+    return n
+
+
+def bands_save(race, item_id, cid, view, bands):
+    """Hand-edited bands from the Workshop Editor ({"<part>@item": PNG data URL, R = level, A = painted}): only the
+    levels of the layer's band pixels change (material, outline and coverage stay); listed in meta "bands_edited"."""
+    import base64, io
+    d = out_dir(race, item_id) / cid; meta = _meta(d)
+    if view not in VIEWS:
+        raise ValueError("Unknown view.")
+    _keep_orig(d); done = set()
+    for name, png in bands.items():
+        n = _part_name(name); fl = d / "plevels" / view / f"{n}.png"
+        if not fl.exists():
+            continue
+        new = np.asarray(Image.open(io.BytesIO(base64.b64decode(png.split(",", 1)[-1]))).convert("RGBA"))
+        Image.fromarray(write_bands(np.asarray(Image.open(fl).convert("RGBA")), new, LEVELS)).save(fl); done.add(f"{view}/{n}")
+    store.update_meta(d, edited=True, bands_edited=sorted(set(meta.get("bands_edited", [])) | done))
+    previews(race, item_id, cid)
+    return layer_doc(race, item_id, cid)
+
+
+def bands_reset(race, item_id, cid, view=None, part=None):
+    """Redo an item's bands from its paint (one part of a view, else every part), keeping each pixel's material and the
+    outline; drops the hand edits."""
+    d = out_dir(race, item_id) / cid; meta = _meta(d)
+    cents = {int(k): np.array(v) for k, v in meta.get("cents", {}).items()}
+    _keep_orig(d); done = set()
+    for v in ([view] if view else VIEWS):
+        for fl in sorted((d / "plevels" / v).glob("*.png")):
+            if part and fl.stem != _part_name(part):
+                continue
+            fp = d / "parts" / v / fl.name; lev = np.asarray(Image.open(fl).convert("RGBA")).copy()
+            L = np.asarray(Image.open(fp).convert("RGBA")) if fp.exists() else None
+            Image.fromarray(levels_from_colour(L, lev, cents) if (L is not None and cents) else smooth_levels(lev)).save(fl)
+            done.add(f"{v}/{fl.stem}")
+    store.update_meta(d, bands_edited=sorted(set(meta.get("bands_edited", [])) - done) or None)
     previews(race, item_id, cid)
     return layer_doc(race, item_id, cid)
 
@@ -1406,7 +1464,7 @@ def layer_revert(race, item_id, cid):
     if (d / "parts_orig").exists():
         for sub in ("parts", "plevels"):
             shutil.rmtree(d / sub, ignore_errors=True); shutil.move(str(d / f"{sub}_orig"), str(d / sub))
-    store.update_meta(d, edited=None)
+    store.update_meta(d, edited=None, bands_edited=None)
     previews(race, item_id, cid)
     return layer_doc(race, item_id, cid)
 
@@ -1462,6 +1520,10 @@ def api(action, b):
         return layer_save(race, b["item"], b["id"], b["view"], b["layers"])
     if action == "layer_revert":
         return layer_revert(race, b["item"], b["id"])
+    if action == "bands_save":   # Workshop Editor: hand-edited item bands
+        return bands_save(race, b["item"], b["id"], b["view"], b["bands"])
+    if action == "bands_reset":
+        return bands_reset(race, b["item"], b["id"], b.get("view"), b.get("part"))
     if action == "export":   # pack + layers (+ intake for new ids) of game items into the game (R-003, R-004)
         from . import item_export as ie
         return ie.export(b.get("items") or None, race)

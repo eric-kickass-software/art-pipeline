@@ -182,6 +182,10 @@ def workshop_post(st, action, b):
             return pf.save_layer(b["race"], b["kind"], b["id"], b["view"], b["png"])
         if action == "face/layer_revert":
             return pf.revert_layer(b["race"], b["kind"], b["id"])
+        if action == "face/bands_save":   # Workshop Editor: hand-edited hair bands
+            return pf.save_bands(b["race"], b["kind"], b["id"], b["view"], b["png"])
+        if action == "face/bands_reset":
+            return pf.reset_bands(b["race"], b["kind"], b["id"], b.get("view"))
         if action == "face/ramp_preview":   # Ramps tab: the painted puppet wearing the race's hair + face, three level maps
             return pf.ramp_preview(b["build"])
         if action == "face/preview":   # previews with another hair / eye ramp (data URLs)
@@ -541,8 +545,9 @@ def serve(renders, spec, palettes, port=4321, open_browser=True):
             u = urlparse(self.path)
             q = parse_qs(u.query)
             try:
-                if u.path in ("/", "/index.html", "/workshop", "/items", "/dungeon"):   # /items = the Item Workshop
-                    page = {"/workshop": "workshop.html", "/items": "workshop.html", "/dungeon": "dungeon.html"}.get(u.path, PAGE.name)
+                if u.path in ("/", "/index.html", "/workshop", "/items", "/editor", "/dungeon"):   # /items, /editor: same page
+                    page = {"/workshop": "workshop.html", "/items": "workshop.html", "/editor": "workshop.html",
+                            "/dungeon": "dungeon.html"}.get(u.path, PAGE.name)
                     body = PAGE.with_name(page).read_bytes()
                     self.send_response(200)
                     self.send_header("Content-Type", "text/html; charset=utf-8")

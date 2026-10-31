@@ -96,3 +96,28 @@ def _spread(mask_from, values, into, steps=120):
             break
         known |= took
     return out, known
+
+
+# ----------------------------------------------------------------------------- hand-edited bands (Workshop Editor)
+
+def is_band(lev):
+    """The pixels of a levels map that carry a cel level (not outline, not empty)."""
+    return (lev[..., 3] > 127) & (lev[..., 0] < 254)
+
+
+def keep_bands(old, new):
+    """`new` levels with the hand-edited levels of `old` kept wherever both have a band of the same channel (a repaint
+    of a layer whose bands were edited by hand keeps those edits; newly painted pixels get their own levels)."""
+    if old is None or old.shape != new.shape:
+        return new
+    keep = is_band(old) & is_band(new) & (old[..., 1] == new[..., 1])
+    out = new.copy(); out[..., 0][keep] = old[..., 0][keep]
+    return out
+
+
+def write_bands(lev, png_rgba, n_levels):
+    """A levels map with the bands painted in the editor (RGBA, R = level, A = painted) written over its band pixels;
+    outline, material and coverage stay."""
+    out = lev.copy(); m = is_band(lev) & (png_rgba[..., 3] > 127)
+    out[..., 0][m] = np.minimum(png_rgba[..., 0][m], n_levels - 1)
+    return out

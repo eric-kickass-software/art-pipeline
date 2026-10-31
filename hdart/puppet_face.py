@@ -21,6 +21,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 from . import ai_kit, comfy, jobs, memo, store, workshop as ws, puppet as pp, puppet_template as pt, puppet_paint as ppt
+from .levels import keep_bands, write_bands
 
 SPEC = ai_kit.ROOT / "specs" / "face.json"
 KINDS = ("hair", "face")
@@ -772,11 +773,14 @@ def layer_doc(race, kind, fid):
             Image.fromarray(h).save(d / f"ctx_head_{v}.png"); paths["head"] = ws.rel(d / f"ctx_head_{v}.png")
         paths["layer"] = ws.rel(d / f"layer_{v}.png")
         views[v] = {"order": order, "parts": paths, "template": {}}
+        if kind == "hair" and (d / f"levels_{v}.png").exists():   # its cel levels, editable as bands
+            views[v]["levels"] = {"layer": ws.rel(d / f"levels_{v}.png")}
     files = sorted(f.name for f in d.glob("*.*"))
     stamp = int(max((f.stat().st_mtime for f in d.glob("*.*")), default=0))
     prev = [f for f in ("prev_male_front.png", "prev_male_back.png", "prev_female_front.png", "prev_female_back.png") if f in files]
     return {"race": race, "kind": kind, "id": fid, "dir": ws.rel(d), "on": build, "views": views, "editable": ["layer"],
-            "files": files, "previews": prev, "stamp": stamp, "edited": any(f.startswith("layer_orig_") for f in files)}
+            "files": files, "previews": prev, "stamp": stamp, "edited": any(f.startswith("layer_orig_") for f in files),
+            "bandsEdited": [f"{v}/layer" for v in meta.get("bands_edited", [])]}
 
 
 def levels_from_layer(kind, L, sp=None):
@@ -814,8 +818,47 @@ def save_layer(race, kind, fid, view, png):
     L = np.asarray(im); im.save(d / f"layer_{view}.png")
     meta = store.read_meta(d)
     sp = base(meta.get("on") or f"{race}.male")[1]
-    lev = levels_from_layer(kind, L, sp); Image.fromarray(lev).save(d / f"levels_{view}.png")
+    lev = levels_from_layer(kind, L, sp)
+    if view in meta.get("bands_edited", []) and (d / f"levels_{view}.png").exists():   # hand-edited bands stay
+        lev = keep_bands(np.asarray(Image.open(d / f"levels_{view}.png").convert("RGBA")), lev)
+    Image.fromarray(lev).save(d / f"levels_{view}.png")
     store.update_meta(d, keyed={**meta.get("keyed", {}), view: int((lev[..., 3] > 0).sum())}, edited=True)
+    previews(race, kind, fid)
+    return layer_doc(race, kind, fid)
+
+
+def _keep_orig(d, view):
+    for stem in ("layer", "levels"):
+        if (d / f"{stem}_{view}.png").exists() and not (d / f"{stem}_orig_{view}.png").exists():
+            shutil.copy(d / f"{stem}_{view}.png", d / f"{stem}_orig_{view}.png")
+
+
+def save_bands(race, kind, fid, view, png):
+    """Hand-edited hair bands from the Workshop Editor (PNG data URL, R = level, A = painted): only the levels of the
+    layer's band pixels change (not the outline); the view is listed in meta "bands_edited" so a repaint keeps them."""
+    import base64, io
+    d = out_dir(race, kind) / fid; f = d / f"levels_{view}.png"
+    if kind != "hair" or view not in _views(kind) or not f.exists():
+        raise ValueError("Bands are edited on hair layers (front / back).")
+    new = np.asarray(Image.open(io.BytesIO(base64.b64decode(png.split(",", 1)[-1]))).convert("RGBA"))
+    _keep_orig(d, view)
+    lev = write_bands(np.asarray(Image.open(f).convert("RGBA")), new, 5); Image.fromarray(lev).save(f)
+    meta = store.read_meta(d)
+    store.update_meta(d, bands_edited=sorted(set(meta.get("bands_edited", [])) | {view}), edited=True)
+    previews(race, kind, fid)
+    return layer_doc(race, kind, fid)
+
+
+def reset_bands(race, kind, fid, view=None):
+    """Redo a hair layer's bands from its paint (one view, else both), dropping the hand edits."""
+    d = out_dir(race, kind) / fid; meta = store.read_meta(d); sp = base(meta.get("on") or f"{race}.male")[1]
+    views = [view] if view else list(_views(kind))
+    for v in views:
+        if (d / f"layer_{v}.png").exists():
+            _keep_orig(d, v)
+            L = np.asarray(Image.open(d / f"layer_{v}.png").convert("RGBA"))
+            Image.fromarray(levels_from_layer(kind, L, sp)).save(d / f"levels_{v}.png")
+    store.update_meta(d, bands_edited=sorted(set(meta.get("bands_edited", [])) - set(views)))
     previews(race, kind, fid)
     return layer_doc(race, kind, fid)
 
@@ -827,7 +870,7 @@ def revert_layer(race, kind, fid):
             o = d / f"{stem}_orig_{v}.png"
             if o.exists():
                 shutil.move(str(o), str(d / f"{stem}_{v}.png"))
-    store.update_meta(d, edited=None)
+    store.update_meta(d, edited=None, bands_edited=None)
     previews(race, kind, fid)
     return layer_doc(race, kind, fid)
 

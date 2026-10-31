@@ -112,5 +112,24 @@ new = pi.job({"action": "generate", "race": "human", "item": "item.cloth_trouser
 assert len(new) == 1 and new[0] != t
 pi.archive("human", "item.cloth_trousers", new[0])
 assert not (pi.out_dir("human", "item.cloth_trousers") / new[0]).exists() and pi.resolve("human", "item.cloth_trousers", "human.male") == t
+
+# item bands (Workshop Editor): the doc lists each covered part's levels; hand edits change only band pixels, survive a
+# repaint of the part, and are redone on request; revert brings back the originals
+ld = pi.layer_doc("human", "item.cloth_trousers", t); lvs = ld["views"]["front"]["levels"]
+assert lvs and ld["slot"] == "legs" and ld["bandsEdited"] == []
+lk = sorted(lvs)[0]; part = lk[:-len(pi.LAYER_SEP)]; fl = d / "plevels" / "front" / f"{part}.png"
+lv0 = np.asarray(Image.open(fl)).copy(); band = (lv0[..., 3] > 127) & (lv0[..., 0] < 254); assert band.any()
+p4 = np.zeros_like(lv0); p4[..., 0] = 4; p4[..., 3] = 255
+ld = pi.bands_save("human", "item.cloth_trousers", t, "front", {lk: u(p4)})
+lv1 = np.asarray(Image.open(fl))
+assert (lv1[..., 0][band] == 4).all() and np.array_equal(lv1[..., 1], lv0[..., 1]) and np.array_equal(lv1[..., 0][~band], lv0[..., 0][~band])
+assert ld["bandsEdited"] == [f"front/{lk}"] and (d / "plevels_orig").exists()
+pi.layer_save("human", "item.cloth_trousers", t, "front", {lk: u(np.asarray(Image.open(d / "parts" / "front" / f"{part}.png")))})
+lv2 = np.asarray(Image.open(fl)); kept = band & (lv2[..., 3] > 127) & (lv2[..., 0] < 254) & (lv2[..., 1] == lv0[..., 1])
+assert kept.sum() > 0.9 * band.sum() and (lv2[..., 0][kept] == 4).all()
+ld = pi.bands_reset("human", "item.cloth_trousers", t, "front", lk); assert ld["bandsEdited"] == []
+assert not (np.asarray(Image.open(fl))[..., 0][band] == 4).all()
+pi.layer_revert("human", "item.cloth_trousers", t)
+assert np.array_equal(np.asarray(Image.open(fl)), lv0) and "bands_edited" not in json.loads((d / "meta.json").read_text())
 fake.stop(); shutil.rmtree(tmp)
 print("ok")
