@@ -116,8 +116,18 @@ def migrate(ai_dir=None, specs=None, dry=False, skip_backup=False, previews=True
     todo = plan(ai_dir, specs)
     if todo["unknown"]:
         raise ValueError("1024 px images no rule covers (add a rule first):\n  " + "\n  ".join(map(str, todo["unknown"][:20])))
-    if dry:
-        return {g: len(v) for g, v in todo.items()}
+    if dry:   # only what a run would still change
+        n = Counter()
+        for g, fs in todo.items():
+            for f in fs:
+                if g == "specs":
+                    n[g] += json.loads(f.read_text(encoding="utf-8")).get("px", OLD_PX) != pp.PX
+                elif g == "grip meta":
+                    m = json.loads(f.read_text(encoding="utf-8")); n[g] += bool(m.get("grip")) and m.get("canvas") != NEW_N
+                else:
+                    with Image.open(f) as im:
+                        n[g] += im.size == (OLD_N, OLD_N)
+        return {g: c for g, c in n.items() if c}
     if not skip_backup:
         from .backup import backup
         r = backup(); log(f"backup: {r['files']} files -> {r['dest']}")

@@ -318,7 +318,7 @@ def cmd_canvas_migrate(a):
     from .canvas_migrate import migrate
     r = migrate(dry=a.dry_run)
     if a.dry_run:
-        print("would migrate: " + ", ".join(f"{g} {n}" for g, n in r.items() if n and g != "unknown"))
+        print("would migrate: " + ", ".join(f"{g} {n}" for g, n in r.items()) if r else "nothing to migrate")
 
 
 def main(argv=None):
