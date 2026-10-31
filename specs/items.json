@@ -229,6 +229,19 @@
         0.439
       ],
       "held_as": "shield"
+    },
+    "item.leather_trousers": {
+      "slot": "legs",
+      "depth": 1,
+      "materials": [
+        "cloth"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "text": "Leather pants, adventuring gear, adventuring armor, seam down leg, small leather straps around thighs. Small pouches around belt.",
+      "item": "item.leather_trousers",
+      "fit": "shared",
+      "complete": true
     }
   },
   "_doc_game": "Game items (R-002): a Workshop piece (an entry of items) belongs to the game item `item` (default: its own id); several pieces can make one game item (item.iron_breastplate = breastplate + pauldrons). slot is one of the game's art slots (requirements.json). game_items: what an intake file says about a NEW game item (one the game doesn't have yet): name, kind, slot (game slot), weaponType, text (one line for the game), materials (material -> default ramp id). Missing fields are derived from the pieces; items the game already has take all of this from the game's content.",
