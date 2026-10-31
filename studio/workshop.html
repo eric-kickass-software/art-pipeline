@@ -30,11 +30,11 @@
   .pfield { display:flex; flex-direction:column; gap:1px; width:118px; } .pfield.wide { width:200px; }
   .pfield label { color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.6px; }
   .pfield select { padding:3px 4px; font-size:12px; }
-  #paItemsBox { margin-top:12px; width:300px; }
-  #paItems .irow { display:grid; grid-template-columns:58px 1fr 92px; gap:5px; align-items:center; margin:3px 0; }
-  #paItems .irow label { color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.6px; }
-  #paItems select { padding:3px 4px; font-size:12px; min-width:0; } #paItems select.ramp:disabled { opacity:.35; }
-  #paLayerCol { width:240px; flex:none; max-height:calc(100vh - 170px); overflow:auto; }
+  #paLayerCol { width:300px; flex:none; max-height:calc(100vh - 170px); overflow:auto; scrollbar-width:thin; scrollbar-color:#ffffff30 transparent; }
+  .ltree .lslot { display:grid; grid-template-columns:1fr 104px; gap:4px; padding:0 4px 4px 22px; background:var(--panel); border-radius:0 0 4px 4px; margin-top:-2px; }
+  .ltree .lslot select { padding:2px 4px; font-size:12px; min-width:0; } .ltree .lslot select.ramp:disabled { opacity:.35; }
+  .ltree .lgrp.off .lroot { background:#ffffff08; } .ltree .lgrp.off .lslot { background:#ffffff08; }
+  .ltree .lroot .slot { color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.6px; }
   #paStage { position:relative; line-height:0; border-radius:10px; overflow:hidden; box-shadow:0 4px 24px #0006; }
   #paStage canvas { display:block; }
   .pfloat { position:absolute; z-index:3; background:rgba(24,20,31,.82); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
@@ -373,7 +373,7 @@
         <div class="pfield"><label>Skin ramp</label><select id="paSkin" title="Preview the skin in a ramp (from its bands); none = as painted"><option value="">none</option></select></div></div></div>
     </div>
     <div class="row" style="align-items:flex-start;flex-wrap:nowrap;gap:12px;margin:0">
-      <div id="paLayerCol"><div class="row" style="margin:0 0 4px"><b>Layers</b><button id="paAll" style="padding:1px 8px" title="Show every layer">show all</button></div>
+      <div id="paLayerCol"><div class="row" style="margin:0 0 4px"><b>Layers</b><span class="hint" title="Under the puppet: hair, face and one header per worn slot. Pick what it wears in the left dropdown (its layers fold out below), a ramp to preview it in on the right (none = as painted; the Ramp tool shows the bands instead). Held weapons and shields are edited in their Grip card. 'on ♀' / 'on ♂' = fitted on the other build: shown, but it may not line up." style="cursor:help">ⓘ</span><button id="paAll" style="padding:1px 8px" title="Show every layer">show all</button></div>
         <div id="paLayers" class="ltree"></div></div>
       <div>
         <div id="paStage">
@@ -429,9 +429,6 @@
           <div class="row"><textarea id="paFixBase" rows="3" style="flex:1"></textarea></div>
           <div class="row"><button id="paFixSave">Save wording</button><span class="hint" id="paFixStatus"></span></div></details>
       </div>
-      <div style="min-width:270px">
-        <div class="pgrp" id="paItemsBox" style="margin-top:0"><h3>Items <span class="hint" title="Right: a ramp to preview it in (none = as painted; the Ramp tool shows the bands instead). Held weapons and shields are edited in their Grip card. 'on ♀' / 'on ♂' = fitted on the other build: shown, but it may not line up.">ⓘ</span></h3>
-          <div id="paItems"></div></div></div>
     </div>
   </section>
 
@@ -1783,17 +1780,46 @@ function paLoadUi() { try { const u = JSON.parse(localStorage.getItem("paUi") ||
   PA.fold = new Set(u.fold || []); PA.hidden = new Set(u.hidden || []); PA.ghide = new Set(u.ghide || []); PA.allParts = new Set(u.all || []); } catch (e) { } }
 function paRootOrder() { const slots = PA.its ? PA.its.vocab.artSlots : [];
   return ["puppet", ...slots.map(s => `item:${s}`), "hair", "face"].map(paG).filter(Boolean); }
+function paSlots() {   // the Layers roots: the puppet, hair, face, every worn slot (empty or not), then any other group (held items)
+  const S = PA.its, worn = S ? S.vocab.artSlots.filter(s => !PA_HELD.includes(s)) : [];
+  const out = [{ gid: "puppet" }, { gid: "hair", kind: "hair" }, { gid: "face", kind: "face" }, ...worn.map(s => ({ gid: `item:${s}`, kind: "item", slot: s }))];
+  PA.groups.forEach(g => { if (!out.some(o => o.gid === g.gid)) out.push({ gid: g.gid, slot: g.slot }); });
+  return out;
+}
+function paPickers(o) {   // a slot header's two dropdowns: what it wears, and the ramp to preview it in
+  const S = PA.its, F = PA.fcs, C = PA.rampCols || {}, g = paG(o.gid), sx = b => b ? ({ male: "♂", female: "♀", unisex: "⚥" }[b.split(".")[1]] || b) : "?";
+  const rsel = (gid, opts, on) => `<select class="ramp" data-pramp="${gid}" ${on ? "" : "disabled"} title="ramp preview (none = as painted)"><option value="">ramp: none</option>${opts}</select>`;
+  const names = (grp, cur) => Object.keys(C[grp] || {}).map(n => `<option ${cur === n ? "selected" : ""}>${n}</option>`).join("");
+  if (o.kind === "hair" || o.kind === "face") {
+    const lst = F ? (F.kinds[o.kind] || []).filter(c => c.files.includes("layer_front.png")).reverse() : [];
+    return (lst.length ? `<select data-pfk="${o.kind}" title="the ${o.kind} it wears"><option value="">none</option>${lst.map(c => `<option value="${c.id}" ${g && g.id === c.id ? "selected" : ""}>${c.id}${c.in_set ? " ✓" : ""}${c.meta.edited ? " · edited" : ""}${c.meta.on && c.meta.on !== PA.build ? ` · on ${sx(c.meta.on)}` : ""}</option>`).join("")}</select>`
+      : `<select disabled><option>(none made yet)</option></select>`) + rsel(o.kind, names(o.kind === "hair" ? "hair" : "eyes", PA.ramps[o.kind]), !!g);
+  }
+  if (!S || !o.slot || PA_HELD.includes(o.slot)) return "";
+  const items = Object.entries(S.spec.items).filter(([, it]) => it.slot === o.slot && it.kind !== "held");
+  if (!items.length) return `<select disabled><option>(no items)</option></select>` + rsel("", "", false);
+  const opts = items.map(([iid]) => { const cs = (S.candidates[iid] || []).slice().sort((a, b) => (b.on === PA.build) - (a.on === PA.build));
+    if (!cs.length) return `<option disabled>${paShort(iid)} (no candidates)</option>`;
+    return `<optgroup label="${paShort(iid)}">` + cs.map(c => { const ap = Object.entries(S.approved[iid] || {}).filter(([, v]) => v === c.id).map(([k]) => SEXSYM[k] || k).join("");
+      return `<option value="${iid}|${c.id}" ${g && g.item === iid && g.id === c.id ? "selected" : ""}>${c.id}${ap ? " " + ap : ""}${c.edited ? " · edited" : ""}${c.on !== PA.build ? ` · on ${sx(c.on)}` : ""}</option>`; }).join("") + `</optgroup>`; }).join("");
+  const mats = g ? (S.spec.items[g.item].materials || []) : [], cur = PA.ramps[o.gid] || {};
+  const ropts = mats.map(m => { const grp = S.spec.materials[m] && S.spec.materials[m].group;
+    return Object.keys(C[grp] || {}).map(n => `<option value="${m}=${n}" ${cur[m] === n ? "selected" : ""}>${mats.length > 1 ? m + ": " : ""}${n}</option>`).join(""); }).join("");
+  return `<select data-pslot="${o.slot}" title="the item it wears"><option value="">none</option>${opts}</select>` + rsel(o.gid, ropts, !!g);
+}
 function paLayers() {
   const v = PA.view, html = [];
-  for (const g of paRootOrder()) {
-    const I = paInfo(g, v), gid = g.gid, folded = PA.fold.has(gid), gd = paGroupDirty(gid);
-    const kind = g.kind === "paint" ? "puppet" : g.kind;
-    html.push(`<div class="lgrp"><div class="lroot" data-gfold="${gid}"><span class="fold">${folded ? "▸" : "▾"}</span>`
-      + `<input type="checkbox" data-gvis="${gid}" ${PA.ghide.has(gid) ? "" : "checked"} title="show / hide all of it">`
-      + `<b>${g.label}</b>${gd ? " •" : ""}<span class="hint"> ${kind}${g.doc.edited ? " · edited" : ""}</span>`
-      + (g.kind === "item" ? `<button class="mini" data-gall="${gid}" title="list the parts it doesn't cover yet too (to paint it onto them)">${PA.allParts.has(gid) ? "covered" : "all parts"}</button>` : "")
-      + (g.gid !== "puppet" ? `<button class="mini" data-gx="${gid}" title="take it off">✕</button>` : "") + `</div>`);
-    if (!folded) {
+  for (const o of paSlots()) {
+    const g = paG(o.gid), gid = o.gid, folded = PA.fold.has(gid), pick = o.gid === "puppet" ? "" : paPickers(o);
+    if (!g && o.gid === "puppet") continue;
+    const I = g && paInfo(g, v), gd = g && paGroupDirty(gid), name = o.slot || o.kind || "";
+    html.push(`<div class="lgrp ${g ? "" : "off"}"><div class="lroot" ${g ? `data-gfold="${gid}"` : ""}><span class="fold">${g ? (folded ? "▸" : "▾") : ""}</span>`
+      + (g ? `<input type="checkbox" data-gvis="${gid}" ${PA.ghide.has(gid) ? "" : "checked"} title="show / hide all of it">` : "")
+      + (g && g.kind === "paint" ? `<b>${g.label}</b>${gd ? " •" : ""}<span class="hint"> puppet${g.doc.edited ? " · edited" : ""}</span>`
+        : `<span class="slot">${name}</span>${g ? `${gd ? " •" : ""}${g.doc.edited ? '<span class="hint"> · edited</span>' : ""}` : ""}`)
+      + (g && g.kind === "item" ? `<button class="mini" data-gall="${gid}" title="list the parts it doesn't cover yet too (to paint it onto them)">${PA.allParts.has(gid) ? "covered" : "all parts"}</button>` : "")
+      + `</div>` + (pick ? `<div class="lslot">${pick}</div>` : ""));
+    if (g && !folded) {
       if (!I) html.push(`<div class="hint" style="padding-left:24px">no ${v} view</div>`);
       else if (g.kind === "paint" || g.kind === "item") {
         let names = I.names;
@@ -1817,11 +1843,15 @@ function paLayers() {
   L.querySelectorAll("[data-gfold]").forEach(r => r.onclick = () => { const k = r.dataset.gfold; PA.fold.has(k) ? PA.fold.delete(k) : PA.fold.add(k); redraw(); });
   L.querySelectorAll("[data-nfold]").forEach(f => f.onclick = e => { e.stopPropagation(); const k = f.dataset.nfold; PA.fold.has(k) ? PA.fold.delete(k) : PA.fold.add(k); redraw(); });
   L.querySelectorAll("[data-gall]").forEach(b => b.onclick = e => { e.stopPropagation(); const k = b.dataset.gall; PA.allParts.has(k) ? PA.allParts.delete(k) : PA.allParts.add(k); redraw(); });
-  L.querySelectorAll("[data-gx]").forEach(b => b.onclick = guard(async e => { e.stopPropagation(); const g = paG(b.dataset.gx);
-    if (g.kind === "item") await paSetItem(g.slot, ""); else await paSetLayer(g.kind, ""); }));
   L.querySelectorAll("[data-pdel]").forEach(b => b.onclick = e => { e.stopPropagation(); paClearLayer(b.dataset.pdel); });
   L.querySelectorAll("[data-psel]").forEach(r => r.onclick = e => { if (e.target.tagName === "INPUT" || e.target.dataset.nfold || e.target.closest("[data-pdel]")) return;
     PA.sel = r.dataset.psel; paLevels(); paLayers(); paDraw(); });
+  L.querySelectorAll("[data-pfk]").forEach(el => el.onchange = guard(() => paSetLayer(el.dataset.pfk, el.value)));
+  L.querySelectorAll("[data-pslot]").forEach(el => el.onchange = guard(() => { const [iid, cid] = el.value ? el.value.split("|") : ["", ""]; return paSetItem(el.dataset.pslot, iid, cid); }));
+  L.querySelectorAll("[data-pramp]").forEach(el => el.onchange = () => { const gid = el.dataset.pramp;
+    if (gid.startsWith("item:")) { if (!el.value) delete PA.ramps[gid]; else { const [m, n] = el.value.split("="); PA.ramps[gid] = { [m]: n }; } }
+    else if (el.value) PA.ramps[gid] = el.value; else delete PA.ramps[gid];
+    paRampChanged(gid); });
 }
 function paRow(g, n, depth, kids) {
   const id = `${g.gid}|${n}`, k = paKey(PA.view, g.gid, n), folded = PA.fold.has(id);
@@ -2059,37 +2089,7 @@ async function paFillPickers() {
   if (!PA.fcs || PA.fcs.race !== PA.race) PA.fcs = await api("/api/ws/face/state", { race: PA.race });
   if (!PA.rampCols) PA.rampCols = await api("/api/ws/items/ramp_colours", { race: PA.race });
   $("paSkin").innerHTML = `<option value="">none</option>` + Object.keys(PA.rampCols.skin || {}).map(n => `<option ${PA.ramps.puppet === n ? "selected" : ""}>${n}</option>`).join("");
-  paItemPickers();
-}
-function paItemPickers() {   // the item selection group: hair, face, then one dropdown per (worn) item slot
-  const S = PA.its, F = PA.fcs, sx = b => b ? ({ male: "♂", female: "♀", unisex: "⚥" }[b.split(".")[1]] || b) : "?";
-  const C = PA.rampCols || {}, rsel = (gid, opts, on) => `<select class="ramp" data-pramp="${gid}" ${on ? "" : "disabled"} title="ramp preview (none = as painted)"><option value="">ramp: none</option>${opts}</select>`;
-  const names = (grp, cur) => Object.keys(C[grp] || {}).map(n => `<option ${cur === n ? "selected" : ""}>${n}</option>`).join("");
-  const field = (label, sel, ramp) => `<div class="irow"><label>${label}</label>${sel}${ramp}</div>`, rows = [];
-  for (const kind of ["hair", "face"]) {
-    const lst = (F.kinds[kind] || []).filter(c => c.files.includes("layer_front.png")).reverse(), g = paG(kind);
-    rows.push(field(kind, lst.length ? `<select data-pfk="${kind}"><option value="">none</option>${lst.map(c => `<option value="${c.id}" ${g && g.id === c.id ? "selected" : ""}>${c.id}${c.in_set ? " ✓" : ""}${c.meta.edited ? " · edited" : ""}${c.meta.on && c.meta.on !== PA.build ? ` · on ${sx(c.meta.on)}` : ""}</option>`).join("")}</select>`
-      : `<select disabled><option>(none made yet)</option></select>`, rsel(kind, names(kind === "hair" ? "hair" : "eyes", PA.ramps[kind]), !!g)));
-  }
-  for (const s of S.vocab.artSlots.filter(s => !PA_HELD.includes(s))) {
-    const items = Object.entries(S.spec.items).filter(([, it]) => it.slot === s && it.kind !== "held"), g = paG(`item:${s}`);
-    if (!items.length) { rows.push(field(s, `<select disabled><option>(no items)</option></select>`, rsel("", "", false))); continue; }
-    const opts = items.map(([iid]) => { const cs = (S.candidates[iid] || []).slice().sort((a, b) => (b.on === PA.build) - (a.on === PA.build));
-      if (!cs.length) return `<option disabled>${paShort(iid)} (no candidates)</option>`;
-      return `<optgroup label="${paShort(iid)}">` + cs.map(c => { const ap = Object.entries(S.approved[iid] || {}).filter(([, v]) => v === c.id).map(([k]) => SEXSYM[k] || k).join("");
-        return `<option value="${iid}|${c.id}" ${g && g.item === iid && g.id === c.id ? "selected" : ""}>${c.id}${ap ? " " + ap : ""}${c.edited ? " · edited" : ""}${c.on !== PA.build ? ` · on ${sx(c.on)}` : ""}</option>`; }).join("") + `</optgroup>`; }).join("");
-    const mats = g ? (S.spec.items[g.item].materials || []) : [], cur = PA.ramps[`item:${s}`] || {};
-    const ropts = mats.map(m => { const grp = S.spec.materials[m] && S.spec.materials[m].group;
-      return Object.keys(C[grp] || {}).map(n => `<option value="${m}=${n}" ${cur[m] === n ? "selected" : ""}>${mats.length > 1 ? m + ": " : ""}${n}</option>`).join(""); }).join("");
-    rows.push(field(s, `<select data-pslot="${s}"><option value="">none</option>${opts}</select>`, rsel(`item:${s}`, ropts, !!g)));
-  }
-  $("paItems").innerHTML = rows.join("");
-  $("paItems").querySelectorAll("[data-pfk]").forEach(el => el.onchange = guard(() => paSetLayer(el.dataset.pfk, el.value)));
-  $("paItems").querySelectorAll("[data-pslot]").forEach(el => el.onchange = guard(() => { const [iid, cid] = el.value ? el.value.split("|") : ["", ""]; return paSetItem(el.dataset.pslot, iid, cid); }));
-  $("paItems").querySelectorAll("[data-pramp]").forEach(el => el.onchange = () => { const gid = el.dataset.pramp;
-    if (gid.startsWith("item:")) { if (!el.value) delete PA.ramps[gid]; else { const [m, n] = el.value.split("="); PA.ramps[gid] = { [m]: n }; } }
-    else if (el.value) PA.ramps[gid] = el.value; else delete PA.ramps[gid];
-    paRampChanged(gid); });
+  paLayers();
 }
 function paRampChanged(gid) { for (const k of Object.keys(PA.rc)) if (k.includes(`|${gid}|`)) delete PA.rc[k]; paDraw(); }
 function paDefaultCand(st) { return st.approved || (st.candidates.length ? st.candidates[st.candidates.length - 1].id : null); }
@@ -2109,21 +2109,21 @@ async function paSetPuppet(race, sex, id, plain) {   // the base model; another 
 }
 async function paSetItem(slot, item, cid, doc) {   // an item candidate on its slot ("" = take it off)
   const gid = `item:${slot}`, old = paG(gid);
-  if (old && paGroupDirty(gid) && !(old.item === item && old.id === cid) && !confirm(`Discard the unsaved edits of ${old.label}?`)) { paItemPickers(); return; }
+  if (old && paGroupDirty(gid) && !(old.item === item && old.id === cid) && !confirm(`Discard the unsaved edits of ${old.label}?`)) { paLayers(); return; }
   if (old && old.item === item && old.id === cid && !doc) return;
   if (!item) { paDropCache(gid); PA.groups = PA.groups.filter(g => g.gid !== gid); }
   else { paStatus(" loading the item…"); doc = doc || await api("/api/ws/items/layer_doc", { race: PA.race, item, id: cid });
     paPut({ gid, kind: "item", doc, race: PA.race, item, id: cid, slot, label: `${slot}: ${paShort(item)}` }); PA.fold.delete(gid); }
-  paItemPickers(); await paRefreshAll();
+  await paRefreshAll();
 }
 async function paSetLayer(kind, id, doc) {   // a hair / face candidate ("" = take it off)
   const old = paG(kind);
-  if (old && paGroupDirty(kind) && old.id !== id && !confirm(`Discard the unsaved edits of the ${kind} layer?`)) { paItemPickers(); return; }
+  if (old && paGroupDirty(kind) && old.id !== id && !confirm(`Discard the unsaved edits of the ${kind} layer?`)) { paLayers(); return; }
   if (old && old.id === id && !doc) return;
   if (!id) { paDropCache(kind); PA.groups = PA.groups.filter(g => g.gid !== kind); }
   else { doc = doc || await api("/api/ws/face/layer_doc", { race: PA.race, kind, id });
     paPut({ gid: kind, kind, doc, race: PA.race, id, label: `${kind}: ${id}` }); PA.fold.delete(kind); }
-  paItemPickers(); await paRefreshAll();
+  await paRefreshAll();
 }
 function paDocOf(g) {
   return g.kind === "paint" ? api("/api/ws/paint/parts", { build: g.build, id: g.id })
