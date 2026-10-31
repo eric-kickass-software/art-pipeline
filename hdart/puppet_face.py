@@ -81,6 +81,9 @@ def composed(race, sex, doc=None):
 
 def base_cid(build):
     """The paint a build's items and faces sit on: its approved paint candidate, else the newest finished one, else None."""
+    ap = ws.load_state()["builds"].get(build, {}).get("paint", {}).get("approved")
+    if ap:   # the usual case, without listing every candidate's files
+        return ap
     st = ppt.state(build)
     cands = sorted((c for c in st["candidates"] if not c["progress"]), key=lambda c: c["meta"].get("made", 0))
     return st["approved"] or (cands[-1]["id"] if cands else None)

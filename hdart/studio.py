@@ -124,12 +124,27 @@ def make_jobs():
 JOBS = None
 
 
+_SRC = {}   # module name -> source mtime when fresh() last saw it
+
+
+def fresh(*mods):
+    """Reload `mods` (in order) when any of their source files changed since the last check, so code edits apply without
+    a Studio restart while the modules' in-memory caches (painted puppet, item layers) survive the requests in between."""
+    import importlib, os
+    changed = False
+    for m in mods:
+        t = os.stat(m.__file__).st_mtime_ns
+        if _SRC.get(m.__name__) != t:
+            changed = True; _SRC[m.__name__] = t
+    if changed:
+        for m in mods:
+            importlib.reload(m)
+
+
 def workshop_post(st, action, b):
     """Workshop actions (see hdart/workshop.py). Long ones (generation) block until ComfyUI is done."""
     from . import ai_kit, comfy, workshop as ws
-    import importlib
-    for mod in (comfy, ai_kit, ws):
-        importlib.reload(mod)
+    fresh(comfy, ai_kit, ws)
     if action == "style":
         return {"style": ws.save_style(b.get("groups"), b.get("base"), b.get("builds"))}
     if action == "base/generate":
@@ -140,19 +155,18 @@ def workshop_post(st, action, b):
         return {"ok": True}
     if action == "puppet/joints":
         from . import puppet
-        importlib.reload(puppet)
+        fresh(puppet)
         return puppet.set_joints(b["build"], b["view"], b.get("joints"))
     if action == "puppet/template":
         from . import puppet
         return json.loads((puppet.out_dir(b["build"]) / "template.json").read_text(encoding="utf-8"))
     if action == "puppet/approve":
         from . import puppet
-        importlib.reload(puppet)
+        fresh(puppet)
         return puppet.approve(b["build"], b.get("on", True))
     if action.startswith("face/"):   # Face tab: racial hair and faces
         from . import puppet, puppet_template, puppet_paint, puppet_face as pf
-        for mod in (puppet, puppet_template, puppet_paint, pf):
-            importlib.reload(mod)
+        fresh(puppet, puppet_template, puppet_paint, pf)
         if action == "face/state":
             return pf.state(b["race"])
         if action == "face/spec":
@@ -173,15 +187,15 @@ def workshop_post(st, action, b):
         if action == "face/preview":   # previews with another hair / eye ramp (data URLs)
             return pf.previews(b["race"], b["kind"], b["id"], b.get("ramp"), save=False)
         raise ValueError(f"unknown action {action}")
-    if action.startswith("items/"):   # Item Workshop: every action goes through puppet_items.api (reloaded per request)
+    if action.startswith("items/"):   # Item Workshop: every action goes through puppet_items.api (reloaded when edited)
         from . import config, puppet, puppet_template, puppet_paint, puppet_face, puppet_items, contract, unity_export, item_export
-        for mod in (config, puppet, puppet_template, puppet_paint, puppet_face, puppet_items, contract, unity_export, item_export):
-            importlib.reload(mod)
+        import importlib
+        importlib.reload(config)   # cheap; picks up config.toml edits
+        fresh(puppet, puppet_template, puppet_paint, puppet_face, puppet_items, contract, unity_export, item_export)
         return puppet_items.api(action[6:], b)
     if action.startswith("paint/"):   # puppet Paint step (Races) and Parts editor
         from . import puppet, puppet_template, puppet_paint as ppt
-        for mod in (puppet, puppet_template, ppt):
-            importlib.reload(mod)
+        fresh(puppet, puppet_template, ppt)
         if action == "paint/state":
             return ppt.state(b["build"])
         if action == "paint/spec":   # the paint prompts (+ the composed ones of a build)
@@ -212,7 +226,7 @@ def workshop_post(st, action, b):
         raise ValueError(f"unknown action {action}")
     if action in ("tpl/state", "tpl/save"):   # clean puppet template editor
         from . import puppet, puppet_template
-        importlib.reload(puppet); importlib.reload(puppet_template)
+        fresh(puppet, puppet_template)
         if action == "tpl/save":
             puppet_template.save(b["spec"])
             if b.get("render"):
@@ -532,6 +546,7 @@ def serve(renders, spec, palettes, port=4321, open_browser=True):
                     body = PAGE.with_name(page).read_bytes()
                     self.send_response(200)
                     self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Cache-Control", "no-cache")   # a page edit shows on the next plain reload
                     self.end_headers()
                     self.wfile.write(body)
                 elif u.path.startswith("/api/lib/"):

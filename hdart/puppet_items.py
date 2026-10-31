@@ -749,7 +749,7 @@ def dressed(build, worn, view, hair=None, painted=False):
     """The build's parts with items stacked on (`worn` = [(item_id, cid, ramps)], by depth), plus an optional hair
     layer (RGBA, rest pose) on the head that items with clips: [hair] cut away where they cover it."""
     race = build.split(".")[0]; doc = spec()
-    _, sp, parts = pf.base(build); parts = {n: p.copy() for n, p in parts[view].items()}
+    _, sp, parts = pf.base(build); parts = dict(parts[view])   # read-only arrays: layers below replace entries, never draw in place
     worn = sorted(worn, key=lambda w: doc["items"][w[0]].get("depth", 0))
     grips = grip_assets(race, build, view); bkey = pf.base_key(build); lays = []
     for iid, cid, ramps in worn:   # cached before colouring: a new colour recolours only the item's crop
@@ -897,7 +897,7 @@ def state(race):
     from . import contract, item_export as ie
     doc = spec(); st = load_state(race); pal = ws.palettes_doc()["groups"]
     doc.setdefault("prompt_held_shield", PROMPT_HELD_SHIELD); doc.setdefault("prompt_held_focus", PROMPT_HELD_FOCUS)
-    v = contract.vocab(); game = contract.game_items()
+    v = contract.vocab(); game = contract.game_items(); gi = {g: ie.info(g, doc, v, game) for g in ie.game_ids(doc)}
     return {"spec": doc, "approved": st["approved"], "builds": _builds(race),
             "candidates": {i: candidates(race, i) for i in doc["items"]},
             "masks": {i: sorted(f.name[len(i) + 1:-4] for f in ZONES.glob(f"{i}.*.png")) for i in doc["items"]} if ZONES.exists() else {},
@@ -905,9 +905,22 @@ def state(race):
             "hair": ws.load_state()["builds"].get(f"{race}.unisex", {}).get("face_sets", {}).get("hair", []),
             "hair_ramps": list(pal.get("hair", {})), "grips": grip_state(race), "grip_spec": grip_spec(),
             "vocab": {"artSlots": contract.art_slots(v), "heldAs": list(contract.HELD_AS), "found": v["found"],
-                      "revision": v["revision"], "known": sorted(set(game) | set(v["wanted"]))},
-            "game": {g: ie.info(g, doc, v, game) for g in ie.game_ids(doc)}}
+                      "revision": v["revision"], "known": sorted(set(game) | set(v["wanted"])), "slots": v["slots"]},
+            "game": gi,
+            # the game's items no Workshop piece makes yet (Outfit tab: shown per slot as "no art")
+            "noart": {g: {"slot": r.get("slot"), "name": r.get("name") or g, "wanted": g in v["wanted"]}
+                      for g, r in game.items() if g not in gi and r.get("slot")},
+            "swatches": {grp: {n: _swatch(grp, n) for n in ramps} for grp, ramps in pal.items()}}
 
+
+
+def _swatch(group, name):
+    """A ramp's middle colour as #rrggbb (the Outfit tab's colour buttons)."""
+    try:
+        r = pf.group_ramp(group, name)
+    except Exception:
+        return "#808080"
+    return "#%02x%02x%02x" % tuple(r[len(r) // 2])
 
 ITEM_KEYS = {"slot": str, "kind": str, "text": str, "materials": list, "depth": (int, float), "bulk": (int, float),
              "clips": list, "fit": str, "hand": str, "length": (int, float), "tilt": (int, float), "zones": list,

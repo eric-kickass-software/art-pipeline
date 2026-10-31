@@ -81,6 +81,28 @@
   .pcands .pcand button { margin-top:4px; padding:2px 6px; font-size:12px; }
   .pwork { min-height:150px; min-width:300px; display:flex; flex-direction:column; justify-content:center; gap:8px; padding:8px; font-size:12px; }
   .pbar { height:6px; background:#1b1722; border-radius:3px; overflow:hidden; } .pbar i { display:block; height:100%; background:var(--accent); }
+  .ofgrid { display:grid; grid-template-columns: minmax(440px, 600px) 1fr; gap:12px; align-items:start; }
+  .ofprev { position:sticky; top:56px; }
+  .ofslot { display:grid; grid-template-columns: 96px 1fr; gap:3px 10px; padding:7px 2px; border-bottom:1px solid var(--line); }
+  .ofslot .nm { color:var(--accent); font-size:11px; text-transform:uppercase; letter-spacing:1px; padding-top:4px; }
+  .ofslot .nm .hint { text-transform:none; letter-spacing:0; font-size:10px; display:block; }
+  .ofslot.blocked .chips { opacity:.4; pointer-events:none; }
+  .ofslot .sub { grid-column:2; display:flex; flex-direction:column; gap:4px; font-size:12px; }
+  .ofslot .warn { grid-column:2; color:var(--warn); font-size:11px; }
+  .chip.on { background:#4a3c22; border-color:var(--accent); color:var(--accent); }
+  .chip.noart { opacity:.5; cursor:default; border-style:dashed; } .chip.noart:hover { border-color:var(--line); }
+  .chip .fit { color:var(--ok); margin-left:4px; } .chip .fit.part { color:var(--warn); }
+  .ofsw { width:30px; height:30px; border-radius:4px; border:2px solid transparent; cursor:pointer; display:inline-block; vertical-align:middle; }
+  .ofsw.on { border-color:#fff; } .ofsw:hover { border-color:var(--accent); }
+  .ofslot .chips { align-items:flex-start; } .chip.nofit { opacity:.7; }
+  .ofslot .sub > .ofmat { display:grid; grid-template-columns: 58px 1fr; gap:6px; align-items:start; }   /* material | its ramps */
+  .ofmat > .hint { padding-top:7px; margin:0; } .ofsws { display:grid; grid-template-columns: repeat(auto-fill, 30px); gap:4px; }
+  .ofcols { display:flex; gap:14px; align-items:flex-start; }
+  .ofcol { flex:1; min-width:0; display:flex; flex-direction:column; gap:6px; }   /* one build: front over back */
+  .ofview { display:grid; gap:8px; grid-template-columns: minmax(0, calc((100vh - 200px) / 2)); }   /* two fill the screen height */
+  .ofcols.walk .ofview { grid-template-columns: repeat(2, minmax(0, calc((100vh - 200px) / 2))); }   /* walk beside rest */
+  .ofview figure { margin:0; } .ofview img { width:100%; aspect-ratio:1; display:block; border-radius:4px; background:#c4c6cc; }
+  .ofview figcaption { color:var(--muted); font-size:11px; }
   .rampgrid { display:grid; grid-template-columns: 420px 1fr; gap:14px; }
   .rlist { display:flex; flex-direction:column; gap:4px; max-height:260px; overflow:auto; }
   .ritem { display:flex; align-items:center; gap:8px; padding:3px 6px; border-radius:4px; border:1px solid transparent; cursor:pointer; }
@@ -496,11 +518,21 @@
 
   <!-- ITEM WORKSHOP: OUTFIT -->
   <section id="outfit">
-    <div class="card"><div class="row"><label>Build</label><select id="ofBuild" style="width:140px"></select>
-        <label>Hair</label><select id="ofHair" style="width:220px"></select><select id="ofHairRamp" style="width:120px"></select>
-        <button class="primary" id="ofGo">Preview</button><span class="hint" id="ofStatus">Each item's approved fit for this build.</span></div>
-      <div id="ofItems"></div></div>
-    <div class="card"><div id="ofOut" class="row" style="align-items:flex-start"></div></div>
+    <div class="ofgrid">
+      <div class="card">
+        <div class="row"><label>Build</label><select id="ofBuild" style="width:130px"></select>
+          <label>Hair</label><select id="ofHair" style="width:170px"></select><select id="ofHairRamp" style="width:100px"></select>
+          <button id="ofClear" title="Take everything off">Undress</button></div>
+        <div class="hint">The game's slots: one item each, as the hero equips it (an item brings all its pieces). Each build wears its approved fit.
+          Marks: ✓ approved (♂♀ per build) · ½ some pieces approved · · nothing approved yet · ★ the game wants it, no art yet.</div>
+        <div id="ofSlots"></div>
+      </div>
+      <div class="card ofprev">
+        <div class="row"><b>Preview</b><label style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="ofWalk" style="width:auto"> walk</label>
+          <span class="hint" id="ofStatus"></span></div>
+        <div id="ofOut"></div>
+      </div>
+    </div>
   </section>
 </main>
 
@@ -577,7 +609,7 @@ document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
 // ------------------------------------------------------------------ jobs
 $("jobsBtn").onclick = () => $("jobsPanel").classList.toggle("on");
 $("jobsClear").onclick = guard(async () => { await api("/api/ws/jobs/clear", {}); pollJobs(); });
-let lastDone = 0;
+let lastDone = null;   // the first poll only learns the count (the page loads its data itself)
 async function pollJobs() {
   try {
     jobs = (await api("/api/ws/jobs")).jobs;
@@ -586,6 +618,7 @@ async function pollJobs() {
     $("jobsBtn").textContent = active.length ? `Queue: ${active.length} (${run ? run.label : "starting"})` : "Queue: idle";
     $("jobsList").innerHTML = jobs.slice().reverse().map(j => `<div class="job"><span>${j.label}${j.note ? `<div class="note">${j.note}</div>` : ""}</span><span><span class="s ${j.status}" title="${j.error || ""}">${j.status}</span>${j.status === "queued" || j.status === "running" ? `<button class="x" title="Cancel this job" onclick="cancelJob(${j.id})">✕</button>` : ""}</span></div>`).join("") || `<p class="hint">Nothing queued.</p>`;
     const done = jobs.filter(j => j.status === "done" || j.status === "failed").length;
+    if (lastDone === null) lastDone = done;
     if (done !== lastDone) { lastDone = done; const f = jobs.filter(j => j.status === "failed").pop(); if (f) err(`${f.label}: ${f.error}`); await refresh(); }
     markRunning(active);
   } catch (e) { }
@@ -1916,7 +1949,7 @@ async function itRefresh() {
   const ids = Object.keys(IT.st.spec.items);
   if (!IT.sel || !ids.includes(IT.sel)) IT.sel = ids[0] || null;
   const opts = IT.st.builds.map(b => `<option>${b}</option>`).join("");
-  for (const id of ["zeBuild", "itBuild", "ofBuild"]) { const el = $(id), v = el.value; el.innerHTML = opts; if (IT.st.builds.includes(v)) el.value = v; }
+  for (const id of ["zeBuild", "itBuild"]) { const el = $(id), v = el.value; el.innerHTML = opts; if (IT.st.builds.includes(v)) el.value = v; }
   itRenderList(); itRenderForm(); itRenderCands(); itRenderPrompts(); ofRender();
 }
 function itFitsText(id) {
@@ -2037,12 +2070,8 @@ function itRenderCands() {
   q("[data-rc]").forEach(b => b.onclick = guard(async () => queue([{ kind: "item", action: "rekey", complete: true, race: IT.race, item: IT.sel, id: b.dataset.rc, label: `${IT.sel} · ${b.dataset.rc} · re-extract + FLUX hidden` }])));
   q("[data-walk]").forEach(b => b.onclick = guard(async () => {
     const box = $(`walk_${b.dataset.walk}`); box.innerHTML = `<span class="hint">rendering…</span>`;
-    const out = [];
-    for (const build of IT.st.builds) {
-      const r = await itApi("outfit", { build, items: [IT.sel], cids: { [IT.sel]: b.dataset.walk } });
-      out.push(`<figure><img src="${r.walk_front}"><figcaption>${build} front</figcaption></figure><figure><img src="${r.walk_back}"><figcaption>${build} back</figcaption></figure>`);
-    }
-    box.innerHTML = out.join("");
+    const rs = await Promise.all(IT.st.builds.map(build => itApi("outfit", { build, items: [IT.sel], cids: { [IT.sel]: b.dataset.walk }, part: "walk" })));
+    box.innerHTML = rs.map((r, k) => `<figure><img src="${r.walk_front}"><figcaption>${IT.st.builds[k]} front</figcaption></figure><figure><img src="${r.walk_back}"><figcaption>${IT.st.builds[k]} back</figcaption></figure>`).join("");
   }));
 }
 
@@ -2290,30 +2319,105 @@ $("gripSaveSpec").onclick = guard(async () => {
   await itApi("grip/spec", { prompt: $("gripPFront").value, prompt_back: $("gripPBack").value, wrist: +$("gripWrist").value }); await itRefresh(); });
 $("gripWrist").onchange = guard(async () => { await itApi("grip/spec", { wrist: +$("gripWrist").value }); await itRefresh(); });
 
-// ---- outfit
-function ofRender() {
-  const st = IT.st, cur = {}; document.querySelectorAll("[data-of]").forEach(c => cur[c.dataset.of] = c.checked);
-  $("ofHair").innerHTML = `<option value="">no hair</option>` + st.hair.map(h => `<option>${h}</option>`).join("");
-  if (!$("ofHairRamp").options.length) $("ofHairRamp").innerHTML = st.hair_ramps.map(h => `<option>${h}</option>`).join("");
-  const build = $("ofBuild").value;
-  $("ofItems").innerHTML = Object.entries(st.spec.items).map(([id, d]) => {
-    const ap = st.approved[id] || {}, k = d.fit === "per_sex" ? (build || "").split(".")[1] : "all", has = ap[k] || ap.all;
-    return `<div class="row" style="margin:3px 0"><label style="width:200px;display:flex;gap:6px;align-items:center">
-      <input type="checkbox" data-of="${id}" style="width:auto" ${has ? "" : "disabled"} ${has && cur[id] !== false ? "checked" : ""}>${id.replace(/^item\./, "")}</label>
-      ${has ? (d.materials || []).map(m => `<label>${m}</label><select data-ofr="${id}|${m}" style="width:110px">${st.ramps[m].map(r => `<option>${r}</option>`).join("")}</select>`).join("")
-            : `<span class="hint">nothing approved${d.fit === "per_sex" ? " for this sex" : ""}</span>`}</div>`;
-  }).join("");
+// ---- outfit: the game's slots, one game item each (all its pieces), live preview
+const OF = { pick: {}, ramps: {}, build: "", hair: "", hairRamp: "", walk: false, seq: 0, timer: null };   // pick[slot] = game id ("" = none chosen)
+try { Object.assign(OF, JSON.parse(localStorage.getItem("hd.outfit") || "{}")); } catch (e) { }
+const ofStore = () => localStorage.setItem("hd.outfit", JSON.stringify({ pick: OF.pick, ramps: OF.ramps, build: OF.build, hair: OF.hair, hairRamp: OF.hairRamp, walk: OF.walk }));
+const ofOn = () => document.querySelector('.tab[data-t="outfit"]').classList.contains("on");
+const ofBuilds = () => OF.build === "both" ? IT.st.builds : IT.st.builds.includes(OF.build) ? [OF.build] : IT.st.builds.slice(0, 1);
+function ofFit(gid, build) {   // the item's pieces this build has an approved fit for, and the ones it lacks
+  const sx = build.split(".")[1], ok = [], miss = [];
+  for (const p of IT.st.game[gid].pieces) {
+    const d = IT.st.spec.items[p], ap = IT.st.approved[p] || {};
+    ((d.fit === "per_sex" ? ap[sx] : null) || ap.all ? ok : miss).push(p);
+  }
+  return { ok, miss };
 }
-$("ofBuild").onchange = () => ofRender();
-$("ofGo").onclick = guard(async () => {
-  const items = [...document.querySelectorAll("[data-of]")].filter(c => c.checked).map(c => c.dataset.of), ramps = {};
-  document.querySelectorAll("[data-ofr]").forEach(s => { const [i, m] = s.dataset.ofr.split("|"); (ramps[i] ??= {})[m] = s.value; });
+function ofTwoHanded() { const m = OF.pick.main; return m && IT.st.game[m] && IT.st.game[m].hands === 2 ? m : null; }
+function ofRender() {
+  const st = IT.st, slots = st.vocab.slots || [], builds = ofBuilds();
+  $("ofBuild").innerHTML = st.builds.map(b => `<option>${b}</option>`).join("") + (st.builds.length > 1 ? `<option value="both">both</option>` : "");
+  $("ofBuild").value = OF.build === "both" || st.builds.includes(OF.build) ? OF.build : st.builds[0] || "";
+  $("ofHair").innerHTML = `<option value="">no hair</option>` + st.hair.map(h => `<option>${h}</option>`).join("");
+  $("ofHair").value = st.hair.includes(OF.hair) ? OF.hair : "";
+  $("ofHairRamp").innerHTML = st.hair_ramps.map(h => `<option>${h}</option>`).join(""); if (st.hair_ramps.includes(OF.hairRamp)) $("ofHairRamp").value = OF.hairRamp;
+  $("ofWalk").checked = !!OF.walk;
+  const bySlot = {};
+  for (const [gid, g] of Object.entries(st.game)) (bySlot[g.slot] ??= []).push({ gid, name: g.name, art: true, wanted: g.wanted });
+  for (const [gid, g] of Object.entries(st.noart || {})) (bySlot[g.slot] ??= []).push({ gid, name: g.name, art: false, wanted: g.wanted });
+  for (const s of slots) if (OF.pick[s.key] === undefined && (s.artSlots || []).length) {   // first visit: the first item each build can wear
+    const first = (bySlot[s.key] || []).find(o => o.art && builds.every(b => ofFit(o.gid, b).ok.length));
+    OF.pick[s.key] = first && !(s.key === "off" && ofTwoHanded()) ? first.gid : "";
+  }
+  const two = ofTwoHanded();
+  $("ofSlots").innerHTML = slots.map(s => {
+    const label = `<div class="nm">${s.name || s.key}${s.count > 1 ? ` ×${s.count}` : ""}${(s.artSlots || []).length > 1 ? `<span class="hint">${s.artSlots.join(" · ")}</span>` : ""}</div>`;
+    if (!(s.artSlots || []).length) return `<div class="ofslot">${label}<div class="hint" style="padding-top:3px">not drawn on the puppet (no art slot)</div></div>`;
+    const opts = (bySlot[s.key] || []).sort((a, b) => (b.art - a.art) || a.name.localeCompare(b.name)), cur = OF.pick[s.key];
+    const chips = opts.map(o => {
+      if (!o.art) return `<span class="chip noart" title="${o.gid}: in the game, no Workshop art yet">${o.name}${o.wanted ? " ★" : ""}</span>`;
+      const fits = builds.map(b => ofFit(o.gid, b)), full = fits.every(f => !f.miss.length), none = fits.every(f => !f.ok.length);
+      const mark = builds.length > 1 ? builds.map((b, k) => fits[k].miss.length ? "" : SEXSYM[b.split(".")[1]]).join("") : "";
+      return `<span class="chip ${cur === o.gid ? "on" : ""} ${none ? "nofit" : ""}" data-ofpick="${s.key}|${o.gid}" title="${o.gid} · pieces: ${st.game[o.gid].pieces.join(", ")}${none ? " · nothing approved for this build yet" : full ? "" : " · some pieces not approved"}">${o.name}<span class="fit ${full ? "" : "part"}">${none ? "·" : full ? (mark || "✓") : "½"}</span></span>`;
+    }).join("") || `<span class="hint">no items for this slot</span>`;
+    let sub = "", warn = "";
+    if (cur && st.game[cur]) {
+      const g = st.game[cur];
+      sub = Object.entries(g.materials).map(([m, def]) => {
+        const grp = st.spec.materials[m].group, on = (OF.ramps[cur] || {})[m] || def;
+        return `<div class="ofmat"><span class="hint">${m}</span><span class="ofsws">${Object.entries(st.swatches[grp] || {}).map(([n, hex]) => `<i class="ofsw ${on === `${grp}.${n}` ? "on" : ""}" style="background:${hex}" title="${grp}.${n}" data-ofsw="${cur}|${m}|${grp}.${n}"></i>`).join("")}</span></div>`;
+      }).join("");
+      warn = builds.map(b => { const f = ofFit(cur, b); return f.miss.length ? `${b}: ${f.miss.map(p => p.replace(/^item\./, "")).join(", ")} not approved` : ""; }).filter(Boolean).join(" · ");
+    }
+    const blocked = s.key === "off" && two;
+    const edit = cur && st.game[cur] ? `<button data-ofedit="${st.game[cur].pieces[0]}" title="Open ${st.game[cur].name} in the Items tab" style="padding:1px 7px;margin-top:6px;font-size:11px">✎ edit</button>` : "";
+    return `<div class="ofslot ${blocked ? "blocked" : ""}">${label.replace(/<\/div>$/, edit + "</div>")}<div class="chips">${chips}</div>
+      ${blocked ? `<div class="warn">both hands hold ${st.game[two].name}</div>` : ""}${sub ? `<div class="sub">${sub}</div>` : ""}${warn ? `<div class="warn">${warn}</div>` : ""}</div>`;
+  }).join("");
+  $("ofSlots").querySelectorAll("[data-ofpick]").forEach(c => c.onclick = () => {
+    const [slot, gid] = c.dataset.ofpick.split("|"); OF.pick[slot] = OF.pick[slot] === gid ? "" : gid;
+    if (slot === "main" && ofTwoHanded()) OF.pick.off = "";
+    ofChanged();
+  });
+  $("ofSlots").querySelectorAll("[data-ofsw]").forEach(c => c.onclick = () => { const [gid, m, r] = c.dataset.ofsw.split("|"); (OF.ramps[gid] ??= {})[m] = r; ofChanged(); });
+  $("ofSlots").querySelectorAll("[data-ofedit]").forEach(b => b.onclick = () => {
+    IT.sel = b.dataset.ofedit; ZE.loaded = null; itRenderList(); itRenderForm(); itRenderCands(); itRenderPrompts();
+    document.querySelector('.tab[data-t="items"]').click(); });
+  if (ofOn()) ofQueue();
+}
+function ofChanged() { ofStore(); ofRender(); }
+function ofQueue() { clearTimeout(OF.timer); OF.timer = setTimeout(guard(ofRun), 120); }
+function ofBody(build) {   // the outfit request of one build: every piece of the worn items, coloured per item
+  const items = [], ramps = {}, two = ofTwoHanded();
+  for (const [slot, gid] of Object.entries(OF.pick)) {
+    if (!gid || !IT.st.game[gid] || (slot === "off" && two)) continue;
+    const mats = { ...IT.st.game[gid].materials, ...(OF.ramps[gid] || {}) };
+    for (const p of IT.st.game[gid].pieces) { items.push(p); ramps[p] = mats; }
+  }
+  return { build, items, ramps, hair: OF.hair || null, hair_ramp: OF.hairRamp || $("ofHairRamp").value };
+}
+async function ofRun() {
+  const seq = ++OF.seq, builds = ofBuilds(), t0 = performance.now();
+  if (!builds.length) { $("ofOut").innerHTML = `<p class="hint">No build has a paint yet.</p>`; return; }
   $("ofStatus").textContent = "rendering…";
-  const r = await itApi("outfit", { build: $("ofBuild").value, items, ramps, hair: $("ofHair").value || null, hair_ramp: $("ofHairRamp").value });
-  $("ofOut").innerHTML = ["front", "back"].map(v => `<figure><img src="${r[v]}" style="width:320px;background:#c4c6cc"><figcaption>${v}</figcaption></figure>
-    <figure><img src="${r["walk_" + v]}" style="width:320px"><figcaption>${v} walk</figcaption></figure>`).join("");
-  $("ofStatus").textContent = `wearing: ${r.worn.map(w => w[0].replace(/^item\./, "") + " " + w[1]).join(", ") || "nothing"}`;
-});
+  const rest = await Promise.all(builds.map(b => itApi("outfit", { ...ofBody(b), part: "rest" })));
+  if (seq !== OF.seq) return;   // a newer change is already on its way
+  $("ofOut").innerHTML = `<div class="ofcols ${OF.walk ? "walk" : ""}">` + builds.map((b, k) => `<div class="ofcol">${["front", "back"].map(v =>
+    `<div class="ofview"><figure><img src="${rest[k][v]}"><figcaption>${b} ${v}</figcaption></figure><figure id="ofWalk_${k}_${v}"></figure></div>`).join("")}</div>`).join("") + "</div>";
+  const worn = [...new Set(rest.flatMap(r => r.worn.map(w => w[0].replace(/^item\./, ""))))];
+  $("ofStatus").textContent = `${Math.round(performance.now() - t0)} ms${rest.every(r => r.cached) ? " (cached)" : ""} · pieces: ${worn.join(", ") || "none"}`;
+  if (!OF.walk) return;
+  const walk = await Promise.all(builds.map(b => itApi("outfit", { ...ofBody(b), part: "walk" })));
+  if (seq !== OF.seq) return;
+  builds.forEach((b, k) => ["front", "back"].forEach(v =>
+    $(`ofWalk_${k}_${v}`).innerHTML = `<img src="${walk[k]["walk_" + v]}"><figcaption>${b} ${v} walk</figcaption>`));
+}
+$("ofBuild").onchange = () => { OF.build = $("ofBuild").value; ofChanged(); };
+$("ofHair").onchange = () => { OF.hair = $("ofHair").value; ofChanged(); };
+$("ofHairRamp").onchange = () => { OF.hairRamp = $("ofHairRamp").value; ofChanged(); };
+$("ofWalk").onchange = () => { OF.walk = $("ofWalk").checked; ofChanged(); };
+$("ofClear").onclick = () => { for (const k of Object.keys(OF.pick)) OF.pick[k] = ""; ofChanged(); };
+document.querySelector('.tab[data-t="outfit"]').addEventListener("click", () => { if (IT.st) ofQueue(); });
 
 if (APP === "items") {
   const r0 = refresh; refresh = async () => { await r0(); await itRefresh(); };   // a finished job refreshes the item lists too
