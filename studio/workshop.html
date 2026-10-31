@@ -21,12 +21,53 @@
   #appMenu a:hover { background:var(--card); } #appMenu a.on { color:var(--accent); background:var(--card); }
   #appMenu .hint { padding:4px 10px 2px; color:var(--muted); font-size:11px; }
   /* Workshop Editor */
-  #paSide { width:300px; flex:none; } #paLayerCol { width:240px; flex:none; max-height:calc(100vh - 80px); overflow:auto; }
-  .pgrp { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:8px 10px; margin-bottom:10px; }
-  .pgrp h3 { margin:0 0 6px; font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--accent); }
-  .pfield { display:grid; grid-template-columns:78px 1fr; align-items:center; gap:6px; margin:3px 0; }
-  .pfield label { color:var(--muted); text-transform:capitalize; }
-  .pgrp .row { margin:5px 0; } #paTools button { padding:3px 7px; font-size:12px; }
+  .ptop { display:flex; gap:10px; align-items:stretch; margin-bottom:10px; }
+  .pgrp { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:7px 10px 8px; }
+  .pgrp.grow { flex:1; min-width:0; }
+  .pgrp h3 { margin:0 0 5px; font-size:10px; text-transform:uppercase; letter-spacing:1.2px; color:var(--accent); font-weight:600; }
+  .pgrp h3 .hint { text-transform:none; cursor:help; }
+  .pfields { display:flex; flex-wrap:wrap; gap:6px 8px; }
+  .pfield { display:flex; flex-direction:column; gap:1px; width:118px; } .pfield.wide { width:200px; }
+  .pfield label { color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.6px; }
+  .pfield select { padding:3px 4px; font-size:12px; }
+  #paLayerCol { width:240px; flex:none; max-height:calc(100vh - 170px); overflow:auto; }
+  #paStage { position:relative; line-height:0; border-radius:10px; overflow:hidden; box-shadow:0 4px 24px #0006; }
+  #paStage canvas { display:block; }
+  .pfloat { position:absolute; z-index:3; background:rgba(24,20,31,.82); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+            border:1px solid #ffffff1a; border-radius:12px; box-shadow:0 4px 18px #0007; line-height:1.45; }
+  #paRail, #paActs { top:10px; display:flex; flex-direction:column; align-items:center; gap:3px; padding:5px; }
+  #paRail { left:10px; } #paActs { right:10px; }
+  #paCtx { top:10px; left:64px; right:64px; width:max-content; max-width:calc(100% - 128px); display:flex; align-items:center; gap:12px;
+           padding:5px 12px; min-height:42px; flex-wrap:wrap; }
+  #paCtx .tname { color:var(--accent); font-weight:600; font-size:12px; letter-spacing:.3px; }
+  #paCtx .cgrp { display:flex; align-items:center; gap:6px; } #paCtx .cgrp[hidden] { display:none; }
+  #paCtx .hint { margin:0; font-size:11px; }
+  #paCtx input[type=range] { width:130px; accent-color:var(--accent); padding:0; background:none; border:0; }
+  #paCtx #paPrompt { width:230px; padding:3px 6px; font-size:12px; }
+  #paCtx .si { width:16px; height:16px; color:var(--muted); fill:none; stroke:currentColor; stroke-width:2; }
+  .pfloat .val { color:var(--text); font-size:11px; min-width:26px; text-align:center; font-variant-numeric:tabular-nums; }
+  button.ib { width:34px; height:34px; padding:0; display:grid; place-items:center; border-radius:8px; background:transparent; border:1px solid transparent;
+              color:#cfc6dc; position:relative; transition:background .12s, color .12s, border-color .12s; }
+  button.ib svg { width:19px; height:19px; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
+  button.ib:hover { background:#ffffff14; color:#fff; border-color:transparent; }
+  button.ib.on { background:linear-gradient(180deg, #e0b874, #c39a52); color:#241c10; border-color:#f0d29a; box-shadow:0 0 0 1px #0006, 0 2px 8px #e0b87455; }
+  button.ib.on2 { border-color:#e0b87499; color:#fff; }
+  button.ib.tg { width:30px; height:30px; } button.ib.tg svg { width:16px; height:16px; }
+  button.ib.tg { color:#8a8098; } button.ib.tg.on { background:#6fcf8a1f; border-color:#6fcf8a55; color:#9fe3b0; box-shadow:none; }
+  button.ib.sm { width:28px; height:28px; } button.ib.sm svg { width:16px; height:16px; }
+  button.ib.save { color:#f0d29a; } button.ib.save .dot { position:absolute; top:5px; right:5px; width:7px; height:7px; border-radius:50%; background:var(--warn); box-shadow:0 0 6px var(--warn); display:none; }
+  button.ib.save.dirty .dot { display:block; }
+  #paCtx button.sm:not(.ib) { padding:3px 8px; font-size:12px; }
+  .pfloat .sep { width:22px; height:1px; background:#ffffff22; margin:3px 0; } .pfloat .vsep { width:22px; height:1px; background:#ffffff22; margin:3px 0; }
+  .swatch { width:30px; height:30px; border-radius:50%; cursor:pointer; position:relative; margin:3px 0; display:block; }
+  .swatch input { position:absolute; inset:0; opacity:0; width:100%; height:100%; padding:0; border:0; cursor:pointer; }
+  .swatch span { position:absolute; inset:0; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px #000a, inset 0 0 0 1px #0004; pointer-events:none; }
+  #paActs select { width:44px; padding:2px; font-size:11px; text-align:center; background:#ffffff10; border-color:#ffffff22; }
+  #paStatusBox { left:64px; bottom:10px; padding:5px 12px; font-size:12px; color:var(--text); max-width:calc(100% - 128px); }
+  #paStatusBox:empty, #paStatusBox.off { display:none; }
+  #paLv button { width:26px; height:26px; border-radius:7px; border:2px solid #0006; font-size:11px; font-weight:600; padding:0; }
+  #paLv button.on { border-color:#fff; box-shadow:0 0 0 2px var(--accent); }
+  #paLv { display:flex; gap:4px; }
   .ltree .lgrp { margin-bottom:6px; }
   .ltree .lroot { display:flex; align-items:center; gap:4px; padding:3px 4px; border-radius:4px; background:var(--panel); cursor:pointer; font-size:12px; }
   .ltree .lroot input { width:auto; margin:0 2px 0 0; } .ltree .lroot .hint { margin:0; font-size:11px; }
@@ -280,57 +321,98 @@
   </section>
 
   <section id="parts">
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <!-- icons: Lucide (lucide.dev, ISC licence) line icons, plus a custom ramp swatch -->
+      <defs>
+        <symbol id="i-brush" viewBox="0 0 24 24"><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></symbol>
+        <symbol id="i-eraser" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></symbol>
+        <symbol id="i-heal" viewBox="0 0 24 24"><g transform="rotate(-45 12 12)"><rect x="2" y="7" width="20" height="10" rx="5"/><path d="M8.5 7v10"/><path d="M15.5 7v10"/><path d="M11 11h.01"/><path d="M13 13h.01"/><path d="M13 11h.01"/><path d="M11 13h.01"/></g></symbol>
+        <symbol id="i-outline" viewBox="0 0 24 24"><path d="M15.707 21.293a1 1 0 0 1-1.414 0l-1.586-1.586a1 1 0 0 1 0-1.414l5.586-5.586a1 1 0 0 1 1.414 0l1.586 1.586a1 1 0 0 1 0 1.414z"/><path d="m18 13-1.375-6.874a1 1 0 0 0-.746-.776L3.235 2.028a1 1 0 0 0-1.207 1.207L5.35 15.879a1 1 0 0 0 .776.746L13 18"/><path d="m2.3 2.3 7.286 7.286"/><circle cx="11" cy="11" r="2"/></symbol>
+        <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 2v20"/><path d="m15 19-3 3-3-3"/><path d="m19 9 3 3-3 3"/><path d="M2 12h20"/><path d="m5 9-3 3 3 3"/><path d="m9 5 3-3 3 3"/></symbol>
+        <symbol id="i-ramp" viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="16" rx="3"/><path d="M6.3 4v16M10.1 4v16M13.9 4v16M17.7 4v16" stroke-opacity=".55"/>
+          <rect x="3.6" y="5.1" width="2.2" height="13.8" rx="1" fill="#3b2a6b" stroke="none"/><rect x="6.9" y="5.1" width="2.6" height="13.8" fill="#8a3f8f" stroke="none"/>
+          <rect x="10.7" y="5.1" width="2.6" height="13.8" fill="#d4606a" stroke="none"/><rect x="14.5" y="5.1" width="2.6" height="13.8" fill="#f2a65a" stroke="none"/><rect x="18.3" y="5.1" width="2.2" height="13.8" rx="1" fill="#fbeaa0" stroke="none"/></symbol>
+        <symbol id="i-pick" viewBox="0 0 24 24"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></symbol>
+        <symbol id="i-ai" viewBox="0 0 24 24"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></symbol>
+        <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+        <symbol id="i-top" viewBox="0 0 24 24"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></symbol>
+        <symbol id="i-ghost" viewBox="0 0 24 24"><path d="M5 3a2 2 0 0 0-2 2"/><path d="M19 3a2 2 0 0 1 2 2"/><path d="M21 19a2 2 0 0 1-2 2"/><path d="M5 21a2 2 0 0 1-2-2"/><path d="M9 3h1"/><path d="M9 21h1"/><path d="M14 3h1"/><path d="M14 21h1"/><path d="M3 9v1"/><path d="M21 9v1"/><path d="M3 14v1"/><path d="M21 14v1"/></symbol>
+        <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></symbol>
+        <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"/></symbol>
+        <symbol id="i-save" viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></symbol>
+        <symbol id="i-revert" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+        <symbol id="i-redraw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+        <symbol id="i-zin" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6"/><path d="M8 11h6"/></symbol>
+        <symbol id="i-zout" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M8 11h6"/></symbol>
+        <symbol id="i-fit" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/></symbol>
+        <symbol id="i-size" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="8" stroke-dasharray="2 3"/></symbol>
+      </defs>
+    </svg>
+    <div class="ptop">
+      <div class="pgrp"><h3>Puppet</h3><div class="pfields">
+        <div class="pfield"><label>Race</label><select id="paRace"></select></div>
+        <div class="pfield"><label>Gender</label><select id="paSex"><option>male</option><option>female</option><option>unisex</option></select></div>
+        <div class="pfield wide"><label>Candidate</label><select id="paCand"></select></div>
+        <div class="pfield"><label>View</label><select id="paView"><option>front</option><option>back</option></select></div></div></div>
+      <div class="pgrp grow"><h3>Items <span class="hint" title="Held weapons and shields are edited in their Grip card. 'on ♀' / 'on ♂' = fitted on the other build: shown, but it may not line up.">ⓘ</span></h3>
+        <div class="pfields" id="paItems"></div></div>
+    </div>
     <div class="row" style="align-items:flex-start;flex-wrap:nowrap;gap:12px;margin:0">
-      <div id="paSide">
-        <div class="pgrp"><h3>Puppet</h3>
-          <div class="pfield"><label>Race</label><select id="paRace"></select></div>
-          <div class="pfield"><label>Gender</label><select id="paSex"><option>male</option><option>female</option><option>unisex</option></select></div>
-          <div class="pfield"><label>Candidate</label><select id="paCand"></select></div>
-          <div class="pfield"><label>View</label><select id="paView"><option>front</option><option>back</option></select></div>
-        </div>
-        <div class="pgrp"><h3>Items</h3><div id="paItems"></div>
-          <p class="hint" style="margin:4px 0 0">One per slot (held weapons and shields are edited in their Grip card). <i>on ♀</i> = fitted on the other build: shown, but it may not line up.</p></div>
-        <div class="pgrp"><h3>Tools</h3>
-          <div class="row" id="paTools">
-            <button data-tool="brush" title="B">Brush</button><button data-tool="eraser" title="E">Eraser</button>
-            <button data-tool="heal" title="H: fills the stroke from the colours around it">Heal</button>
-            <button data-tool="outline" title="O: the even outline colour and weight">Outline</button>
-            <button data-tool="pick" title="I (or Alt-click with any tool)">Eyedropper</button>
-            <button data-tool="move" title="V: drag the selected layer (only the marked area when there's an AI-fix mark); arrow keys nudge 1 px, Shift+arrow 10 px">Move</button>
-            <button data-tool="mask" title="M: mark an area for the AI fix (puppet parts)">AI fix area</button></div>
-          <div class="row"><label>Size</label><input id="paSize" type="range" min="1" max="80" value="12" style="flex:1"><span class="hint" id="paSizeV">12</span>
-            <label>Colour</label><input id="paColor" type="color" value="#d8a07c" style="width:44px;padding:0"></div>
-          <div class="row" style="gap:4px">
-            <label class="chip"><input id="paClamp" type="checkbox" checked style="width:auto"> keep inside the template shape</label>
-            <label class="chip"><input id="paTop" type="checkbox" checked style="width:auto"> selected layer on top</label>
-            <label class="chip"><input id="paGhost" type="checkbox" checked style="width:auto"> template outline</label></div>
-          <div class="row" id="paBandRow"><label class="chip"><input id="paBands" type="checkbox" style="width:auto"> <b>Ramp bands</b></label>
-            <span id="paLv"></span>
-            <button id="paBandReset" title="Redo the selected layer's bands from its paint (drops its hand edits). Shift-click: the whole puppet / item / hair">Redo bands</button>
-            <p class="hint" style="margin:0">The cel levels the ramps colour (darkest first): skin on the puppet, every material on an item, the hair. Brush paints the chosen level (keys 1-5), Heal smooths, Eyedropper picks a level; only the banded pixels change (not the outline). Saving paint redoes that layer's bands unless you edited them here.</p></div>
-          <div class="row"><button id="paUndo" title="Ctrl+Z">Undo</button><button id="paRedo" title="Ctrl+Y">Redo</button>
-            <button class="primary" id="paSave" title="Saves every edited layer (puppet, items, hair, face)">Save</button>
-            <button id="paRevert" title="Back to the generated originals of the selected layer's puppet / item / hair / face (all its edits)">Revert…</button></div>
-          <div class="row"><label>Canvas</label><select id="paZoom" style="max-width:100px"><option value="560">medium</option><option value="760" selected>large</option><option value="960">x-large</option></select>
-            <button id="paReset">Reset zoom</button></div>
-          <div class="hint" id="paStatus" style="min-height:18px"></div>
-          <details><summary class="hint">AI fix (puppet parts)</summary>
-            <div class="row"><input id="paPrompt" placeholder="optional: what to paint there (e.g. smooth skin)" style="flex:1"></div>
-            <div class="row"><button class="primary" id="paFix">Fix marked area</button><button id="paClearMask">Clear mark</button></div>
-            <p class="hint">Repaints only the marked area of the selected puppet part (inside its template shape), with the whole figure as context, then re-renders the walk. The wording for every fix ({body} and {clothes} come from the build's paint prompts in Race; your text above is added):</p>
-            <div class="row"><textarea id="paFixBase" rows="3" style="flex:1"></textarea></div>
-            <div class="row"><button id="paFixSave">Save wording</button><span class="hint" id="paFixStatus"></span></div></details>
-        </div>
-      </div>
       <div id="paLayerCol"><div class="row" style="margin:0 0 4px"><b>Layers</b><button id="paAll" style="padding:1px 8px" title="Show every layer">show all</button></div>
         <div id="paLayers" class="ltree"></div></div>
-      <div><canvas id="paCv" width="760" height="760" style="width:760px;cursor:crosshair;border-radius:4px"></canvas>
-        <p class="hint" style="max-width:760px">Paint on the <b>selected layer</b> (click its name). Left-drag paints; wheel zooms (up to 8×); right/middle-drag or Space+drag pans.
-          Keys: B brush, E eraser, H heal, O outline, I eyedropper, M AI-fix area, V move (arrows nudge 1 px, Shift 10), [ ] size, 1-5 band level, Ctrl+Z / Ctrl+Y.</p></div>
+      <div>
+        <div id="paStage">
+          <canvas id="paCv" width="760" height="760" style="width:760px;cursor:crosshair"></canvas>
+          <div class="pfloat" id="paRail">
+            <button class="ib" data-tool="brush" title="Brush (B)"><svg><use href="#i-brush"/></svg></button>
+            <button class="ib" data-tool="eraser" title="Eraser (E)"><svg><use href="#i-eraser"/></svg></button>
+            <button class="ib" data-tool="heal" title="Heal (H): fills the stroke from the colours around it (on ramp bands: smooths them)"><svg><use href="#i-heal"/></svg></button>
+            <button class="ib" data-tool="outline" title="Outline (O): the even outline colour and weight"><svg><use href="#i-outline"/></svg></button>
+            <button class="ib" data-tool="move" title="Move (V): drag the selected layer (only the AI-fix mark when there is one); arrows nudge 1 px, Shift 10"><svg><use href="#i-move"/></svg></button>
+            <button class="ib" data-tool="ramp" title="Ramp bands (R): paint the cel levels the ramps colour (skin, item materials, hair); keys 1-5 pick the level. Heal and Eyedropper then work on the bands too"><svg class="keep"><use href="#i-ramp"/></svg></button>
+            <button class="ib" data-tool="pick" title="Eyedropper (I, or Alt-click): a colour (on ramp bands: a level)"><svg><use href="#i-pick"/></svg></button>
+            <label class="swatch" title="Colour"><input id="paColor" type="color" value="#d8a07c"><span id="paSwatch"></span></label>
+            <div class="sep"></div>
+            <button class="ib" data-tool="mask" title="AI fix area (M): mark an area of a puppet part to repaint"><svg><use href="#i-ai"/></svg></button>
+            <div class="sep"></div>
+            <button class="ib tg" data-toggle="paClamp" title="Keep strokes inside the part's template shape"><svg><use href="#i-lock"/></svg></button>
+            <button class="ib tg" data-toggle="paTop" title="Draw the selected layer on top"><svg><use href="#i-top"/></svg></button>
+            <button class="ib tg" data-toggle="paGhost" title="Show the selected part's template outline"><svg><use href="#i-ghost"/></svg></button>
+            <input id="paClamp" type="checkbox" checked hidden><input id="paTop" type="checkbox" checked hidden><input id="paGhost" type="checkbox" checked hidden>
+          </div>
+          <div class="pfloat" id="paCtx">
+            <span class="tname" id="paToolName"></span>
+            <span class="cgrp" id="paSizeGrp"><svg class="si"><use href="#i-size"/></svg><input id="paSize" type="range" min="1" max="80" value="12"><span class="val" id="paSizeV">12</span></span>
+            <span class="cgrp" id="paLvGrp"><span id="paLv"></span>
+              <button class="ib sm" id="paBandReset" title="Redo the selected layer's bands from its paint (drops its hand edits). Shift-click: the whole puppet / item / hair"><svg><use href="#i-redraw"/></svg></button></span>
+            <span class="cgrp" id="paFixGrp"><input id="paPrompt" placeholder="what to paint there (optional)">
+              <button class="primary sm" id="paFix">Fix marked area</button><button class="sm" id="paClearMask">Clear</button></span>
+            <span class="hint" id="paToolHint"></span>
+          </div>
+          <div class="pfloat" id="paActs">
+            <button class="ib" id="paUndo" title="Undo (Ctrl+Z)"><svg><use href="#i-undo"/></svg></button>
+            <button class="ib" id="paRedo" title="Redo (Ctrl+Y)"><svg><use href="#i-redo"/></svg></button>
+            <button class="ib save" id="paSave" title="Save every edited layer (puppet, items, hair, face)"><svg><use href="#i-save"/></svg><span class="dot" id="paDirtyDot"></span></button>
+            <button class="ib" id="paRevert" title="Revert the selected layer's puppet / item / hair / face to its generated originals (all its edits)"><svg><use href="#i-revert"/></svg></button>
+            <div class="vsep"></div>
+            <button class="ib" id="paZOut" title="Zoom out"><svg><use href="#i-zout"/></svg></button>
+            <span class="val" id="paZv">100%</span>
+            <button class="ib" id="paZIn" title="Zoom in (or the mouse wheel)"><svg><use href="#i-zin"/></svg></button>
+            <button class="ib" id="paReset" title="Fit: zoom back to the whole canvas"><svg><use href="#i-fit"/></svg></button>
+            <select id="paZoom" title="Canvas size"><option value="560">M</option><option value="760" selected>L</option><option value="960">XL</option></select>
+          </div>
+          <div class="pfloat" id="paStatusBox"><span id="paStatus"></span></div>
+        </div>
+        <p class="hint" style="max-width:760px">Paint on the <b>selected layer</b> (click its name). Wheel zooms; right/middle-drag or Space+drag pans.
+          Keys: B brush, E eraser, H heal, O outline, V move, R ramp, I eyedropper, M AI-fix area, [ ] size, 1-5 band level, Ctrl+Z / Ctrl+Y.</p>
+        <details style="max-width:760px"><summary class="hint">AI fix wording (every fix of a puppet part)</summary>
+          <p class="hint">{body} and {clothes} come from the build's paint prompts in Race; the text typed in the bar is added. The fix repaints only the marked area, inside the part's template shape, with the whole figure as context, then re-renders the walk.</p>
+          <div class="row"><textarea id="paFixBase" rows="3" style="flex:1"></textarea></div>
+          <div class="row"><button id="paFixSave">Save wording</button><span class="hint" id="paFixStatus"></span></div></details>
+      </div>
       <div style="min-width:270px"><b>Walk</b> <span class="hint">(the puppet's saved paint; drag to scrub)</span>
-        <div id="paWalk" style="width:256px;height:256px;background-size:2048px 256px;background-color:#c4c6cc;border-radius:4px;margin-top:4px"></div>
+        <div id="paWalk" style="width:256px;height:256px;background-size:2048px 256px;background-color:#c4c6cc;border-radius:6px;margin-top:4px"></div>
         <input id="paFrame" type="range" min="0" max="7" value="0" style="width:256px">
-        <div id="paPrev" style="margin-top:6px"></div>
         <div id="paWorn" style="margin-top:10px"></div></div>
     </div>
   </section>
@@ -1477,7 +1559,7 @@ const paG = gid => PA.groups.find(g => g.gid === gid);
 const paSelG = () => PA.sel ? paG(PA.sel.split("|")[0]) : null;
 const paSelN = () => PA.sel ? PA.sel.split("|")[1] : null;
 const paSelKey = () => PA.sel ? `${PA.view}|${PA.sel}` : null;
-const paBandsOn = () => $("paBands").checked;
+const paBandsOn = () => !!PA.bandMode;
 const paEK = () => { const k = paSelKey(); return k && paBandsOn() && PA.parts[k + "#b"] ? k + "#b" : k; };   // the canvas the tools edit
 const paShort = id => id.replace(/^item\./, "").replace(/_/g, " ");
 const paGroupDirty = gid => Object.keys(PA.dirty).some(k => PA.dirty[k] && k.includes(`|${gid}|`));
@@ -1528,9 +1610,25 @@ function paBandPng(key) {   // display canvas -> the bands PNG the server wants 
 }
 function paLevels() {   // the level picker (the puppet's skin key names the painted colour of each level)
   const g = paSelG(), key = g && g.kind === "paint" ? g.doc.skinKey : null, n = (key && key.length) || PA_LEVELS; PA.lv = Math.min(PA.lv, n - 1);
-  $("paLv").innerHTML = PA_BAND.slice(0, n).map((c, i) => `<button data-lv="${i}" title="level ${i + 1}${key ? " (painted " + rgb2hex(key[i]) + ")" : ""}" style="width:30px;padding:2px 0;background:${c};color:${i > 2 ? "#222" : "#fff"};${i === PA.lv ? "outline:2px solid var(--accent)" : ""}">${i + 1}</button>`).join("");
+  $("paLv").innerHTML = PA_BAND.slice(0, n).map((c, i) => `<button data-lv="${i}" class="${i === PA.lv ? "on" : ""}" title="level ${i + 1} (key ${i + 1})${key ? ": painted " + rgb2hex(key[i]) : ""}" style="background:${c};color:${i > 2 ? "#222" : "#fff"}">${i + 1}</button>`).join("");
   $("paLv").querySelectorAll("[data-lv]").forEach(b => b.onclick = () => { PA.lv = +b.dataset.lv; paLevels(); });
+  paSwatch();
 }
+function paSwatch() { $("paSwatch").style.background = paBandsOn() ? PA_BAND[PA.lv] : $("paColor").value;
+  $("paSwatch").parentElement.title = paBandsOn() ? `Ramp level ${PA.lv + 1} (keys 1-5)` : "Colour"; }
+const PA_TOOLS = { brush: ["Brush", true, "paints the selected layer"], eraser: ["Eraser", true, ""], heal: ["Heal", true, "fills the stroke from the colours around it"],
+  outline: ["Outline", false, "the even outline colour and weight"], move: ["Move", false, "drag the selected layer; arrows nudge 1 px, Shift 10"],
+  ramp: ["Ramp bands", true, ""], pick: ["Eyedropper", false, "click a colour (Alt-click with any tool)"], mask: ["AI fix area", true, ""] };
+function paCtx() {   // the bar along the top of the canvas: what the chosen tool needs
+  const t = PA_TOOLS[PA.tool] || ["", false, ""], bands = paBandsOn();
+  $("paToolName").textContent = bands && PA.tool !== "ramp" ? `${t[0]} · bands` : t[0];
+  $("paSizeGrp").hidden = !t[1]; $("paLvGrp").hidden = !bands; $("paFixGrp").hidden = PA.tool !== "mask";
+  $("paToolHint").textContent = bands ? (PA.tool === "ramp" ? "" : PA.tool === "heal" ? "smooths the bands" : "picks a level") : t[2];
+  document.querySelectorAll("#paRail [data-tool]").forEach(b => { b.classList.toggle("on", b.dataset.tool === PA.tool); b.classList.toggle("on2", b.dataset.tool === "ramp" && bands && PA.tool !== "ramp"); });
+  paSwatch();
+}
+function paZoomBy(f) { const vw = PA.vw, s = [PA_N / 2, PA_N / 2], z = Math.min(8, Math.max(1, vw.z * f));
+  if (z === 1) { vw.ox = vw.oy = 0; } else { vw.ox = s[0] - (s[0] - vw.ox) * z / vw.z; vw.oy = s[1] - (s[1] - vw.oy) * z / vw.z; } vw.z = z; paDraw(); }
 function paSize() { const cv = $("paCv"), css = +$("paZoom").value, px = Math.round(css * (window.devicePixelRatio || 1));
   cv.style.width = css + "px"; if (cv.width !== px) { cv.width = px; cv.height = px; } }
 function paOrder(v) {   // the draw order, bottom first: [group, layer]
@@ -1547,6 +1645,7 @@ function paDraw() { if (!paRaf) paRaf = requestAnimationFrame(() => { paRaf = 0;
 function paDrawNow() {
   const cv = $("paCv"), x = cv.getContext("2d"), k = cv.width / PA_N, vw = PA.vw;
   x.setTransform(1, 0, 0, 1, 0, 0); x.fillStyle = "#c4c6cc"; x.fillRect(0, 0, cv.width, cv.height);
+  $("paZv").textContent = Math.round(vw.z * 100) + "%";
   if (!paG("puppet")) return;
   x.setTransform(k * vw.z, 0, 0, k * vw.z, k * vw.ox, k * vw.oy); x.imageSmoothingEnabled = vw.z < 2.5;
   const top = $("paTop").checked && PA.sel, bands = paBandsOn();
@@ -1631,8 +1730,12 @@ function paRow(g, n, depth, kids) {
     + `<input type="checkbox" data-ply="${id}" ${PA.hidden.has(id) ? "" : "checked"} style="width:auto;margin:0 6px 0 0">${label}`
     + `${PA.dirty[k] || PA.dirty[k + "#b"] ? " •" : ""}${PA.parts[k + "#b"] ? ' <span class="hint" title="has ramp bands">≡</span>' : ""}${edited ? ' <span class="hint" title="bands edited by hand">✎</span>' : ""}${empty ? ' <span class="hint">(empty)</span>' : ""}</div>`;
 }
-function paStatus(t) { const n = Object.values(PA.dirty).filter(Boolean).length; $("paStatus").textContent = t || (n ? `${n} unsaved layer${n > 1 ? "s" : ""}` : ""); }
-function paSetTool(t) { PA.tool = t; document.querySelectorAll("#paTools [data-tool]").forEach(b => b.classList.toggle("on", b.dataset.tool === t)); paDraw(); }
+function paStatus(t) { const n = Object.values(PA.dirty).filter(Boolean).length, msg = (t || (n ? `${n} unsaved layer${n > 1 ? "s" : ""}` : "")).trim();
+  $("paStatus").textContent = msg; $("paStatusBox").classList.toggle("off", !msg);
+  $("paSave").classList.toggle("dirty", n > 0); $("paSave").title = n ? `Save ${n} edited layer${n > 1 ? "s" : ""} (puppet, items, hair, face)` : "Save (nothing edited yet)"; }
+function paSetTool(t) {   // Ramp turns the band view on (Heal and Eyedropper then work on the bands); the painting tools turn it off
+  if (t === "ramp") PA.bandMode = true; else if (!["heal", "pick"].includes(t)) PA.bandMode = false;
+  PA.tool = t; paCtx(); paLevels(); paDraw(); }
 function paPos(e) { const r = $("paCv").getBoundingClientRect(), s = [(e.clientX - r.left) * PA_N / r.width, (e.clientY - r.top) * PA_N / r.height];
   return { s, w: [(s[0] - PA.vw.ox) / PA.vw.z, (s[1] - PA.vw.oy) / PA.vw.z] }; }
 function paPick(p) {   // the colour (bands on: the level) under the cursor, from the visible layers (selected on top)
@@ -1641,7 +1744,7 @@ function paPick(p) {   // the colour (bands on: the level) under the cursor, fro
   if ($("paTop").checked && PA.sel) seq = [...seq.filter(s => s !== PA.sel), PA.sel];
   for (const s of seq.reverse()) { const k = `${PA.view}|${s}`, b = paBandsOn() && PA.parts[k + "#b"], c = PA.parts[k];
     if (b && at(b)[3] > 127) { const d = at(b); PA.lv = paBandLevel(d[0], d[1], d[2]); paLevels(); return; }
-    if (c && at(c)[3] > 127) { if (paBandsOn()) return; const d = at(c); $("paColor").value = "#" + [d[0], d[1], d[2]].map(v => v.toString(16).padStart(2, "0")).join(""); return; } }
+    if (c && at(c)[3] > 127) { if (paBandsOn()) return; const d = at(c); $("paColor").value = "#" + [d[0], d[1], d[2]].map(v => v.toString(16).padStart(2, "0")).join(""); paSwatch(); return; } }
 }
 function paStamp(ctx, a, b, r) {   // round stamps from a to b
   const d = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.ceil(d / Math.max(1, r * 0.35)));
@@ -1673,7 +1776,7 @@ function paBegin(p) {
 }
 function paExtend(p) {
   const st = PA.stroke, r = PA.tool === "outline" ? 2 : +$("paSize").value / 2, L = st.layer.getContext("2d");
-  L.fillStyle = PA.tool === "outline" ? PA_LINE : (PA.tool === "brush" ? (st.key.endsWith("#b") ? PA_BAND[PA.lv] : $("paColor").value) : "#fff");
+  L.fillStyle = PA.tool === "outline" ? PA_LINE : (PA.tool === "brush" || PA.tool === "ramp" ? (st.key.endsWith("#b") ? PA_BAND[PA.lv] : $("paColor").value) : "#fff");
   paStamp(L, st.last, p, r); st.last = p;
   st.box = [Math.min(st.box[0], p[0] - r), Math.min(st.box[1], p[1] - r), Math.max(st.box[2], p[0] + r), Math.max(st.box[3], p[1] + r)];
   paApplyPreview();
@@ -1690,7 +1793,7 @@ function paApplyPreview() {   // live result of the stroke so far (from the snap
   const st = PA.stroke, part = PA.parts[st.key], ctx = part.getContext("2d");
   ctx.putImageData(st.before, 0, 0);
   if (PA.tool === "eraser") { ctx.globalCompositeOperation = "destination-out"; ctx.drawImage(st.layer, 0, 0); ctx.globalCompositeOperation = "source-over"; }
-  else if (PA.tool === "brush" || PA.tool === "outline") ctx.drawImage(paClampTo(st.layer, st.key), 0, 0);
+  else if (PA.tool === "brush" || PA.tool === "ramp" || PA.tool === "outline") ctx.drawImage(paClampTo(st.layer, st.key), 0, 0);
   paDraw();
 }
 function paHeal(st) {   // fill the stroke from the colours around it (diffusion from the layer's own pixels outside the stroke)
@@ -1746,8 +1849,7 @@ function paWire() {
     if (PA.tool === "mask") { PA.maskLast = p.w; paMaskStroke(p.w, p.w); return; }
     if (!PA.sel || !PA.parts[paSelKey()]) { paStatus(" select a layer first (click its name)"); return; }
     if (paBandsOn()) {
-      if (!PA.parts[paSelKey() + "#b"]) { paStatus(` ${PA.sel.replace("|", " · ")} has no ramp bands here (turn Ramp bands off to paint it)`); return; }
-      if (!["brush", "heal"].includes(PA.tool)) { paStatus(" ramp bands: Brush paints a level, Heal smooths, Eyedropper picks (turn Ramp bands off to paint)"); return; } }
+      if (!PA.parts[paSelKey() + "#b"]) { paStatus(` ${PA.sel.replace("|", " · ")} has no ramp bands in this view (pick a banded layer: ≡ in Layers)`); return; } }
     if (PA.tool === "move") { paMoveStart(p.w); return; }
     if (PA.hidden.has(PA.sel) || PA.ghide.has(paSelG().gid)) { paStatus(" the selected layer is hidden"); return; }
     paBegin(p.w); };
@@ -1766,7 +1868,7 @@ function paWire() {
     if (e.code === "Space") { e.preventDefault(); PA.space = true; return; }
     const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
     if (arrows[e.key] && PA.tool === "move") { e.preventDefault(); const st = e.shiftKey ? 10 : 1; paNudge(arrows[e.key][0] * st, arrows[e.key][1] * st); return; }
-    const tools = { b: "brush", e: "eraser", h: "heal", o: "outline", i: "pick", m: "mask", v: "move" };
+    const tools = { b: "brush", e: "eraser", h: "heal", o: "outline", i: "pick", m: "mask", v: "move", r: "ramp" };
     if (tools[k] && !e.ctrlKey && !e.metaKey) paSetTool(tools[k]);
     if (paBandsOn() && /^[1-9]$/.test(k) && +k <= PA_BAND.length) { PA.lv = +k - 1; paLevels(); }
     if (k === "[" || k === "]") { $("paSize").value = Math.max(1, Math.min(80, +$("paSize").value + (k === "]" ? 2 : -2))); $("paSizeV").textContent = $("paSize").value; paDraw(); }
@@ -1775,12 +1877,10 @@ function paWire() {
 }
 // ---- previews: the puppet's walk (its saved paint) and, with items or hair on, the outfit (saved layers on the build's approved paint)
 function paPreview() {
-  const P = paG("puppet"); if (!P) { $("paWalk").style.backgroundImage = "none"; $("paPrev").innerHTML = ""; return; }
+  const P = paG("puppet"); if (!P) { $("paWalk").style.backgroundImage = "none"; return; }
   const d = P.doc, t = `&t=${d.stamp}`, strip = `walkstrip_${PA.view}.png`;
   $("paWalk").style.backgroundImage = d.files.includes(strip) ? `url("${img(d.dir + "/" + strip)}${t}")` : "none";
   $("paWalk").style.backgroundPosition = `-${+$("paFrame").value * 256}px 0`;
-  $("paPrev").innerHTML = ["rest_front.png", "rest_back.png"].filter(f => d.files.includes(f)).map(f =>
-    `<a href="${img(d.dir + "/" + f.replace("rest_", "walk_").replace(".png", ".gif"))}${t}" target="_blank"><img src="${img(d.dir + "/" + f)}${t}" style="width:126px;background:#c4c6cc;border-radius:3px"></a>`).join(" ");
 }
 let paWornTimer = 0;
 function paWornSoon() { clearTimeout(paWornTimer); paWornTimer = setTimeout(() => paWorn().catch(e => { $("paWorn").innerHTML = `<span class="err">${e.message}</span>`; }), 250); }
@@ -1957,11 +2057,13 @@ async function paFix() {
 }
 async function initParts() {
   if (PA.inited) return; PA.inited = true;
-  paLoadUi(); paSize(); paWire(); paSetTool("brush");
-  document.querySelectorAll("#paTools [data-tool]").forEach(b => b.onclick = () => paSetTool(b.dataset.tool));
+  paLoadUi(); paSize(); paWire(); paSetTool("brush"); paStatus();
+  document.querySelectorAll("#paRail [data-tool]").forEach(b => b.onclick = () => paSetTool(b.dataset.tool));
   $("paSize").oninput = () => { $("paSizeV").textContent = $("paSize").value; paDraw(); };
-  ["paClamp", "paTop", "paGhost"].forEach(id => $(id).onchange = paDraw);
-  $("paBands").onchange = () => { if ($("paBands").checked && !["brush", "heal", "pick"].includes(PA.tool)) paSetTool("brush"); paLevels(); paDraw(); };
+  document.querySelectorAll("#paRail [data-toggle]").forEach(b => { const box = $(b.dataset.toggle); b.classList.toggle("on", box.checked);
+    b.onclick = () => { box.checked = !box.checked; b.classList.toggle("on", box.checked); paDraw(); }; });
+  $("paColor").oninput = () => { if (paBandsOn()) paSetTool("brush"); paSwatch(); };
+  $("paZIn").onclick = () => paZoomBy(1.25); $("paZOut").onclick = () => paZoomBy(0.8);
   $("paBandReset").onclick = guard(paBandReset);
   $("paZoom").onchange = () => { paSize(); paDraw(); };
   $("paReset").onclick = () => { PA.vw = { z: 1, ox: 0, oy: 0 }; paDraw(); };
