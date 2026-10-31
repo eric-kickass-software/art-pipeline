@@ -294,7 +294,7 @@ def cmd_item_export(a):
 def cmd_export(a):
     from . import item_export as ie, unity_export
     if not a.check:   # everything: the race's puppet, then every game item with approved art
-        print(unity_export.export(a.race)); cmd_item_export(argparse.Namespace(items=None, race=a.race, size=512))
+        print(unity_export.export(a.race)); cmd_item_export(argparse.Namespace(items=None, race=a.race, size=None))
     problems = ie.check()
     for line in problems or [f"check: ok ({ie.art_root()})"]:
         print(line)
@@ -314,8 +314,15 @@ def cmd_backup(a):
     print(f"{'would copy' if a.dry_run else 'copied'} {r['files']} files, {r['bytes'] / 1e6:.0f} MB -> {r['dest']}")
 
 
+def cmd_canvas_migrate(a):
+    from .canvas_migrate import migrate
+    r = migrate(dry=a.dry_run)
+    if a.dry_run:
+        print("would migrate: " + ", ".join(f"{g} {n}" for g, n in r.items() if n and g != "unknown"))
+
+
 def main(argv=None):
-    ART = config.project().export("legacy")   # the old CLI writers' root (Assets/Art, not read by the game)
+    ART =config.project().export("legacy")   # the old CLI writers' root (Assets/Art, not read by the game)
     p = argparse.ArgumentParser(prog="hdart", description=__doc__)
     sub = p.add_subparsers(required=True)
 
@@ -425,12 +432,12 @@ def main(argv=None):
 
     pe = sub.add_parser("puppet-export", help="export a race's painted puppet, hair, faces and ramps to Unity (StreamingAssets)")
     pe.add_argument("race", nargs="?", default="human")
-    pe.add_argument("--size", type=int, default=512, help="canvas px (the paint's 1024 px rest pose scaled to this)")
+    pe.add_argument("--size", type=int, help="canvas px (default: the rig canvas, 576; the paint's 1152 px rest pose scaled to this)")
     pe.set_defaults(fn=cmd_puppet_export)
 
     ie_ = sub.add_parser("item-export", help="export game items (Item Workshop pieces) as art packs + intake files for new ids")
     ie_.add_argument("items", nargs="*", help="game item ids (default: every one with approved art)")
-    ie_.add_argument("--race", default="human"); ie_.add_argument("--size", type=int, default=512)
+    ie_.add_argument("--race", default="human"); ie_.add_argument("--size", type=int)
     ie_.set_defaults(fn=cmd_item_export)
 
     ex = sub.add_parser("export", help="export the puppet and every item to the game; --check only validates what's there")
@@ -446,6 +453,10 @@ def main(argv=None):
     bk.add_argument("--dest", help="backup root (default: config.toml [paths] backups)")
     bk.add_argument("--dry-run", action="store_true", help="only count what would be copied")
     bk.set_defaults(fn=cmd_backup)
+
+    cm = sub.add_parser("canvas-migrate", help="move stored puppet art into the 576 px rig canvas (headroom above the head); backs up first")
+    cm.add_argument("--dry-run", action="store_true", help="only count what would change")
+    cm.set_defaults(fn=cmd_canvas_migrate)
 
     a = p.parse_args(argv)
     a.fn(a)

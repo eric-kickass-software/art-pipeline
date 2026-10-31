@@ -170,7 +170,7 @@ PROMPT_COMPLETE = ("{style}. A parts sheet for 2D cutout animation: {item}, cut 
 # ----------------------------------------------------------------------------- zones
 
 def zone_masks(sp, view, parts, zones):
-    """{part: bool mask (1024 rest pose)} of where the item may sit on each part."""
+    """{part: bool mask (rest-pose canvas)} of where the item may sit on each part."""
     V = sp["views"][view]; out = {}
     yy, xx = np.mgrid[:N, :N]
     for z in zones:
@@ -200,7 +200,7 @@ def zone_masks(sp, view, parts, zones):
     return out
 
 
-ZONES = ai_kit.ROOT / "specs" / "item_zones"   # painted zones (Item Workshop zone editor), one 1024 px mask per item and view
+ZONES = ai_kit.ROOT / "specs" / "item_zones"   # painted zones (Item Workshop zone editor), one rest-pose canvas mask (1152 px) per item and view
 
 
 def mask_path(item_id, view, sex=None):
@@ -708,7 +708,7 @@ def dressed(build, worn, view, hair=None, painted=False):
 
 
 def render(build, worn, hair_fn=None, frames=8, painted=False):
-    """{view: (rest RGB 512, [walk frames RGB 512])} of a build wearing `worn`; hair_fn(view) -> hair RGBA or None."""
+    """{view: (rest RGB, [walk frames RGB]) at rig size (576)} of a build wearing `worn`; hair_fn(view) -> hair RGBA or None."""
     out = {}
     for v in VIEWS:
         sp, parts = dressed(build, worn, v, hair_fn(v) if hair_fn else None, painted)
@@ -800,7 +800,7 @@ def resolve(race, item_id, build, st=None, doc=None):
 
 
 def previews(race, item_id, cid, ramps=None):
-    """prev_<build>_<view>.png (512 px): the candidate alone on each of the race's builds."""
+    """prev_<build>_<view>.png (rig size, 576 px): the candidate alone on each of the race's builds."""
     d = out_dir(race, item_id) / cid
     for b in _builds(race):
         try:
@@ -911,7 +911,7 @@ def _write_spec(doc):
 
 
 def zone_doc(race, item_id, build, view):
-    """For the zone editor: the bare puppet of one view (rest pose, 1024 px) and the zone mask it edits (the build's
+    """For the zone editor: the bare puppet of one view (rest-pose canvas) and the zone mask it edits (the build's
     sex's own zone when painted, else the shared one, else the preset zones)."""
     doc = spec(); it = doc["items"][item_id]; _, sp, parts = pf.base(build); sex = build.split(".")[1]
     _, Z = zones_for(sp, view, parts[view], item_id, it, sex)

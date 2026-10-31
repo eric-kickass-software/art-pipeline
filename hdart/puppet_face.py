@@ -1,7 +1,7 @@
 """Face tab: racial hair and faces on the painted puppets (2026-10-24, v1).
 
 Male and female are painted on the same generic Template, so their heads have the same shape in the same place: a
-hairstyle or face made on one build fits every build of the race. Layers are 1024 px RGBA in the rest pose (the paint
+hairstyle or face made on one build fits every build of the race. Layers are 1152 px RGBA in the rest pose (the paint
 parts' canvas) and ride on the head bone.
 
   hair   FLUX paints hair around the head of the race's painted puppet (approved Paint of the chosen build, else its
@@ -119,7 +119,7 @@ def _head_box(parts, grow_up=0.45, grow_side=0.3, grow_down=0.55):
 
 
 def face_ellipse(sp, scale=1.0):
-    """The face area (an ellipse around the eyes and mouth, from the Template's face guides) as a 1024 px mask."""
+    """The face area (an ellipse around the eyes and mouth, from the Template's face guides) as a rest-pose canvas mask."""
     fc = sp["views"]["front"]["shapes"]["head"].get("face")
     if not fc:
         raise ValueError("The Template has no face guides (Template tab).")
@@ -372,7 +372,7 @@ def blank_face(head, ellipse, key=None):
 
 
 def _layer(before, after, region, thresh, min_px, key=None, skin_far=40, touch=None, open_=True):
-    """The pixels FLUX changed inside `region` as an RGBA layer (1024 px); with a skin key, only pixels that aren't
+    """The pixels FLUX changed inside `region` as an RGBA layer (rest-pose canvas); with a skin key, only pixels that aren't
     skin (so re-shaded skin stays out of the layer); with `touch`, only pieces that touch that mask (hair grows from
     the head)."""
     d = np.abs(after.astype(int) - before.astype(int)).max(-1)
@@ -401,7 +401,7 @@ def _layer(before, after, region, thresh, min_px, key=None, skin_far=40, touch=N
 # ----------------------------------------------------------------------------- generation
 
 def _crop_pass(comp, region, box, prompt, seed, denoise, tag, refs=()):
-    """Paint `region` of the composite inside `box` (resized to 1024), return the painted full-size RGB."""
+    """Paint `region` of the composite inside `box` (resized to the 1024 px FLUX sheet), return the painted full-size RGB."""
     bg = Image.new("RGBA", (N, N), (255, 255, 255, 255)); bg.alpha_composite(comp)
     full = bg.convert("RGB"); side = box[2] - box[0]
     init = full.crop(box).resize((ppt.SHEET, ppt.SHEET), Image.LANCZOS)
@@ -557,9 +557,10 @@ def _make_one(race, kind, sex, build, cid, sp, parts, P, d, fid, sd):
         for v, lv in levels.items():   # hair: its cel levels (R = level 0..4, 254 = outline; A = hair), coloured by a hair ramp
             Image.fromarray(lv).save(d / f"levels_{v}.png")
         keyed = {v: int((lv[..., 3] > 0).sum()) for v, lv in levels.items()}   # pixels the colour key found (0 = not recolourable)
+        clipped = [v for v, L in layers.items() if (L[:2, :, 3] > 0).any()]    # cut flat by the canvas top (shown with a warning)
         prompt = P[kind] if kind == "face" else P["hair"]
         store.write_meta(d, kind, seed=sd, prompts={kind: prompt}, inputs={"paint": cid}, params={"sex": sex},
-                         race=race, kind=kind, on=build, paint=cid, keyed=keyed, prompt=prompt)
+                         race=race, kind=kind, on=build, paint=cid, keyed=keyed, prompt=prompt, **({"clipped": clipped} if clipped else {}))
         ppt._progress(d, of, of, "previews on male and female", sd)
         previews(race, kind, fid)
 
@@ -587,7 +588,7 @@ def face_from_paint(race, build, cid):
 
 
 def previews(race, kind, fid, ramp=None, save=True):
-    """prev_<sex>_<view>.png (512 px, the layer on that sex's painted puppet) and head close-ups; hair is coloured with
+    """prev_<sex>_<view>.png (rig size, 576 px: the layer on that sex's painted puppet) and head close-ups; hair is coloured with
     `ramp` (a hair ramp name; default the first of the hair group). save=False returns data URLs instead (Face tab's
     hair colour picker)."""
     import base64, io
@@ -678,7 +679,7 @@ def _pick(race, kind):
 
 
 def ramp_preview(build):
-    """Ramps tab: a build's painted puppet wearing the race's hair and face, front and back, as transparent 512 px PNGs,
+    """Ramps tab: a build's painted puppet wearing the race's hair and face, front and back, as transparent rig-size (576 px) PNGs,
     with three level maps (R = level, A = mask): skin (measured on both views together; hair and irises excluded), hair
     (254 = its outline) and irises, so each group's ramp colours its own layer."""
     import base64, io
@@ -771,7 +772,7 @@ def levels_from_layer(kind, L, sp=None):
 
 
 def save_layer(race, kind, fid, view, png):
-    """An edited layer from the Parts editor (PNG data URL / bytes, 1024 px): the first edit keeps the original
+    """An edited layer from the Parts editor (PNG data URL / bytes, the rest-pose canvas): the first edit keeps the original
     (layer_orig_<view>.png); levels and previews are recomputed."""
     import base64, io
     d = out_dir(race, kind) / fid

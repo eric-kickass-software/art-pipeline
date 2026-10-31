@@ -405,7 +405,7 @@ def finish(V, raw):
 # ----------------------------------------------------------------------------- candidates
 
 def _parts_tuple(spec, view, imgs):
-    """{name: (rgba 1024, guides (unused), pivot 512)} as the template renderer returns it, for the rig previews."""
+    """{name: (rgba N, guides (unused), pivot in rig px)} as the template renderer returns it, for the rig previews."""
     V = spec["views"][view]
     piv = {n: pt._joint(V, L["from"]) for n, L in V["limbs"].items()}
     piv["torso"], piv["head"] = pt._joint(V, "pelvis"), pt._joint(V, "neck")
@@ -501,7 +501,7 @@ def _paint_one(build, d, cid, sd, spec, rendered, lays, ramp, P, guide):
 def _spec_for(d):
     """The template a candidate was painted on (pivots/joints match its parts); the current one if not stored."""
     f = d / "template.json"
-    return json.loads(f.read_text(encoding="utf-8")) if f.exists() else pt.load()
+    return pt.checked(json.loads(f.read_text(encoding="utf-8")), f) if f.exists() else pt.load()
 
 
 def candidates(build):
@@ -529,7 +529,7 @@ def state(build):
 
 def ramp_preview(build):
     """Ramps tab: the build's approved paint (else its newest) assembled in the rest pose, front and back, as transparent
-    512 px PNGs, plus skin level maps (R = level, A = skin) measured on both views together, so front and back share
+    rig-size (576 px) PNGs, plus skin level maps (R = level, A = skin) measured on both views together, so front and back share
     one set of cel levels."""
     import base64, io
     st = state(build)
@@ -620,7 +620,7 @@ def ensure_bands(build, cid):
 
 
 def bands_composite(d, spec, view):
-    """A view's skin levels in the rest pose (1024 px, -1 = not skin), from the parts' bands."""
+    """A view's skin levels in the rest pose (rest-pose canvas, -1 = not skin), from the parts' bands."""
     cv = Image.new("RGBA", (pp.PX * S, pp.PX * S))
     for n in spec["views"][view]["order"]:
         cv.alpha_composite(Image.open(d / "bands" / view / f"{n}.png").convert("RGBA"))
@@ -693,7 +693,7 @@ def parts_doc(build, cid):
 
 
 def save_parts(build, cid, view, pngs):
-    """Write edited part images (name -> PNG bytes, 1024 px RGBA); the first edit keeps the originals in parts_orig/."""
+    """Write edited part images (name -> PNG bytes, rest-pose canvas RGBA); the first edit keeps the originals in parts_orig/."""
     import base64, io
     d = out_dir(build) / cid
     if view not in VIEWS or not d.exists():

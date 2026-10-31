@@ -11,7 +11,7 @@ Unity puppet (Presentation/Characters/PuppetArt.cs) builds a rig from it and the
 
 Every image comes with an index map (`*.idx.png`): R = cel level (0 = darkest; 254 = a hair outline), G = colour
 channel (0 = keep the painted colour, 1 = skin, 2 = hair, 3 = eyes), A = mask. The game colours channel pixels from
-the chosen ramp, so one export serves every skin tone, hair colour and eye colour. Canvas = the paint's 1024 px rest
+the chosen ramp, so one export serves every skin tone, hair colour and eye colour. Canvas = the paint's 1152 px rest
 pose scaled to `size`, y down, origin top left; rects are [x, y, w, h] in canvas px.
 """
 import json, shutil, time
@@ -29,6 +29,7 @@ def out_root():
 SEXES = ("male", "female")
 VIEWS = ("front", "back")
 SKIN, HAIR, EYES = 1, 2, 3
+CANVAS = pf.N // ppt.S   # the default export canvas: the rig canvas (576), the same px density as before the headroom
 # Which joint a part turns around, and the joint at its far end (both in template.json's joints).
 JOINT = {"upper": ("pivot", "mid"), "lower": ("mid", "end"), "hand": ("end", "tip")}
 
@@ -99,7 +100,7 @@ def _body(race, sex, size, has_faces, d):
         cid, sp, parts = pf.base(f"{race}.{sex}")
     except ValueError:
         return None
-    k = size / (pf.N / ppt.S)   # rig px (512) -> canvas px
+    k = size / (pf.N / ppt.S)   # rig px (576) -> canvas px
     for v in VIEWS:             # the face comes from the face set, so the painted head goes blank
         if has_faces and v == "front":
             parts[v]["head"] = pf.blank_face(parts[v]["head"], pf.face_ellipse(sp, 1.2) & pf.inner_head(parts[v]["head"]))
@@ -157,8 +158,9 @@ def _layers(race, kind, size, d):
     return out
 
 
-def export(race="human", size=512):
+def export(race="human", size=None):
     """Export a race's puppet art into the game; returns the folder."""
+    size = size or CANVAS
     d = out_root() / race
     if d.exists():
         shutil.rmtree(d)   # only this race's export folder: stale parts / layers go

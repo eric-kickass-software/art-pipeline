@@ -2,7 +2,8 @@
 template style), so nothing is ever cut from a figure. Vault: Hearthdelve - 2D Puppet Rig Research, "Building the
 template itself" (2026-10-23).
 
-The template is numbers, not pixels (specs/puppet_template.json), per view (front-3/4, back-3/4), in 512 px rig space:
+The template is numbers, not pixels (specs/puppet_template.json), per view (front-3/4, back-3/4), in 576 px rig space
+(puppet.PX; 512 until 2026-10-31, when hdart canvas-migrate moved everything by puppet.PAD for headroom):
   joints  shoulder/elbow/wrist/fingertip, hip/knee/ankle/toe (+ R = the shoulder/hip circle), neck, pelvis, crotch
   limbs   per segment (upper, lower, hand/foot): a bone between two joints + an outline of points in the bone's own
           frame ([t, n]: t = 0 at the start joint, 1 at the end joint; n = px to the side), joined by a smooth closed
@@ -13,7 +14,7 @@ The template is numbers, not pixels (specs/puppet_template.json), per view (fron
   face    front head guides (Live2D-style): the two eye centres, the mouth and the face's centre line
 
     measure(build)          -> spec measured from an approved build's puppet rig (hand-fixed joints included)
-    render(spec, view, s)   -> {part: (rgba, guides rgba, pivot)} at 512*s px, clay shaded, outlined
+    render(spec, view, s)   -> {part: (rgba, guides rgba, pivot)} at PX*s px, clay shaded, outlined
     preview(spec)           -> writes sprites/ai/puppet_template/ (parts, guides, sheets, walk previews)
 """
 import json, math, time
@@ -318,7 +319,14 @@ def measure(build="human.unisex", save=True):
 
 
 def load():
-    return json.loads(SPEC.read_text(encoding="utf-8"))
+    return checked(json.loads(SPEC.read_text(encoding="utf-8")), SPEC)
+
+
+def checked(spec, where):
+    """A spec in the current rig canvas (px = PX); older ones (512, no headroom) need `hdart canvas-migrate` first."""
+    if spec.get("px", 512) != PX:
+        raise ValueError(f"{where} is in the old {spec.get('px', 512)} px rig canvas: run `uv run hdart canvas-migrate` first.")
+    return spec
 
 
 def _pt(v, what):
@@ -447,7 +455,7 @@ def _waist(V, s, torso_cov):
 
 
 def render(spec, view, s=2):
-    """Every part as its own whole image on the rig canvas (512*s px): (rgba, guides rgba, pivot in 512 space)."""
+    """Every part as its own whole image on the rig canvas (PX*s px): (rgba, guides rgba, pivot in rig px)."""
     V = spec["views"][view]; N = PX * s
     covs, thick, bones = {}, {}, {}
     for name, L in V["limbs"].items():
@@ -543,7 +551,7 @@ def _exploded(parts, order, guides=True):
 
 
 def rig_from(B, parts):
-    """Swap a puppet rig's pieces for the template's parts (512 px), so the existing walk can drive them."""
+    """Swap a puppet rig's pieces for the template's parts (rig size), so the existing walk can drive them."""
     def at512(rgba):  # hard alpha: the rig copies every pixel with alpha > 0, so soft edges would leave halos
         a = np.asarray(Image.fromarray(rgba).resize((PX, PX), Image.LANCZOS)).copy()
         a[..., 3] = np.where(a[..., 3] > 127, 255, 0)
@@ -572,7 +580,7 @@ def preview(spec=None, s=2, frames=8):
         imgs = [pp.on_bg(pp.render(B2, v, i / frames)) for i in range(frames)]
         _save(imgs[0], out / f"walk_{v}.gif", save_all=True, append_images=imgs[1:], duration=120, loop=0)
         art_p = ai_kit.AI_DIR / frm[v] if frm.get(v) else None
-        art = Image.open(art_p).convert("RGB").resize((PX, PX)) if art_p and art_p.exists() else Image.new("RGB", (PX, PX), pp.BG)
+        art = pp.framed(Image.open(art_p).convert("RGB")) if art_p and art_p.exists() else Image.new("RGB", (PX, PX), pp.BG)
         res[v] = {"rest": rest, "guides": rest_g, "walk": imgs[2], "art": art}
     T = 400; f = ImageFont.load_default(size=18)
     cols = (("art", "approved unisex art"), ("rest", "template: rest pose"), ("guides", "template + guides"), ("walk", "template on the walk"))

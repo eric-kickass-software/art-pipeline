@@ -17,7 +17,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 from . import ai_kit, jobs, workshop as ws
 
-PX = 512
+PX = 576                  # the rig canvas (rest pose); was 512 until 2026-10-31
+PAD = (32, 64)            # where the old 512 frame (and the 512 px mannequins) sits in it: headroom for hair and helmets
 BG = (196, 198, 204)
 yy, xx = np.mgrid[:PX, :PX]
 FWD = {"front": None, "back": None}  # set below (needs unit())
@@ -273,10 +274,18 @@ def ang(v):
 
 # ----------------------------------------------------------------------------- build one view
 
+def framed(img):
+    """A 512 px mannequin on the PX rig canvas at PAD (padded with its own corner colour)."""
+    if img.size == (PX, PX):
+        return img
+    out = Image.new(img.mode, (PX, PX), img.getpixel((0, 0))); out.paste(img, PAD)
+    return out
+
+
 def _build(img, view, hip_frac, overrides=None):
     """Test 3: rounded joints with pivots inside them, torso complete underneath, chest never on an arm,
     shorts stay on the torso (legs start inside them, drawn under the torso)."""
-    img = img.convert("RGB")
+    img = framed(img.convert("RGB"))
     a = np.asarray(img); ai = a.astype(int)
     m, th, J, C, chin = skeleton(img)
     P = segment_parts(m, J, C, chin, th)
@@ -924,7 +933,7 @@ def template(build, frames=8):
 
 
 def set_joints(build, view, joints):
-    """Hand-placed joints for one view: {limb: {pivot, mid, end}} in 512-px art coords; None clears them. The next
+    """Hand-placed joints for one view: {limb: {pivot, mid, end}} in rig px (puppet.PX canvas); None clears them. The next
     template build uses them instead of the detected ones."""
     with ws.edit_state() as s:
         p = s["builds"].get(build, {}).setdefault("puppet", {})

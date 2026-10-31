@@ -52,6 +52,13 @@ for f in ("prev_male_front.png", "prev_female_back.png", "head_female.png"):
 # the hair is cut by colour: no skin in it (the head under it stays the paint's)
 lay = np.asarray(Image.open(d / "layer_front.png")); hm = lay[..., 3] > 0
 assert (lay[hm][:, 1].astype(int) - lay[hm][:, 0]).mean() > 60   # green-dominant (outline pixels aside)
+# headroom: the hair grows above the head and stays clear of the canvas top (no flat cut, no `clipped` flag)
+_, _, parts = pf.base("human.male")
+for v in ("front", "back"):
+    top = np.nonzero(np.asarray(Image.open(d / f"layer_{v}.png"))[..., 3].any(1))[0].min()
+    head_top = np.nonzero((parts[v]["head"][..., 3] > 127).any(1))[0].min()
+    assert 0 < top < head_top - 20, (v, top, head_top)
+assert "clipped" not in meta
 
 f = pf.generate("human", "face", "female", n=1, seed=5)[0]
 fd = pf.out_dir("human", "face") / f
