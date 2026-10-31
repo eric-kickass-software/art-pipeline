@@ -353,6 +353,17 @@ tab is gone: its descriptor groups are there, its mannequin clothing / builds / 
      Save writes the parts (the painted originals are kept in `parts_orig/`, "Revert to painted" restores them) and
      queues `paint_preview` (walk re-render; scrub its frames beside the canvas). Tests: `tests/test_puppet_paint.py`
      (fake ComfyUI stub).
+   - **Skin bands** (2026-10-31): each part's skin cel levels, made once from its paint and stored with the candidate
+     (`bands/<view>/<part>.png`: R = level, 255 = not skin, A = the part's coverage; the skin key, the levels' RGB
+     centres measured on both views, in `meta.json` `skin_key`). Made at the end of a paint job, or the first time an
+     older candidate opens (~20 s). The level map is cut from the brightness blurred inside the skin (the pale 2 px rim
+     left out), small patches merged and band edges smoothed (`workshop.skin_cut`, helpers in `hdart/levels.py`, shared
+     with the Item Workshop); the front head is measured with its painted face removed. The **Skin bands** toggle shows
+     them in display colours (one per level, darkest first) over each part: Brush paints the chosen level (1–5),
+     Heal smooths, Eyedropper picks; only skin pixels change. Saving paint (or an AI fix) redoes that part's bands
+     unless they were edited by hand (✎ in the layer list, `bands_edited` in meta); "Redo bands from paint" resets
+     the selected part (Shift: every part, new skin key); Revert to painted resets them all. The Ramps tab and the
+     Unity export read the bands. Actions `paint/bands_save {build, id, view, bands}`, `paint/bands_reset {build, id[, view, part]}`.
    - API: `race/state {race}`, `race/spec {spec}`, `race/approve {build, facing, file}`, `puppet/approve {build, on}`; queue job kind `race`
      `{race, sex, facing, n, seed}`. Tests: `tests/test_races.py` (fake ComfyUI stub).
 1. **Mannequins** tab: generate and approve the male/female/slim base (front, then a back made from the mirrored front, clamped to the
@@ -426,15 +437,15 @@ tab is gone: its descriptor groups are there, its mannequin clothing / builds / 
    - Jobs `face_gen {race, what (hair|face), sex, n, seed}`; actions `face/state|spec|set|archive|preview|ramp_preview`.
      Tests: `tests/test_puppet_face.py` (on `hdart.fake_comfy`, with a respond hook that paints the keys).
 5. **Ramps** tab (2026-10-24: painted puppets + the race's colour set): pick a **race**; the preview recolours its painted
-   **male and female** puppets (approved Paint, else the newest), front and back, full size and 64 px. Skin levels are
-   measured on the assembled rest pose of both views together (`puppet_paint.ramp_preview`, action
-   `paint/ramp_preview`). A race's **skin tone set** = every `skin` ramp tagged with it: shown as a male/female grid
+   **male and female** puppets (approved Paint, else the newest) in a 2×2 grid (male front/back on top, female below).
+   The skin levels are the parts' **skin bands** (Parts editor), composed in the rest pose (`puppet_paint.bands_composite`;
+   action `paint/ramp_preview`). A race's **skin tone set** = every `skin` ramp tagged with it: listed as name + swatches
    (click one to edit), "Add this ramp to the set" / "Remove it from the set" (tags the race and saves), "Create
    starter set" (one ramp per chosen Monk tone, `<race>_monk<n>`, default sliders; existing names are kept). Human has
    a starter set (Monk 1, 3, 5, 7, 9). The puppets wear the race's hair and face (Face tab: first in the set, else the
-   newest; `puppet_face.ramp_preview` returns skin, hair and iris level maps, hair/irises excluded from the skin levels);
-   the ramp being edited colours its own layer, the others take the race's first ramp of their group. The **<Race>'s
-   colour set** card shows the race-tagged skin, hair and eye ramps (rows), each on male and female.
+   newest; `puppet_face.ramp_preview` returns skin, hair and iris level maps, what the hair and face layers cover
+   excluded from the skin); the ramp being edited colours its own layer, the others take the race's first ramp of their
+   group. The **<Race>'s colour set** card lists the race-tagged skin, hair and eye ramps (name + swatches).
    Editing: edit the colour ramps in `specs/palettes.json` (any group; skin tones are the `skin` group). A tone is a
    5-colour ramp, darkest first; the art keeps its cel levels and the game colours them, so one mannequin and one puppet rig
    serve every tone (decided 2026-10-22, see the vault's Art Pipeline note).
@@ -442,9 +453,8 @@ tab is gone: its descriptor groups are there, its mannequin clothing / builds / 
      offset, shadow depth / hue shift / hue target / saturation, highlight lift / hue shift / hue target / desaturation.
      At the default sliders the ramp equals `hdart.palette.ramp_from_base` (checked against the JS in `tests/test_ramps.py`).
    - Click a swatch to set that colour by hand, right-click to reset it. `races` tags which races may use the ramp.
-   - Live preview on an approved mannequin (front/back, full and 64 px): the skin is quantized into the ramp's levels
-     (`skin_levels`: k-means on the skin colours, seeded from brightness percentiles; anti-aliased skin edges included),
-     then coloured in the browser. "Every ramp in the group" shows them all side by side.
+   - Live preview: the skin bands coloured in the browser (`workshop.skin_key`: k-means on the skin colours, seeded
+     from brightness percentiles, gives the level colours; `skin_cut` the smoothed level map). "Every ramp in the group" shows them all side by side.
    - Save writes `base`, `tune` and the resolved `colors` (the game export uses `colors`). API: `/api/ws/ramp/palettes`,
      `ramp/preview {build}`, `ramp/save {group, name, old_name, base, tune, colors, races}`, `ramp/delete`.
    - Raw Monk values are photographic and muted: game ramps need more saturation (~×1.4), and very dark tones a lifted
@@ -494,7 +504,7 @@ Template, so an item fitted once is reused on every build of the race.
 - **Smooth cel levels:** FLUX's soft gradients between its flat tones used to quantize into mottled islands (splotchy
   once a ramp colours them). The brightness is now blurred inside the item before it's cut into levels (`smooth_val`,
   outline excluded), patches smaller than `ISLAND` (400 px) merge into their surroundings and a small majority filter
-  smooths band edges (`smooth_levels`). `relevel` (job) redoes an existing candidate's levels from its painted colours.
+  smooths band edges (`smooth_levels`, `hdart/levels.py`, shared with the skin bands). `relevel` (job) redoes an existing candidate's levels from its painted colours.
 - **Painted zones** replace the preset `zones` once saved. A painted zone only reaches what shows in the rest pose, so
   each part's zone also floods into that part's hidden pixels from where it was painted (a vest continues under the
   near arm; a sleeve into its shoulder cap). Areas painted past the body are allowed (pauldron or skirt silhouettes).

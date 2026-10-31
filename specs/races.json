@@ -10,8 +10,8 @@
   ],
   "sexes": {
     "unisex": "an androgynous adult with a neutral, average build, an unclothed mannequin body that is completely smooth and featureless like a plastic toy doll, no anatomical details, bald head, barefoot, neutral expression",
-    "male": "an adult male build: broader shoulders, a flat chest, narrower hips and slightly more muscular arms, athletic build, clay model, clay render, 3D modeled, hand painted, AAA quality, clean open hands",
-    "female": "an adult female build: narrower shoulders, perky bust, supple, wider hips and a defined waist, athletic build, clay model, clay render, 3D modeled, hand painted, AAA quality, clean open hands"
+    "male": "an adult male build: broader shoulders, a flat chest, narrower hips and slightly more muscular arms, athletic build, clay model, clay render, 3D modeled, hand painted, AAA quality, clean open hands, hard shadows, sculpted figure, stark lighting.",
+    "female": "an adult female build: narrower shoulders, perky bust, supple, wider hips and a defined waist, athletic build, clay model, clay render, 3D modeled, hand painted, AAA quality, clean open hands, hard shadows, sculpted figure, stark lighting."
   },
   "races": {
     "human": {

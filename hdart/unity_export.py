@@ -77,15 +77,11 @@ def _crop_save(art, idx, path, min_alpha=8):
     return [x0, y0, x1 - x0, y1 - y0]
 
 
-def skin_index(art, cent):
-    """Index map of a part: its skin pixels (workshop.skin_mask on white) labelled with the nearest skin level."""
-    rgb = np.full(art.shape[:2] + (3,), 255, np.uint8); a = art[..., 3] > 127; rgb[a] = art[a, :3]
-    m = ws.skin_mask(rgb) & a
-    idx = np.zeros(art.shape, np.uint8)
-    if len(cent) and m.any():
-        c = np.array(cent, float)
-        lab = ((rgb[m].astype(float)[:, None] - c[None]) ** 2).sum(-1).argmin(1)
-        idx[m, 0] = lab; idx[m, 1] = SKIN; idx[m, 3] = 255
+def skin_index(art, band, size):
+    """Index map of a part from its skin bands (Parts editor, puppet_paint.bake_bands), at the export size."""
+    b = _small(band, size, nearest=True)
+    idx = np.zeros(art.shape, np.uint8); m = (b[..., 3] > 127) & (b[..., 0] != ppt.NOT_SKIN) & (art[..., 3] > 127)
+    idx[m, 0] = b[m, 0]; idx[m, 1] = SKIN; idx[m, 3] = 255
     return idx
 
 
@@ -107,12 +103,8 @@ def _body(race, sex, size, has_faces, d):
     for v in VIEWS:             # the face comes from the face set, so the painted head goes blank
         if has_faces and v == "front":
             parts[v]["head"] = pf.blank_face(parts[v]["head"], pf.face_ellipse(sp, 1.2) & pf.inner_head(parts[v]["head"]))
-    # Skin levels measured on both views together (like the Ramps tab), so front and back match.
-    both = Image.new("RGB", (pf.N * 2, pf.N), (255, 255, 255))
-    for i, v in enumerate(VIEWS):
-        rest = pf.compose(sp, v, parts[v])
-        both.paste(rest, (i * pf.N, 0), rest)
-    _, cent = ws.skin_levels(both.resize((size * 2, size), Image.LANCZOS), ws.palettes_doc().get("rampSize", 5))
+    # Skin levels = the parts' bands (made from the paint, maybe edited by hand), the key measured on both views.
+    cent = ppt.ensure_bands(f"{race}.{sex}", cid); bands = ppt.out_dir(f"{race}.{sex}") / cid / "bands"
     entry = {"paint": cid, "skinKey": cent, "views": {}}
     for v in VIEWS:
         V = sp["views"][v]; joints = {}
@@ -126,7 +118,8 @@ def _body(race, sex, size, has_faces, d):
         out_parts = []
         for n in V["order"]:
             art = _small(parts[v][n], size)
-            rect = _crop_save(art, skin_index(art, cent), d / sex / v / n)
+            band = np.asarray(Image.open(bands / v / f"{n}.png").convert("RGBA"))
+            rect = _crop_save(art, skin_index(art, band, size), d / sex / v / n)
             if rect is None:
                 continue
             if n == "torso":
