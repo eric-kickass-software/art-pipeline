@@ -324,6 +324,7 @@
         <label>Art</label><input id="tpArt" type="range" min="0" max="1" step="0.05" value="0.45" style="max-width:110px">
         <label>Parts</label><input id="tpParts" type="range" min="0" max="1" step="0.05" value="0.75" style="max-width:110px">
         <label>Size</label><select id="tpZoom" style="max-width:90px"><option value="440">small</option><option value="560" selected>medium</option><option value="760">large</option><option value="960">x-large</option></select>
+        <label title="Dragging a joint moves only the joint (pivot): the limb outlines that hang on it stay where they are. Hold Shift while dragging to flip this for one drag."><input type="checkbox" id="tpKeep" style="width:auto"> Keep shapes</label>
         <button id="tpReset" title="Back to the whole figure (both views)">Reset zoom</button>
         <button id="tpUndo">Undo</button><button class="primary" id="tpSave">Save</button><button class="primary" id="tpRender">Save &amp; render preview</button>
         <button id="tpMeasure" title="Throw away edits and measure again from the approved human.unisex rig">Re-measure</button>
@@ -337,7 +338,8 @@
         <b style="color:#22b14c">fingertip/toe</b>, <b style="color:#a24bd6">neck/pelvis/crotch</b>, <b style="color:#e1288f">waistband</b>, <b style="color:#ff8c00">face guides</b> (front head: eyes, mouth, centre line).
         Click a part (or its layer) to select it in both views, then drag its <b style="color:#20c0c0">outline points</b>
         (double-click the outline to add one, Alt-click a point to remove it). Limb points belong to their bone: moving a joint carries the
-        outline along (the round ends around the joints are the overlap under the parent).
+        outline along (the round ends around the joints are the overlap under the parent). With <b>Keep shapes</b> on (or Shift held while dragging),
+        a joint moves alone: only the pivot changes, every outline stays put.
         <b>Zoom</b>: mouse wheel (up to 8×); <b>pan</b>: right- or middle-drag, or hold Space and drag. Ctrl+Z undoes. Hidden layers can't be clicked.</p>
       <div class="hint" id="tpInfo"></div>
     </div>
@@ -1494,7 +1496,9 @@ function tpWire(v) {
     if (h.type === "part") { TP.sel = h.name; $("tpPart").value = h.name; tpDrawAll(); return; }
     if (h.type === "pt" && e.altKey) { const pts = tpRawPts(V, h.part);
       if (pts.length > 6) { tpPushUndo(); pts.splice(h.i, 1); TP.dirty = true; tpDrawAll(); } return; }
-    tpPushUndo(); TP.drag = { v, ...h }; };
+    tpPushUndo(); TP.drag = { v, ...h };
+    if (h.type === "joint" && $("tpKeep").checked !== e.shiftKey)   // keep shapes: remember the outlines of the limbs on this joint in rig space
+      TP.drag.keep = Object.fromEntries(Object.entries(V.limbs).filter(([, L]) => L.from === h.name || L.to === h.name).map(([n, L]) => [n, tpLimbWorld(V, L)])); };
   cv.ondblclick = e => {   // add an outline point on the selected part, between the two nearest neighbours
     const V = TP.spec.views[v]; if (!TP.sel || !(V.limbs[TP.sel] || V.shapes[TP.sel])) return;
     const p = pos(e), pts = tpSelPts(V, TP.sel); let best = 0, bd = 1e9;
@@ -1505,7 +1509,8 @@ function tpWire(v) {
     if (TP.pan && TP.pan.v === v) { const vw = TP.vw[v], s = scr(e); vw.ox = TP.pan.ox + s[0] - TP.pan.s[0]; vw.oy = TP.pan.oy + s[1] - TP.pan.s[1]; tpDraw(v); return; }
     const d = TP.drag; if (!d || d.v !== v) return;
     const V = TP.spec.views[v], p = pos(e).map(c => Math.round(c * 10) / 10);
-    if (d.type === "joint") { const [k, j] = d.name.split("."); if (j) V.joints[k][j] = p; else V.joints[k] = p; }
+    if (d.type === "joint") { const [k, j] = d.name.split("."); if (j) V.joints[k][j] = p; else V.joints[k] = p;
+      if (d.keep) for (const [n, w] of Object.entries(d.keep)) V.limbs[n].points = w.map(q => tpToLocal(V, V.limbs[n], q)); }   // same outline, new bone frame
     else if (d.type === "pt") tpSetPt(V, d.part, d.i, p);
     else if (d.type === "seam") V.seams.waist.y = p[1];
     else if (d.type === "face") { const f = V.shapes.head.face; if (d.key === "mouth") f.mouth = p; else f[d.key][d.i] = p; }
@@ -1545,6 +1550,7 @@ async function initTemplate() {
   if (TP.inited) return; TP.inited = true;
   ["front", "back"].forEach(v => { tpSize(v); tpWire(v); });
   ["tpArt", "tpParts"].forEach(id => $(id).oninput = tpDrawAll);
+  $("tpKeep").checked = localStorage.getItem("tpKeep") === "1"; $("tpKeep").onchange = () => localStorage.setItem("tpKeep", $("tpKeep").checked ? "1" : "0");
   $("tpZoom").onchange = () => { ["front", "back"].forEach(tpSize); tpDrawAll(); };
   $("tpReset").onclick = () => { ["front", "back"].forEach(v => TP.vw[v] = { z: 1, ox: 0, oy: 0 }); tpDrawAll(); };
   $("tpAll").onclick = () => { TP.hidden.clear(); tpSaveHidden(); tpDrawAll(); };
