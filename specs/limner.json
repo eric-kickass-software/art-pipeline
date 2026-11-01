@@ -513,8 +513,45 @@
   },
   "gear/item.backpack": {
    "subject": "leather backpack with room for a few things. grey scale"
+  },
+  "items/item.holy_water": {
+   "subject": "a glass flask filled with holy water that hurts the undead, liquid is a pale blue with a slight angelic glow"
+  },
+  "gear/item.throwing_flasks": {
+   "subject": "A thick leather bandolier with a row of thin glass vials filed with glowing green liquid."
+  },
+  "items/item.medium_potion": {
+   "subject": "medium potion, a medium corked vial of red healing draught"
+  },
+  "gear/item.rapier": {
+   "subject": "a thin steal rapier with a looped guard"
+  },
+  "gear/item.oak_staff": {
+   "subject": "a gnarled and knobby oak staff, a nice narrow tapper up the shaft"
+  },
+  "gear/item.mace": {
+   "subject": "spiked steel mace"
+  },
+  "gear/item.holy_symbol": {
+   "subject": "a small carved figurine of a beautiful goddess"
+  },
+  "gear/item.bone_focus": {
+   "subject": "a small effigy of bone and twine"
+  },
+  "gear/item.whip": {
+   "subject": "a thick leather whip coiled up"
+  },
+  "gear/item.chainmail": {
+   "subject": "a chainmail shirt, rings of steel linked together to make a light flexible armor"
   }
  },
  "_house_style": "Portraits: 'semireal' (Eric, 2026-11-01: 'that top row is gold'). Reference: specs/limner_refs/semireal.jpg (seed 11, 832x1024, 4 steps, no LoRA). Change the house style only on purpose.",
- "added": {}
+ "added": {
+  "items": {
+   "item.medium_potion": {
+    "name": "Medium Potion",
+    "sub": "consumable"
+   }
+  }
+ }
 }
