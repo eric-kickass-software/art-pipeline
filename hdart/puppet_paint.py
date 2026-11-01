@@ -607,14 +607,29 @@ def bake_bands(build, cid, view=None, names=None, force=False):
     for v in ([view] if view else VIEWS):
         (d / "bands" / v).mkdir(parents=True, exist_ok=True)
         for n in spec["views"][v]["order"]:
-            if (names is not None and n not in names) or (f"{v}/{n}" in edited and not force):
+            if names is not None and n not in names:
+                continue
+            f = d / "bands" / v / f"{n}.png"; hand = f"{v}/{n}" in edited and not force
+            if hand and names is None:   # a full rebake leaves hand-edited bands alone; a repaint of the part merges (below)
                 continue
             im = np.asarray(Image.open(d / "parts" / v / f"{n}.png").convert("RGBA"))
-            Image.fromarray(part_band(spec, v, n, im, key)).save(d / "bands" / v / f"{n}.png")
+            band = part_band(spec, v, n, im, key)
+            if hand and f.exists():   # repainted: hand levels stay where the pixel was skin and still is; outline, erased
+                band = keep_hand_bands(np.asarray(Image.open(f).convert("RGBA")), band)   # and newly painted skin follow the paint
+            Image.fromarray(band).save(f)
             done.append(f"{v}/{n}")
     if force and done:
         store.update_meta(d, bands_edited=sorted(edited - set(done)))
     return key
+
+
+def keep_hand_bands(old, new):
+    """`new` bands (from the paint) with the levels of `old` (hand-edited) kept where both call the pixel skin."""
+    if old.shape != new.shape:
+        return new
+    skin = lambda b: (b[..., 3] > 127) & (b[..., 0] != NOT_SKIN)
+    keep = skin(old) & skin(new); out = new.copy(); out[..., 0][keep] = old[..., 0][keep]
+    return out
 
 
 def ensure_bands(build, cid):
@@ -731,7 +746,7 @@ def save_parts(build, cid, view, pngs):
         if im.size != (pp.PX * S, pp.PX * S):
             raise ValueError(f"{name}: expected {pp.PX * S} px, got {im.size}.")
         im.save(d / "parts" / view / f"{name}.png")
-    bake_bands(build, cid, view, list(pngs))   # the bands follow the paint (hand-edited ones stay)
+    bake_bands(build, cid, view, list(pngs))   # the bands follow the paint (hand-edited levels stay where it's still skin)
     return parts_doc(build, cid)
 
 

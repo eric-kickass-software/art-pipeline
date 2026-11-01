@@ -1592,7 +1592,7 @@ const paSelG = () => PA.sel ? paG(PA.sel.split("|")[0]) : null;
 const paSelN = () => PA.sel ? PA.sel.split("|")[1] : null;
 const paSelKey = () => PA.sel ? `${PA.view}|${PA.sel}` : null;
 const paBandsOn = () => !!PA.bandMode;
-const paEK = () => { const k = paSelKey(); return k && paBandsOn() && PA.parts[k + "#b"] ? k + "#b" : k; };   // the canvas the tools edit
+const paEK = () => { const k = paSelKey(); return k && paBandsOn() && PA.tool !== "outline" && PA.parts[k + "#b"] ? k + "#b" : k; };   // the canvas the tools edit (the outline is always paint)
 const paShort = id => id.replace(/^item\./, "").replace(/_/g, " ");
 const paGroupDirty = gid => Object.keys(PA.dirty).some(k => PA.dirty[k] && k.includes(`|${gid}|`));
 const paVisible = (gid, n) => !PA.ghide.has(gid) && !PA.hidden.has(`${gid}|${n}`);
@@ -2020,9 +2020,41 @@ function paEnd() {
   if (st.move && !st.dx && !st.dy) { paStatus(); return; }   // a click without a drag: nothing moved
   if (!st.before) st.before = st.base.getContext("2d").getImageData(0, 0, PA_N, PA_N);   // the undo snapshot, read once at pen-up (not at pen-down)
   if (PA.tool === "heal" && !st.move) { PA.parts[st.key].getContext("2d").putImageData(st.before, 0, 0); paHeal(st); if (st.key.endsWith("#b")) paBandSnap(st.key, st.box); }
-  PA.undo.push({ key: st.key, before: st.before }); if (PA.undo.length > 25) PA.undo.shift(); PA.redo = [];
+  const sync = !st.move && paBandSync(st);   // the puppet's skin bands follow the paint (outline / erased out, new skin in)
+  PA.undo.push(sync ? { multi: [{ key: st.key, before: st.before }, sync.band], mask: sync.mask } : { key: st.key, before: st.before });
+  if (PA.undo.length > 25) PA.undo.shift(); PA.redo = [];
   paTouch(st.key); PA.dirty[st.key] = true; if (st.key in PA.empty) PA.empty[st.key] = paIsEmpty(PA.parts[st.key]);
   paLayers(); paStatus(); paDraw();
+}
+// A paint stroke on a banded puppet part keeps its bands in step (as the server redoes them on save): where the paint
+// changed, a pixel that's no longer skin (outline, erased, clothes) loses its band, new skin gets the nearest key level.
+// Hand levels on unchanged pixels stay. Returns the undo entries for the bands (or null: nothing to do).
+const paSkinish = (r, g, b) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b); return r > b + 18 && mx - mn > 0.16 * mx && mx > 70; };
+function paBandSync(st) {
+  const key = st.key; if (key.endsWith("#b") || !PA.parts[key + "#b"] || !PA.bmask[key]) return null;
+  const g = paG(key.split("|")[1]); if (!g || g.kind !== "paint") return null;
+  const pad = 4 + (PA.tool === "outline" ? 2 : +$("paSize").value / 2), x0 = Math.max(0, Math.floor(st.box[0] - pad)), y0 = Math.max(0, Math.floor(st.box[1] - pad));
+  const W = Math.min(PA_N, Math.ceil(st.box[2] + pad)) - x0, H = Math.min(PA_N, Math.ceil(st.box[3] + pad)) - y0; if (W < 1 || H < 1) return null;
+  const bx = PA.parts[key + "#b"].getContext("2d", { willReadFrequently: true }), mx = PA.bmask[key].getContext("2d", { willReadFrequently: true });
+  const bandBefore = bx.getImageData(0, 0, PA_N, PA_N), maskBefore = mx.getImageData(0, 0, PA_N, PA_N);
+  const now = PA.parts[key].getContext("2d").getImageData(x0, y0, W, H).data, was = st.before.data;
+  const bim = bx.getImageData(x0, y0, W, H), mim = mx.getImageData(x0, y0, W, H), b = bim.data, m = mim.data;
+  const sk = g.doc.skinKey || [], luma = c => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2], kl = sk.map(luma);
+  let changed = false;
+  for (let yy = 0, i = 0; yy < H; yy++) for (let xx = 0; xx < W; xx++, i += 4) {
+    const j = ((y0 + yy) * PA_N + x0 + xx) * 4;
+    if (now[i] === was[j] && now[i + 1] === was[j + 1] && now[i + 2] === was[j + 2] && now[i + 3] === was[j + 3]) continue;
+    const skin = now[i + 3] > 127 && paSkinish(now[i], now[i + 1], now[i + 2]);
+    if (!skin) { if (b[i + 3] || m[i + 3]) { b[i + 3] = 0; m[i + 3] = 0; changed = true; } continue; }
+    if (b[i + 3] > 127) continue;   // still skin: its (hand) level stays
+    let lv = Math.floor(PA_LEVELS / 2);
+    if (kl.length) { const l = luma(now.subarray(i, i + 3)); lv = kl.reduce((bi, v, k) => Math.abs(v - l) < Math.abs(kl[bi] - l) ? k : bi, 0); }
+    const c = PA_BAND_RGB[Math.min(lv, PA_BAND_RGB.length - 1)];
+    b[i] = c[0]; b[i + 1] = c[1]; b[i + 2] = c[2]; b[i + 3] = 255; m[i] = m[i + 1] = m[i + 2] = m[i + 3] = 255; changed = true;
+  }
+  if (!changed) return null;
+  bx.putImageData(bim, x0, y0); mx.putImageData(mim, x0, y0); paTouch(key + "#b");
+  return { band: { key: key + "#b", before: bandBefore }, mask: { k: key, before: maskBefore } };
 }
 function paUndo(from, to) {
   const u = from.pop(); if (!u) return; const back = [];
@@ -2030,7 +2062,10 @@ function paUndo(from, to) {
     back.push({ key: e.key, before: ctx.getImageData(0, 0, PA_N, PA_N) }); ctx.putImageData(e.before, 0, 0); paTouch(e.key);
     if (e.key in PA.empty) PA.empty[e.key] = paIsEmpty(PA.parts[e.key]);
     if (!(u.multi && e.key.endsWith("#b"))) PA.dirty[e.key] = true; }   // a cleared layer's bands come back with it (not saved separately)
-  if (back.length) to.push(u.multi ? { multi: back } : back[0]);
+  let mask = null;
+  if (u.mask && PA.bmask[u.mask.k]) { const mx = PA.bmask[u.mask.k].getContext("2d");
+    mask = { k: u.mask.k, before: mx.getImageData(0, 0, PA_N, PA_N) }; mx.putImageData(u.mask.before, 0, 0); }
+  if (back.length) to.push(u.multi ? { multi: back, ...(mask ? { mask } : {}) } : back[0]);
   paLayers(); paStatus(); paDraw();
 }
 function paClearLayer(id) {   // an item's layer on one part emptied in this view (Save removes its files); Ctrl+Z brings it back

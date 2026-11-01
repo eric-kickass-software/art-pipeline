@@ -109,6 +109,14 @@ assert band()[y, x, 0] == lv and band()[0, 0, 3] == b0[0, 0, 3] and "front/torso
 buf = io.BytesIO(); Image.open(d / "parts" / "front" / "torso.png").save(buf, "PNG")
 ppt.save_parts("human.female", c[0], "front", {"torso": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()})
 assert band()[y, x, 0] == lv   # saving the paint keeps hand-edited bands
+# ...but they follow the paint where it changes: an outline over a skin pixel leaves the skin, new skin gets a level
+pa = np.asarray(Image.open(d / "parts" / "front" / "torso.png")).copy(); y2, x2 = ys[len(ys) // 3], xs[len(xs) // 3]
+pa[y2, x2] = (40, 32, 30, 255)
+ns = np.argwhere((pa[..., 3] > 127) & ~skin); yn, xn = ns[len(ns) // 2]; pa[yn, xn] = (220, 150, 120, 255)
+buf = io.BytesIO(); Image.fromarray(pa).save(buf, "PNG")
+ppt.save_parts("human.female", c[0], "front", {"torso": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()})
+b1 = band()
+assert b1[y2, x2, 0] == ppt.NOT_SKIN and b1[yn, xn, 0] != ppt.NOT_SKIN and b1[y, x, 0] == lv
 doc = ppt.reset_bands("human.female", c[0], "front", "torso")
 assert band()[y, x, 0] == b0[y, x, 0] and "front/torso" not in doc["bandsEdited"]
 ppt.revert_parts("human.female", c[0])
