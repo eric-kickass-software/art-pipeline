@@ -359,6 +359,120 @@
    "earth": "a cracked brown boulder"
   }
  },
- "entries": {},
+ "entries": {
+  "gear/slot.hands.plate": {
+   "style": "painted",
+   "subject": "a steel plate gauntlet, hand held up."
+  },
+  "gear/weapontype.mace": {
+   "style": "painted"
+  },
+  "gear/weapontype.bow": {
+   "style": "painted",
+   "subject": "a wooden bow and arrow"
+  },
+  "gear/slot.feet.leather": {
+   "style": "painted"
+  },
+  "gear/slot.feet.cloth": {
+   "style": "painted",
+   "subject": "cloth foot wraps"
+  },
+  "gear/slot.legs.leather": {
+   "style": "painted"
+  },
+  "gear/slot.head.plate": {
+   "style": "painted"
+  },
+  "gear/slot.head.leather": {
+   "style": "painted",
+   "subject": "a leather medieval cap"
+  },
+  "gear/weapontype.axe": {
+   "style": "painted"
+  },
+  "classes/class.occultist": {
+   "style": "painted",
+   "subject": "a glowing occult ritual circle with candles"
+  },
+  "classes/class.beast_master": {
+   "subject": "a snarling war-cat head"
+  },
+  "classes/class.elementalist": {
+   "subject": "A solid round sphere of ice, wrapped with fire and lightning"
+  },
+  "classes/class.sniper": {
+   "subject": "a long rifle laid over a crosshair"
+  },
+  "classes/class.zealot": {
+   "subject": "a steel spikey mace sitting in front of aa large bright sun"
+  },
+  "classes/class.necromancer": {
+   "subject": "a skull glowing with green flames sitting on a green pentagram with runes at each point"
+  },
+  "classes/class.bastion": {
+   "subject": "a fortress, bastion, protected by a faint blue barrier"
+  },
+  "classes/class.overlord": {
+   "subject": "a war torn and tattered red tapestry, an intimidating steel helmet in front with glowing orange eyes"
+  },
+  "classes/class.spell_blade": {
+   "subject": "a simple steel scimitar, the blade wrapped in glowing purple flames"
+  },
+  "classes/class.void_reaper": {
+   "subject": "a steel daggers in front of wispy strands of tangled black smoke"
+  },
+  "classes/class.weapon_master": {
+   "subject": "A zoomed in shot of a giant war axe"
+  },
+  "classes/class.dominator": {
+   "subject": "a black iron gauntlet clinching a ball of fire"
+  },
+  "classes/class.alchemist": {
+   "subject": "A collection of bubbling and swirling potions with colorful gas rolling off"
+  },
+  "classes/class.acolyte": {
+   "subject": "a very small leather-bound holy book with a golden ankh on its cover, a bright halo of light surrounding the book"
+  },
+  "portraits/portrait.ranged.elementalist.m": {
+   "subject": "a male human elementalist with a ball of lightening in their hands"
+  },
+  "portraits/portrait.ranged.elementalist.f": {
+   "subject": "a female human elementalist holding a fireball in her hands"
+  },
+  "portraits/portrait.support.alchemist.f": {
+   "subject": "a female human alchemist with a leather apron and brass goggles. Tools are shoved in the pocket of her apron, and she is holding a glowing flask"
+  },
+  "portraits/portrait.support.alchemist.m": {
+   "subject": "a male human alchemist with a leather apron and brass goggles. Tools are shoved in the pocket of his apron, and he is holding a glowing flask"
+  },
+  "statuses/status.bleed": {
+   "subject": "a drop of deep red blood"
+  },
+  "statuses/status.mark": {
+   "subject": "a red cross hairs with triangle indicators"
+  },
+  "statuses/status.poison": {
+   "subject": "a drop of green poison with bubbles"
+  },
+  "statuses/status.soak": {
+   "subject": "a drop of blue water"
+  },
+  "statuses/status.root": {
+   "subject": "a leather boot gripped by roots and vines"
+  },
+  "statuses/status.sticky": {
+   "subject": "A leather boot stuck in amber sticky sap"
+  },
+  "damageTypes/lightning": {
+   "subject": "chain lightening arcs"
+  },
+  "damageTypes/water": {
+   "subject": "a drop of blue water"
+  },
+  "statuses/status.taunt": {
+   "subject": "a cartoonish human face sticking their tongue out mockingly, chibi, anime"
+  }
+ },
  "_house_style": "Portraits: 'semireal' (Eric, 2026-11-01: 'that top row is gold'). Reference: specs/limner_refs/semireal.jpg (seed 11, 832x1024, 4 steps, no LoRA). Change the house style only on purpose."
 }
