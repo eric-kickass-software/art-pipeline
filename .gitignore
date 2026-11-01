@@ -19,3 +19,4 @@ __pycache__/
 
 # Machine-specific settings (hdart/config.py)
 /config.local.toml
+specs/*.lock
