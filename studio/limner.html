@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Limner</title>
+<style>
+  :root { --bg:#16131c; --panel:#211c29; --card:#2a2333; --line:#3a3146; --text:#e8e2ef; --muted:#9a90a8; --accent:#e0b874;
+          --ok:#6fcf8a; --warn:#e8b04a; --bad:#e8786a; --info:#9cc4ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:13px/1.45 system-ui, sans-serif; }
+  header { display:flex; gap:6px; align-items:center; padding:8px 14px; background:var(--panel); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
+  header h1 { font-size:15px; margin:0 14px 0 0; color:var(--accent); letter-spacing:.5px; }
+  header h1 small { color:var(--muted); font-weight:400; font-size:11px; margin-left:6px; }
+  header button.tab { background:none; border:none; color:var(--muted); padding:6px 10px; cursor:pointer; border-radius:4px; font-size:13px; }
+  header button.tab.on { color:var(--text); background:var(--card); } header button.tab .n { font-size:10px; color:var(--muted); margin-left:4px; }
+  #jobsBtn { margin-left:auto; }
+  #appMenuBtn { background:none; border:1px solid var(--line); color:var(--text); border-radius:4px; padding:3px 9px; font-size:16px; cursor:pointer; margin-right:8px; }
+  #appMenuBtn:hover { border-color:var(--accent); }
+  #appMenu { position:fixed; top:46px; left:10px; z-index:40; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:6px; min-width:210px; box-shadow:0 6px 24px #0008; }
+  #appMenu.hidden { display:none; } #appMenu a { display:block; padding:7px 10px; border-radius:4px; color:var(--text); text-decoration:none; }
+  #appMenu a:hover { background:var(--card); } #appMenu a.on { color:var(--accent); background:var(--card); }
+  button { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:4px; padding:4px 10px; cursor:pointer; font-size:12px; }
+  button:hover { border-color:var(--accent); } button.primary { background:#5a4526; border-color:var(--accent); } button:disabled { opacity:.4; cursor:default; }
+  input, select, textarea { background:#1a1620; color:var(--text); border:1px solid var(--line); border-radius:4px; padding:3px 6px; font:inherit; font-size:12px; }
+  textarea { width:100%; resize:vertical; } label { color:var(--muted); font-size:11px; }
+  .hint { color:var(--muted); font-size:11px; } .err { color:var(--bad); white-space:pre-wrap; }
+  #jobsPanel { position:fixed; top:48px; right:14px; width:400px; max-height:60vh; overflow:auto; background:var(--panel); border:1px solid var(--line);
+               border-radius:6px; padding:8px; display:none; z-index:30; box-shadow:0 6px 24px #0008; }
+  #jobsPanel.on { display:block; } .row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .job { padding:4px 0; border-bottom:1px solid var(--line); font-size:12px; display:flex; justify-content:space-between; gap:6px; }
+  .job .s { color:var(--muted); } .job .s.running { color:var(--info); } .job .s.done { color:var(--ok); } .job .s.failed { color:var(--bad); }
+  .job .x { border:0; background:none; color:var(--muted); cursor:pointer; padding:0 2px; } .job .note { color:var(--muted); font-size:11px; }
+
+  .layout { display:grid; grid-template-columns:290px 1fr; gap:12px; padding:12px; align-items:start; }
+  .layout.open { grid-template-columns:290px 1fr 480px; }
+  .side, .detail { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px; position:sticky; top:58px; max-height:calc(100vh - 70px); overflow:auto; scrollbar-width:thin; }
+  .side { overflow-x:hidden; } .side .hint { overflow-wrap:anywhere; }
+  .side h3, .detail h3 { margin:12px 0 6px; font-size:10px; text-transform:uppercase; letter-spacing:1.2px; color:var(--accent); font-weight:600; }
+  .side h3:first-child, .detail h3:first-child { margin-top:0; }
+  .f { display:grid; grid-template-columns:78px 1fr; gap:4px 6px; align-items:center; margin:3px 0; }
+  .f input[type=number] { width:70px; }
+  .arch { border-top:1px solid var(--line); padding:6px 0; } .arch b { color:var(--text); } .arch .cls { color:var(--muted); font-size:11px; }
+  .look { display:grid; grid-template-columns:76px 1fr 22px; gap:4px; margin:3px 0; align-items:start; } .look textarea { min-height:34px; font-size:11px; }
+  .look button { padding:2px 4px; }
+
+  .tools { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:7px 10px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(118px, 1fr)); gap:8px; }
+  .grid.portraits { grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:6px; cursor:pointer; position:relative; }
+  .card:hover { border-color:#ffffff40; } .card.sel { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+  .card.running::after { content:"…"; position:absolute; top:4px; right:8px; color:var(--info); font-weight:700; }
+  .card .pic { aspect-ratio:1; display:flex; align-items:center; justify-content:center; background:#ffffff08; border-radius:5px; overflow:hidden; }
+  .grid.portraits .card .pic { aspect-ratio:13/16; }
+  .card .pic img { width:100%; height:100%; object-fit:contain; image-rendering:pixelated; }
+  .grid.portraits .card .pic img { image-rendering:auto; object-fit:cover; }
+  .card .pic.ghost img { opacity:.35; } .card .pic .none { color:var(--muted); font-size:11px; }
+  .card .nm { font-size:12px; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .card .sb { font-size:10px; color:var(--muted); display:flex; justify-content:space-between; }
+  .card .ck { position:absolute; top:8px; left:8px; }
+  .st.ok { color:var(--ok); } .st.part { color:var(--warn); }
+  .ahead { grid-column:1/-1; margin:10px 0 0; color:var(--accent); font-size:11px; text-transform:uppercase; letter-spacing:1px; }
+  .ahead span { color:var(--muted); text-transform:none; letter-spacing:0; margin-left:8px; }
+
+  .detail .ptext { font-size:11px; color:var(--muted); background:#ffffff06; border-radius:4px; padding:5px 7px; margin:4px 0; word-break:break-word; }
+  .cands { display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; }
+  .cand { background:var(--card); border:1px solid var(--line); border-radius:6px; padding:5px; }
+  .cand.app { border-color:var(--ok); box-shadow:0 0 0 1px var(--ok); }
+  .cand .big { width:100%; aspect-ratio:1; display:flex; align-items:center; justify-content:center; background:#ffffff08; border-radius:4px; cursor:zoom-in; }
+  .cand .big img { width:128px; height:128px; image-rendering:pixelated; }
+  .cand.portrait .big { aspect-ratio:13/16; } .cand.portrait .big img { width:100%; height:100%; object-fit:cover; image-rendering:auto; }
+  .cand .sizes { display:flex; gap:6px; align-items:flex-end; margin:4px 0; }
+  .cand .sizes img { image-rendering:pixelated; background:#ffffff08; border-radius:3px; }
+  .cand .acts { display:flex; gap:3px; flex-wrap:wrap; } .cand .acts button { padding:2px 6px; }
+  .cand .meta { font-size:10px; color:var(--muted); }
+  .bgs { display:flex; gap:3px; } .bgs button { width:18px; height:18px; padding:0; border-radius:3px; }
+  #batch { background:var(--panel); border:1px solid var(--accent); border-radius:8px; padding:10px 12px; margin-bottom:10px; }
+  #batch[hidden] { display:none; } #batch .cols { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+  #batch h3 { margin:0 0 6px; font-size:10px; text-transform:uppercase; letter-spacing:1.2px; color:var(--accent); font-weight:600; }
+  #batch .sty label { display:block; color:var(--text); font-size:12px; } #batch textarea { min-height:70px; }
+  #batch .est { color:var(--info); } #batch .wd { font-size:11px; color:var(--muted); white-space:pre-wrap; margin-top:6px; max-height:90px; overflow:auto; }
+  .card .newb { position:absolute; top:6px; right:6px; background:var(--info); color:#123; font-size:10px; font-weight:700; border-radius:8px; padding:0 5px; }
+  .cand.new { border-color:var(--info); } .cand .meta .nb { color:var(--info); font-weight:600; }
+  header button.tab .nw { font-size:10px; color:var(--info); margin-left:3px; }
+  #zoom { position:fixed; inset:0; background:#000c; display:none; align-items:center; justify-content:center; z-index:60; cursor:zoom-out; }
+  #zoom.on { display:flex; } #zoom img { max-width:92vw; max-height:92vh; image-rendering:auto; }
+  #zoom img.px { image-rendering:pixelated; width:min(80vh, 80vw); }
+</style>
+</head>
+<body>
+<header>
+  <button id="appMenuBtn" title="Tools">☰</button>
+  <h1>Limner<small>icons &amp; portraits</small></h1>
+  <span id="tabs"></span>
+  <button id="jobsBtn">Queue: idle</button>
+</header>
+<nav id="appMenu" class="hidden">
+  <a href="/workshop" data-app="character">Character Workshop</a>
+  <a href="/items" data-app="items">Item Workshop</a>
+  <a href="/editor" data-app="editor">Workshop Editor</a>
+  <a href="/dungeon" data-app="dungeon">Dungeon Forge</a>
+  <a href="/limner" data-app="limner" class="on">Limner <span style="color:var(--muted);font-size:11px">· icons &amp; portraits</span></a>
+</nav>
+<div id="jobsPanel"><div class="row"><b>Generation queue</b><button id="jobsClear" style="margin-left:auto">Clear finished</button></div><div id="jobsList"></div></div>
+<div id="zoom"><img></div>
+<div id="err" class="err" style="padding:0 14px"></div>
+<div class="layout" id="layout">
+  <aside class="side" id="side"></aside>
+  <main>
+    <div class="tools">
+      <label>Show</label><select id="filter"><option value="all">all</option><option value="missing">not approved</option><option value="approved">approved</option><option value="empty">no candidates</option><option value="new">new (to review)</option></select>
+      <label><input type="checkbox" id="selAll"> select shown</label>
+      <button id="markRev" title="Everything made so far stops counting as new in this category">Mark reviewed</button>
+      <span class="hint" title="In the entry panel: left/right = previous/next entry, 1-9 = approve that candidate, Esc closes">keys: ← → 1–9</span>
+      <span style="margin-left:auto"></span>
+      <button id="batchBtn" title="Queue a big run (overnight): entries × styles × variations, with retries and a watchdog">Batch…</button>
+      <label>Candidates</label><input type="number" id="genN" value="3" min="1" max="12" style="width:52px">
+      <button class="primary" id="genSel" title="Queue candidates for every ticked entry">Generate selected</button>
+      <button id="genMissing" title="Queue candidates for every entry with no candidates yet">Generate empty</button>
+      <span class="hint" id="count"></span>
+    </div>
+    <div id="batch" hidden></div>
+    <div class="grid" id="grid"></div>
+  </main>
+  <aside class="detail" id="detail" hidden></aside>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json(); if (j.error) throw new Error(j.error); return j;
+}
+const err = (m) => { $("err").textContent = m || ""; };
+const guard = (fn) => async (...a) => { try { err(); await fn(...a); } catch (e) { err(String(e.message || e)); } };
+
+// tool switcher
+(() => { const btn = $("appMenuBtn"), menu = $("appMenu");
+  btn.onclick = (e) => { e.stopPropagation(); menu.classList.toggle("hidden"); };
+  document.addEventListener("click", (e) => { if (!menu.contains(e.target)) menu.classList.add("hidden"); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { menu.classList.add("hidden"); $("zoom").classList.remove("on"); } }); })();
+
+let D = null, CAT = localStorage.limnerCat || "items", OPEN = null, BUST = Date.now(), BG = localStorage.limnerBg || "#2a2333";
+const SEL = new Set();
+const NAMES = { items: "Items", gear: "Gear", classes: "Classes", statuses: "Statuses", damageTypes: "Damage", skills: "Skills", portraits: "Portraits" };
+const isP = () => CAT === "portraits";
+const img = (cat, id, cid, file) => `/api/limner/img?path=${encodeURIComponent(`${cat}/${id}/${cid}/${file}`)}&v=${BUST}`;
+
+async function load() { D = await api("/api/limner/doc"); render(); }
+function cat() { return D.categories[CAT]; }
+function entry(id) { return cat().entries.find(e => e.id === id); }
+
+function render() {
+  if (!D.categories[CAT]) CAT = "items";
+  $("tabs").innerHTML = D.order.map(c => { const es = D.categories[c].entries, a = es.filter(e => e.approved).length;
+    const nw = D.categories[c].new;
+    return `<button class="tab ${c === CAT ? "on" : ""}" data-c="${c}">${NAMES[c] || c}<span class="n">${a}/${es.length}</span>${nw ? `<span class="nw" title="new candidates to review">+${nw}</span>` : ""}</button>`; }).join("");
+  document.querySelectorAll("#tabs .tab").forEach(b => b.onclick = () => { CAT = localStorage.limnerCat = b.dataset.c; OPEN = null; SEL.clear(); render(); });
+  renderSide(); renderGrid(); renderDetail(); if (!$("batch").hidden) renderBatch();
+}
+
+// ------------------------------------------------------------------ category settings (left)
+function styleOpts(sel, withDefault) {
+  return (withDefault ? `<option value="">category default (${esc(D.styles[cat().style]?.name || cat().style)})</option>` : "") +
+    Object.entries(D.styles).map(([k, s]) => `<option value="${k}" ${k === sel ? "selected" : ""}>${esc(s.name)}</option>`).join("");
+}
+function renderSide() {
+  const c = cat(), f = c.finish, st = D.styles[c.style] || {};
+  let h = `<h3>${esc(c.name)}</h3><div class="hint">${esc(c.hint || "")}</div>
+    <h3>Style</h3>
+    <div class="f"><label>Default</label><select id="cStyle">${styleOpts(c.style)}</select></div>
+    <div class="f"><label>Style words</label><span class="hint">edits apply to every category using it</span></div>
+    <textarea id="sPrefix" rows="3" title="Before the subject">${esc(st.prefix)}</textarea>
+    <textarea id="sSuffix" rows="2" title="After the subject">${esc(st.suffix)}</textarea>
+    <div class="f"><label>Pixel LoRA</label><input id="sLora" type="number" step="0.1" min="0" max="1.5" value="${st.lora ?? 0}"></div>
+    <div class="row"><button id="sSave">Save style</button><button id="sNew" title="Copy this style under a new name">New style…</button></div>
+    <h3>Category words</h3>
+    <div class="f"><label>Before</label><input id="cPrefix" value="${esc(c.prefix)}"></div>
+    <div class="f"><label>After</label><input id="cSuffix" value="${esc(c.suffix)}"></div>
+    <div class="f"><label>Size</label><span><input id="gW" type="number" value="${c.gen.width}" style="width:62px"> × <input id="gH" type="number" value="${c.gen.height}" style="width:62px"></span></div>
+    <div class="f"><label>Steps</label><input id="gSteps" type="number" min="1" max="30" value="${c.gen.steps}"></div>
+    <div class="row"><button id="cSave">Save category</button></div>
+    <h3>Finish <span class="hint" style="text-transform:none;letter-spacing:0">(no GPU; redoes every candidate)</span></h3>`;
+  if (f.kind === "portrait") {
+    h += `<div class="f"><label>Width</label><input id="fW" type="number" value="${f.width}"></div>
+      <div class="f"><label>Thumb</label><input id="fT" type="number" value="${f.thumb}"></div>
+      <div class="f"><label>Face crop</label><span><input id="fCx" type="number" step="0.01" value="${f.crop[0]}" style="width:52px"><input id="fCy" type="number" step="0.01" value="${f.crop[1]}" style="width:52px"><input id="fCs" type="number" step="0.01" value="${f.crop[2]}" style="width:52px"></span></div>
+      <div class="hint">x, y, size as fractions of the width (each portrait can override it).</div>`;
+  } else {
+    h += `<div class="f"><label>Icon px</label><input id="fSize" type="number" value="${f.size}"></div>
+      <div class="f"><label>Colours</label><input id="fCol" type="number" min="0" max="64" value="${f.colors}" title="0 = smooth (no pixel quantize)"></div>
+      <div class="f"><label>Margin</label><input id="fMar" type="number" min="0" max="16" value="${f.margin}"></div>
+      <div class="f"><label>Outline</label><input id="fOut" value="${esc(f.outline)}" placeholder="none" title="#rrggbb, empty = none"></div>`;
+  }
+  h += `<div class="row"><button id="fSave">Save &amp; re-finish</button></div>
+    <h3>Export</h3><div class="hint">Approved only → ${esc(D.export)}\\${isP() ? "Portraits" : "Icons\\" + CAT}</div>
+    <div class="row" style="margin-top:4px"><button class="primary" id="exCat">Export ${esc(c.name)}</button><button id="exAll">Export all</button></div>
+    <div class="hint" id="exMsg"></div>`;
+  if (isP()) {
+    h += `<h3>Archetypes</h3><div class="hint">Each look makes a male and a female portrait. Add looks freely: more portraits to pick from.</div>`;
+    for (const [ak, a] of Object.entries(D.archetypes)) {
+      h += `<div class="arch"><b>${esc(a.name)}</b> <span class="cls">${esc(a.classes.join(", "))}</span><div class="hint">${esc(a.summary)}</div>` +
+        Object.entries(a.looks).map(([lk, t]) => `<div class="look"><span class="hint">${esc(lk)}</span><textarea data-a="${ak}" data-l="${lk}">${esc(t)}</textarea><button data-a="${ak}" data-l="${lk}" class="lookDel" title="Remove this look">✕</button></div>`).join("") +
+        `<div class="look"><input placeholder="new key" data-a="${ak}" class="lookKey"><textarea placeholder="describe the look…" data-a="${ak}" class="lookNew"></textarea><button data-a="${ak}" class="lookAdd" title="Add">＋</button></div></div>`;
+    }
+  }
+  $("side").innerHTML = h;
+  $("cStyle").onchange = guard(async () => { await api("/api/limner/category", { cat: CAT, fields: { style: $("cStyle").value } }); await load(); });
+  $("sSave").onclick = guard(async () => { await api("/api/limner/style", { key: c.style, fields: { prefix: $("sPrefix").value, suffix: $("sSuffix").value, lora: +$("sLora").value } }); await load(); });
+  $("sNew").onclick = guard(async () => { const k = (prompt("New style key (lowercase word):") || "").trim(); if (!k) return;
+    await api("/api/limner/style", { key: k, fields: { name: k, prefix: $("sPrefix").value, suffix: $("sSuffix").value, lora: +$("sLora").value } });
+    await api("/api/limner/category", { cat: CAT, fields: { style: k } }); await load(); });
+  $("cSave").onclick = guard(async () => { await api("/api/limner/category", { cat: CAT, fields: { prefix: $("cPrefix").value, suffix: $("cSuffix").value,
+    gen: { width: +$("gW").value, height: +$("gH").value, steps: +$("gSteps").value } } }); await load(); });
+  $("fSave").onclick = guard(async () => {
+    const fin = f.kind === "portrait" ? { width: +$("fW").value, thumb: +$("fT").value, crop: [+$("fCx").value, +$("fCy").value, +$("fCs").value] }
+      : { size: +$("fSize").value, colors: +$("fCol").value, margin: +$("fMar").value, outline: $("fOut").value.trim() };
+    $("fSave").disabled = true; await api("/api/limner/category", { cat: CAT, fields: { finish: fin } }); BUST = Date.now(); await load(); });
+  const ex = async (cats) => { const r = await api("/api/limner/export", { cats }); $("exMsg").textContent = "Exported: " + Object.entries(r.exported).map(([k, v]) => `${k} ${v}`).join(", "); };
+  $("exCat").onclick = guard(() => ex([CAT])); $("exAll").onclick = guard(() => ex(null));
+  document.querySelectorAll(".look textarea[data-l]").forEach(t => t.onchange = guard(async () => { await api("/api/limner/look", { archetype: t.dataset.a, look: t.dataset.l, text: t.value.trim() }); await load(); }));
+  document.querySelectorAll(".lookDel").forEach(b => b.onclick = guard(async () => { if (!confirmLook(b.dataset.l)) return; await api("/api/limner/look", { archetype: b.dataset.a, look: b.dataset.l, text: "" }); await load(); }));
+  document.querySelectorAll(".lookAdd").forEach(b => b.onclick = guard(async () => {
+    const box = b.closest(".look"), key = box.querySelector(".lookKey").value.trim().toLowerCase(), text = box.querySelector(".lookNew").value.trim();
+    if (!key || !text) throw new Error("A look needs a one-word key and a description.");
+    await api("/api/limner/look", { archetype: b.dataset.a, look: key, text }); await load(); }));
+}
+function confirmLook(l) { return true; }   // its candidates stay on disk; re-adding the key brings them back
+
+// ------------------------------------------------------------------ entries (middle)
+let ACTIVE = [];
+function shown() {
+  const fl = $("filter").value;
+  return cat().entries.filter(e => fl === "all" || (fl === "missing" && !e.approved) || (fl === "approved" && e.approved) || (fl === "empty" && !e.candidates.length) || (fl === "new" && e.new));
+}
+function thumbOf(e) {
+  const cid = e.approved || e.candidates[0]?.cid; if (!cid) return null;
+  return { src: img(CAT, e.id, cid, isP() ? "portrait.png" : "icon.png"), ghost: !e.approved };
+}
+function renderGrid() {
+  const es = shown();
+  $("grid").className = "grid" + (isP() ? " portraits" : "");
+  let h = "", lastA = null;
+  for (const e of es) {
+    if (isP() && e.archetype !== lastA) { lastA = e.archetype; const a = D.archetypes[lastA]; h += `<div class="ahead">${esc(a.name)}<span>${esc(a.classes.join(" · "))}</span></div>`; }
+    const t = thumbOf(e), running = ACTIVE.some(j => j.label.startsWith("Limner") && j.label.includes(` · ${CAT} · ${e.id} `));
+    h += `<div class="card ${OPEN === e.id ? "sel" : ""} ${running ? "running" : ""}" data-id="${esc(e.id)}">
+      <input type="checkbox" class="ck" ${SEL.has(e.id) ? "checked" : ""}>${e.new ? `<span class="newb" title="new candidates">${e.new}</span>` : ""}
+      <div class="pic ${t?.ghost ? "ghost" : ""}" style="background:${BG}">${t ? `<img src="${t.src}" loading="lazy">` : `<span class="none">no art</span>`}</div>
+      <div class="nm" title="${esc(e.id)}">${esc(e.name)}</div>
+      <div class="sb"><span>${esc(e.sub || "")}</span><span class="st ${e.approved ? "ok" : e.candidates.length ? "part" : ""}">${e.approved ? "★" : e.candidates.length || "·"}</span></div></div>`;
+  }
+  $("grid").innerHTML = h || `<p class="hint">Nothing here with this filter.</p>`;
+  $("count").textContent = `${SEL.size} selected · ${es.length} shown`;
+  $("grid").querySelectorAll(".card").forEach(el => {
+    el.onclick = (ev) => { const id = el.dataset.id;
+      if (ev.target.classList.contains("ck")) { ev.target.checked ? SEL.add(id) : SEL.delete(id); $("count").textContent = `${SEL.size} selected · ${shown().length} shown`; return; }
+      OPEN = OPEN === id ? null : id; renderGrid(); renderDetail(); };
+  });
+}
+$("filter").onchange = () => renderGrid();
+$("selAll").onchange = () => { shown().forEach(e => $("selAll").checked ? SEL.add(e.id) : SEL.delete(e.id)); renderGrid(); };
+async function gen(ids, n, extra = {}) {
+  if (!ids.length) throw new Error("Nothing to generate: tick some entries first.");
+  await api("/api/limner/generate", { cat: CAT, ids, n, ...extra }); pollJobs();
+}
+$("genSel").onclick = guard(() => gen([...SEL], +$("genN").value));
+$("genMissing").onclick = guard(() => gen(cat().entries.filter(e => !e.candidates.length).map(e => e.id), +$("genN").value));
+
+// ------------------------------------------------------------------ batch (overnight)
+$("batchBtn").onclick = () => { $("batch").hidden = !$("batch").hidden; if (!$("batch").hidden) renderBatch(); };
+$("markRev").onclick = guard(async () => { await api("/api/limner/reviewed", { cat: CAT }); await load(); });
+const B = { who: "sel", styles: null, variants: "", n: 2, seeds: "random", seed: 1, plain: true };
+function batchIds() { return B.who === "sel" ? [...SEL] : shown().map(e => e.id); }
+function renderBatch() {
+  if (!B.styles || B.cat !== CAT) { B.styles = [cat().style]; B.cat = CAT; }
+  const wd = D.watchdog || {};
+  $("batch").innerHTML = `<div class="row" style="margin-bottom:8px"><b>Batch · ${esc(cat().name)}</b>
+      <span class="hint">One small job per entry × style × variation, each retried twice if it fails; a watchdog keeps the PC awake and restarts what gets stuck. Review in the morning with Show: new.</span>
+      <button style="margin-left:auto" id="bClose">✕</button></div>
+    <div class="cols">
+      <div><h3>Entries</h3>
+        <label style="display:block;color:var(--text)"><input type="radio" name="bw" value="sel" ${B.who === "sel" ? "checked" : ""}> ticked (${SEL.size})</label>
+        <label style="display:block;color:var(--text)"><input type="radio" name="bw" value="shown" ${B.who === "shown" ? "checked" : ""}> all shown (${shown().length}, filter: ${esc($("filter").selectedOptions[0].text)})</label>
+        <h3 style="margin-top:10px">Candidates per run</h3><input id="bN" type="number" min="1" max="12" value="${B.n}" style="width:60px">
+        <h3 style="margin-top:10px">Seeds</h3><select id="bSeeds"><option value="random" ${B.seeds === "random" ? "selected" : ""}>random</option><option value="sweep" ${B.seeds === "sweep" ? "selected" : ""}>sweep from</option></select>
+        <input id="bSeed" type="number" value="${B.seed}" style="width:90px" ${B.seeds === "sweep" ? "" : "disabled"}></div>
+      <div class="sty"><h3>Styles</h3>${Object.entries(D.styles).map(([k, st]) => `<label><input type="checkbox" value="${k}" ${B.styles.includes(k) ? "checked" : ""}> ${esc(st.name)}${k === cat().style ? ' <span class="hint">(default)</span>' : ""}</label>`).join("")}</div>
+      <div><h3>Variations <span class="hint" style="text-transform:none;letter-spacing:0">one per line, added after the subject</span></h3>
+        <textarea id="bVar" placeholder="in candlelight&#10;in cold moonlight&#10;battle-worn, scarred">${esc(B.variants)}</textarea>
+        <label><input type="checkbox" id="bPlain" ${B.plain ? "checked" : ""}> also the plain subject</label></div>
+    </div>
+    <div class="row" style="margin-top:8px"><span class="est" id="bEst">…</span><span style="margin-left:auto"></span>
+      <button id="bCancel" title="Cancel every queued batch job (the running one finishes)">Cancel queued batch jobs</button>
+      <button class="primary" id="bGo">Queue batch</button></div>
+    <div class="wd">Watchdog: ${wd.alive ? "running" : "not running (starts with a batch)"}${(wd.log || []).length ? "\n" + wd.log.map(esc).join("\n") : ""}</div>`;
+  const read = () => { B.who = document.querySelector('input[name=bw]:checked').value; B.n = +$("bN").value; B.seeds = $("bSeeds").value; B.seed = +$("bSeed").value;
+    B.styles = [...$("batch").querySelectorAll(".sty input:checked")].map(i => i.value); B.variants = $("bVar").value; B.plain = $("bPlain").checked; };
+  const body = () => { const v = B.variants.split("\n").map(x => x.trim()).filter(Boolean); if (B.plain || !v.length) v.unshift("");
+    return { cat: CAT, ids: batchIds(), styles: B.styles, variants: v, n: B.n, seeds: B.seeds, seed: B.seed }; };
+  const est = async () => { read(); $("bSeed").disabled = B.seeds !== "sweep";
+    if (!batchIds().length || !B.styles.length) { $("bEst").textContent = "Pick entries (tick them, or use all shown) and at least one style."; return false; }
+    const e = (await api("/api/limner/batch/plan", body())).estimate;
+    $("bEst").textContent = `${e.jobs} jobs · ${e.images} images · about ${e.minutes >= 90 ? (e.minutes / 60).toFixed(1) + " h" : Math.ceil(e.minutes) + " min"} (plus model loading)`; return true; };
+  $("batch").querySelectorAll("input, select, textarea").forEach(x => x.onchange = guard(est));
+  $("bClose").onclick = () => { $("batch").hidden = true; };
+  $("bGo").onclick = guard(async () => { if (!(await est())) return; const r = await api("/api/limner/batch", body());
+    $("bEst").textContent = `Queued batch ${r.batch}: ${r.estimate.jobs} jobs, ${r.estimate.images} images. Watchdog: ${r.watchdog === true ? "started" : r.watchdog}.`; pollJobs(); });
+  $("bCancel").onclick = guard(async () => { const r = await api("/api/limner/batch/cancel", {}); $("bEst").textContent = `Cancelled ${r.cancelled} queued batch job(s).`; pollJobs(); });
+  guard(est)();
+}
+
+// ------------------------------------------------------------------ one entry (right)
+function renderDetail() {
+  const box = $("detail"), e = OPEN && entry(OPEN);
+  $("layout").classList.toggle("open", !!e); box.hidden = !e;
+  if (!e) return;
+  const fp = e.finish.crop || cat().finish.crop;
+  let h = `<div class="row"><h3 style="margin:0">${esc(e.name)}</h3><span class="hint">${esc(e.id)}</span><button style="margin-left:auto" id="dClose">✕</button></div>
+    ${e.text ? `<div class="hint" style="margin-top:4px">${esc(e.text)}</div>` : ""}
+    <h3>Subject</h3><textarea id="dSubj" rows="3" placeholder="${esc(e.draft)}">${esc(e.subject)}</textarea>
+    <div class="hint">Empty = the draft (shown greyed). What the icon shows; style words are added around it.</div>
+    <div class="f"><label>Style</label><select id="dStyle">${styleOpts(e.style, true)}</select></div>
+    <div class="f"><label>Seed</label><span><input id="dSeed" type="number" value="${e.seed ?? ""}" placeholder="random" style="width:110px"> <span class="hint">fixed seed: candidates use seed, seed+1…</span></span></div>
+    ${isP() ? `<div class="f"><label>Face crop</label><span><input id="dCx" type="number" step="0.01" value="${fp[0]}" style="width:52px"><input id="dCy" type="number" step="0.01" value="${fp[1]}" style="width:52px"><input id="dCs" type="number" step="0.01" value="${fp[2]}" style="width:52px"> <button id="dCrop" title="Clear this portrait's own crop">default</button></span></div>` : ""}
+    <div class="row"><button id="dSave">Save</button><label>Candidates</label><input id="dN" type="number" value="${$("genN").value}" min="1" max="12" style="width:52px"><button class="primary" id="dGen">Generate</button></div>
+    <div class="ptext" title="The full prompt the next candidate gets">${esc(e.prompt)}</div>
+    <h3>Candidates <span class="hint" style="text-transform:none;letter-spacing:0">${e.candidates.length}</span>
+      ${isP() ? "" : `<span class="bgs" style="float:right">${["#2a2333", "#0d0b10", "#6b5a44", "#e8e2ef"].map(c => `<button data-bg="${c}" style="background:${c}" title="Preview background"></button>`).join("")}</span>`}</h3>
+    <div class="cands">`;
+  for (const c of e.candidates) {
+    const app = e.approved === c.cid;
+    const main = img(CAT, e.id, c.cid, isP() ? "portrait.png" : "icon.png");
+    const k = e.candidates.indexOf(c) + 1;
+    h += `<div class="cand ${isP() ? "portrait" : ""} ${app ? "app" : ""} ${c.new && !app ? "new" : ""}" title="${esc(c.prompt || "")}">
+      <div class="big" data-z="${img(CAT, e.id, c.cid, "master.png")}" style="background:${BG}"><img src="${main}" loading="lazy"></div>
+      <div class="sizes">${isP() ? `<img src="${img(CAT, e.id, c.cid, "thumb.png")}" width="64" height="64" style="image-rendering:auto"><img src="${img(CAT, e.id, c.cid, "thumb.png")}" width="32" height="32" style="image-rendering:auto">`
+        : `<img src="${main}" width="64" height="64" style="background:${BG}"><img src="${main}" width="32" height="32" style="background:${BG}">`}</div>
+      <div class="meta">${k <= 9 ? `<b>${k}</b> · ` : ""}${c.new && !app ? `<span class="nb">new</span> · ` : ""}${esc(D.styles[c.style]?.name || c.style || "")} · seed ${c.seed}${c.kind === "vary" ? " · varied" : ""}${c.extra ? ` · ${esc(c.extra)}` : ""}${c.batch ? ` · ${esc(c.batch)}` : ""}</div>
+      <div class="acts">
+        <button data-a="approve" data-c="${c.cid}" title="${app ? "Approved: click to unapprove" : "Approve (exported)"}">${app ? "★" : "☆"}</button>
+        <button data-a="vary" data-c="${c.cid}" title="3 variations from this one (img2img with the current subject)">Vary</button>
+        <button data-a="seed" data-c="${c.cid}" data-s="${c.seed}" title="Use this seed for the entry (tweak words, keep the composition)">Seed</button>
+        <button data-a="archive" data-c="${c.cid}" title="Archive (moved to archive/limner)">✕</button></div></div>`;
+  }
+  h += `</div>${e.candidates.length ? "" : `<p class="hint">No candidates yet.</p>`}
+    <div class="f" style="margin-top:8px"><label>Vary strength</label><span><input id="dDen" type="number" step="0.05" min="0.1" max="0.95" value="${localStorage.limnerDen || 0.45}" style="width:62px"> <span class="hint">low = close to the pick</span></span></div>`;
+  box.innerHTML = h;
+  $("dClose").onclick = () => { OPEN = null; renderGrid(); renderDetail(); };
+  const save = async () => {
+    const fields = { subject: $("dSubj").value.trim(), style: $("dStyle").value, seed: $("dSeed").value === "" ? null : +$("dSeed").value };
+    if (isP()) { const cr = [+$("dCx").value, +$("dCy").value, +$("dCs").value]; if (cr.join() !== fp.join()) { fields.finish = { crop: cr }; BUST = Date.now(); } }
+    await api("/api/limner/entry", { cat: CAT, id: e.id, fields });
+  };
+  $("dSave").onclick = guard(async () => { await save(); await load(); });
+  $("dGen").onclick = guard(async () => { await save(); await gen([e.id], +$("dN").value); await load(); });
+  if (isP()) $("dCrop").onclick = guard(async () => { await api("/api/limner/entry", { cat: CAT, id: e.id, fields: { finish: { crop: null } } }); BUST = Date.now(); await load(); });
+  $("dDen").onchange = () => localStorage.limnerDen = $("dDen").value;
+  box.querySelectorAll("[data-bg]").forEach(b => b.onclick = () => { BG = localStorage.limnerBg = b.dataset.bg; renderGrid(); renderDetail(); });
+  box.querySelectorAll(".big").forEach(b => b.onclick = () => { const z = $("zoom"); z.querySelector("img").src = b.dataset.z; z.querySelector("img").className = isP() ? "" : "px"; z.classList.add("on"); });
+  box.querySelectorAll(".acts button").forEach(b => b.onclick = guard(async () => {
+    const a = b.dataset.a, cid = b.dataset.c;
+    if (a === "approve") await api("/api/limner/approve", { cat: CAT, id: e.id, cid, on: e.approved !== cid });
+    if (a === "archive") await api("/api/limner/archive", { cat: CAT, id: e.id, cid });
+    if (a === "seed") await api("/api/limner/entry", { cat: CAT, id: e.id, fields: { seed: +b.dataset.s } });
+    if (a === "vary") { await save(); await api("/api/limner/vary", { cat: CAT, id: e.id, cid, n: 3, denoise: +$("dDen").value }); pollJobs(); }
+    await load(); }));
+}
+$("zoom").onclick = () => $("zoom").classList.remove("on");
+document.addEventListener("keydown", guard(async (ev) => {   // review keys while an entry is open
+  if (!OPEN || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || "")) return;
+  const list = shown(), i = list.findIndex(e => e.id === OPEN), e = entry(OPEN);
+  if (ev.key === "ArrowRight" || ev.key === "ArrowLeft") {
+    ev.preventDefault();
+    const nx = list[(i + (ev.key === "ArrowRight" ? 1 : -1) + list.length) % list.length];
+    if (nx) { OPEN = nx.id; renderGrid(); renderDetail(); document.querySelector(".card.sel")?.scrollIntoView({ block: "nearest" }); }
+  } else if (/^[1-9]$/.test(ev.key) && e && e.candidates[+ev.key - 1]) {
+    const c = e.candidates[+ev.key - 1];
+    await api("/api/limner/approve", { cat: CAT, id: e.id, cid: c.cid, on: e.approved !== c.cid }); await load();
+  } else if (ev.key === "Escape") { OPEN = null; renderGrid(); renderDetail(); }
+}));
+
+// ------------------------------------------------------------------ jobs
+$("jobsBtn").onclick = () => $("jobsPanel").classList.toggle("on");
+$("jobsClear").onclick = guard(async () => { await api("/api/ws/jobs/clear", {}); pollJobs(); });
+let lastDone = null;
+async function pollJobs() {
+  try {
+    const jobs = (await api("/api/ws/jobs")).jobs;
+    ACTIVE = jobs.filter(j => j.status === "queued" || j.status === "running");
+    const run = jobs.find(j => j.status === "running");
+    $("jobsBtn").textContent = ACTIVE.length ? `Queue: ${ACTIVE.length} (${run ? run.label : "starting"})` : "Queue: idle";
+    $("jobsList").innerHTML = jobs.slice().reverse().map(j => `<div class="job"><span>${esc(j.label)}${j.note ? `<div class="note">${esc(j.note)}</div>` : ""}</span><span><span class="s ${j.status}" title="${esc(j.error || "")}">${j.status}</span>${j.status === "queued" || j.status === "running" ? `<button class="x" title="Cancel" onclick="cancelJob(${j.id})">✕</button>` : ""}</span></div>`).join("") || `<p class="hint">Nothing queued.</p>`;
+    const done = jobs.filter(j => (j.status === "done" || j.status === "failed") && j.label.startsWith("Limner")).length;
+    if (lastDone === null) lastDone = done;
+    if (done !== lastDone) { lastDone = done; const f = jobs.filter(j => j.status === "failed" && j.label.startsWith("Limner")).pop(); if (f) err(`${f.label}: ${f.error}`); await load(); }
+    else if (D) renderGrid();
+  } catch (e) { }
+}
+async function cancelJob(id) { await api("/api/ws/jobs/cancel", { id }); pollJobs(); }
+setInterval(pollJobs, 2000);
+guard(load)(); pollJobs();
+</script>
+</body>
+</html>

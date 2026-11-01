@@ -109,7 +109,7 @@ class Studio:
 
 
 # Every module that registers Studio job kinds (hdart.jobs.kind); imported at start so the registry is complete.
-JOB_MODULES = ("dungeon", "library", "workshop", "puppet", "puppet_template", "puppet_paint", "puppet_face", "puppet_items")
+JOB_MODULES = ("dungeon", "library", "workshop", "puppet", "puppet_template", "puppet_paint", "puppet_face", "puppet_items", "limner")
 BASE_RELOAD = ("comfy", "ai_kit", "workshop", "dungeon")   # reloaded before every job (plus each kind's own list)
 
 
@@ -518,6 +518,54 @@ def dungeon_get(path, q):
     raise ValueError(f"unknown {path}")
 
 
+def limner_post(action, b):
+    """Studio > Limner actions (hdart/limner.py). Generation goes through the job queue, one job per entry."""
+    from . import limner as lm
+    fresh(lm)
+    cat = b.get("cat")
+    if action == "generate":   # {cat, ids: [...], n, seed?, style?}
+        ids = []
+        for eid in b["ids"]:
+            a = {"cat": cat, "id": eid, "n": int(b.get("n", 3)), "seed": b.get("seed"), "style": b.get("style")}
+            ids.append(JOBS.add("limner_gen", a, f"Limner · {cat} · {eid} ×{a['n']}")["id"])
+        return {"jobs": ids}
+    if action == "vary":
+        a = {"cat": cat, "id": b["id"], "cid": b["cid"], "n": int(b.get("n", 3)), "denoise": float(b.get("denoise", 0.45))}
+        return {"jobs": [JOBS.add("limner_vary", a, f"Limner · {cat} · {b['id']} vary ×{a['n']}")["id"]]}
+    if action in ("batch", "batch/plan"):   # {cat, ids, styles, variants, n, seeds: random|sweep, seed}
+        bid, plan, est = lm.plan_batch(cat, b["ids"], b.get("styles"), b.get("variants"), int(b.get("n", 2)),
+                                       b.get("seeds", "random"), b.get("seed"))
+        if action == "batch/plan":
+            return {"estimate": est}
+        for a in plan:
+            JOBS.add("limner_gen", a, f"Limner batch {bid} · {cat} · {a['id']} · {a['style'] or 'default'}"
+                                      f"{' · ' + a['extra'] if a.get('extra') else ''} ×{a['n']}")
+        return {"batch": bid, "estimate": est, "watchdog": lm.ensure_watchdog() or "already running"}
+    if action == "batch/cancel":
+        return {"cancelled": JOBS.cancel_where(f"Limner batch {b['batch']}" if b.get("batch") else "Limner batch")}
+    if action == "watchdog":
+        return {"started": lm.ensure_watchdog()}
+    if action == "reviewed":
+        return lm.mark_reviewed(cat)
+    if action == "approve":
+        return lm.approve(cat, b["id"], b["cid"], bool(b.get("on", True)))
+    if action == "archive":
+        return lm.archive(cat, b["id"], b["cid"])
+    if action == "entry":
+        return lm.save_entry(cat, b["id"], b["fields"])
+    if action == "category":
+        return lm.save_category(cat, b["fields"])
+    if action == "style":
+        return lm.save_style(b["key"], b["fields"])
+    if action == "look":
+        return lm.save_look(b["archetype"], b["look"], b.get("text", ""))
+    if action == "refinish":
+        return lm.refinish(cat, b.get("ids"))
+    if action == "export":
+        return lm.export(b.get("cats"))
+    raise ValueError(f"unknown action {action}")
+
+
 def png_url(arr):
     buf = io.BytesIO()
     Image.fromarray(arr).save(buf, "PNG")
@@ -545,9 +593,9 @@ def serve(renders, spec, palettes, port=4321, open_browser=True):
             u = urlparse(self.path)
             q = parse_qs(u.query)
             try:
-                if u.path in ("/", "/index.html", "/workshop", "/items", "/editor", "/dungeon"):   # /items, /editor: same page
+                if u.path in ("/", "/index.html", "/workshop", "/items", "/editor", "/dungeon", "/limner"):   # /items, /editor: same page
                     page = {"/workshop": "workshop.html", "/items": "workshop.html", "/editor": "workshop.html",
-                            "/dungeon": "dungeon.html"}.get(u.path, PAGE.name)
+                            "/dungeon": "dungeon.html", "/limner": "limner.html"}.get(u.path, PAGE.name)
                     body = PAGE.with_name(page).read_bytes()
                     self.send_response(200)
                     self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -569,6 +617,19 @@ def serve(renders, spec, palettes, port=4321, open_browser=True):
                     self.send_header("Content-Length", str(len(data)))
                     self.send_header("Cache-Control", "no-store" if ctype != "image/png" or "room" in u.path
                                      or "capture" in u.path else "max-age=3600")
+                    self.end_headers()
+                    self.wfile.write(data)
+                elif u.path == "/api/limner/doc":
+                    from . import limner
+                    fresh(limner)
+                    self._json(limner.doc())
+                elif u.path == "/api/limner/img":
+                    from . import limner
+                    data = limner.image(q["path"][0])
+                    self.send_response(200)
+                    self.send_header("Content-Type", "image/png")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.send_header("Cache-Control", "no-cache")   # a refinish rewrites the file in place
                     self.end_headers()
                     self.wfile.write(data)
                 elif u.path == "/api/ws/img":
@@ -620,6 +681,8 @@ def serve(renders, spec, palettes, port=4321, open_browser=True):
                     self._json(dungeon_post(u.path[9:], body))
                 elif u.path.startswith("/api/lib/"):
                     self._json(library_post(u.path[9:], body))
+                elif u.path.startswith("/api/limner/"):
+                    self._json(limner_post(u.path[12:], body))
                 elif u.path == "/api/characters/save":
                     from . import workshop
                     self._json(workshop.save_character(body["name"], body["appearance"], body.get("note", "")))

@@ -560,6 +560,32 @@ Template, so an item fitted once is reused on every build of the race.
   packs on disk); item and puppet exports also write `Art/ramps.json` (every group, ids `<group>.<name>`) and
   `Art/channels.json`. The pack folder is rebuilt whole. Test: `tests/test_item_export.py`.
 
+## Limner: icons and hero portraits (`/limner`, 2026-11-01)
+Hamburger menu → **Limner**. Tabs: Items (every base item the game wants, prompted placeholders until real item art),
+Gear (cloth/leather/plate per armour slot + one per weapon type), Classes, Statuses, Damage, Skills (placeholders per
+damage type × active/passive until the class waves) and Portraits (archetype × look × male/female, the static set
+players pick from). Lists come from `ArtContract/requirements.json` → `wanted.icons` + `specs/limner.json`.
+
+- **Layers you can tune, each on its own** (`specs/limner.json`, in git): *styles* (prefix/suffix words, pixel LoRA;
+  the portrait house style is `semireal`, reference `specs/limner_refs/semireal.jpg`), *categories* (default style,
+  extra words, size, steps, the finish), *entries* (Eric's subject, style, seed, finish/crop overrides), *archetype
+  looks* (each look = a male and a female portrait).
+- **Candidates:** `sprites/limner/<cat>/<id>/<cid>/` with `master.png` (kept), `icon.png` or `portrait.png` +
+  `thumb.png`, and `meta.json` (exact prompt, seed, style, batch, variation). Approvals in `sprites/limner/state.json`.
+- **Finish without the GPU:** icon px, colours (0 = smooth), margin, outline; portrait width, thumb, face crop. Saving
+  re-finishes every candidate. **Vary** = img2img from a pick with the current subject; **Seed** = keep the composition.
+- **Overnight batches** (Batch…): entries × styles × variation lines, n candidates each, random seeds or a sweep. One
+  small job each, `retries: 2`, a per-image timeout (a stuck render is dropped from ComfyUI and retried). Queuing a
+  batch starts the **watchdog** (`hdart/watchdog.py`, also `uv run python -m hdart.watchdog`): keeps Windows awake
+  while jobs remain, restarts a dead Studio or ComfyUI, interrupts a job stuck > 15 min, exits 10 min after the queue
+  empties; log `work/watchdog.log`. A Studio restart re-queues the interrupted job when it has retries left.
+- **Review:** tabs show `+N` new candidates; Show → *new*; in an entry ← → next/previous, 1–9 approve; *Mark
+  reviewed* when done.
+- **Export:** approved only → `Art/Icons/<cat>/<id>.png` + `index.json` (id → file); portraits →
+  `Art/Portraits/<id>.png` + `<id>.thumb.png` + `index.json` (id → file, thumb, archetype, gender, look). Each
+  folder is rebuilt whole.
+- Code `hdart/limner.py`, page `studio/limner.html`, test `tests/test_limner.py`.
+
 ## Legacy (retired 2026-10-25)
 The first character directions are retired: the Blender modular character kit, the AI sprite kit v3, the hand-drawn
 2D JRPG kit with voxel sheets, and their Unity side (`CharacterComposer`, `CharacterKit`, `CharacterArtImport`,

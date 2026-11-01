@@ -11,7 +11,9 @@ module is never reloaded (it holds the registry and the queue).
 
 Jobs run one at a time (ComfyUI is single-GPU). The queue is saved to a JSON file on every change: after a restart the
 queued jobs run again, and a job that was running is marked failed ("interrupted"), not re-run, because it may have
-written half its outputs. Before a GPU job the runner waits while ComfyUI is busy with someone else's work (a test, the
+written half its outputs. Retries: a job whose args carry `retries` (> 0) is queued again (at the back, `retries` - 1)
+when it fails or is interrupted by a restart; overnight batches use this so one bad render or a crash costs a retry,
+not the night. Before a GPU job the runner waits while ComfyUI is busy with someone else's work (a test, the
 CLI, a second Studio). Cancel drops a queued job, or interrupts ComfyUI for the running one.
 """
 import importlib
@@ -71,8 +73,14 @@ class Jobs:
             return
         for j in items:
             if j["status"] == "running":
-                j["status"], j["error"] = "failed", "interrupted: the Studio restarted while it ran"
+                if int((j.get("args") or {}).get("retries") or 0) > 0:
+                    j["args"]["retries"] = int(j["args"]["retries"]) - 1
+                    j["status"], j["error"] = "queued", None
+                    j["label"] = j["label"].removesuffix(" (retry)") + " (retry)"
+                else:
+                    j["status"], j["error"] = "failed", "interrupted: the Studio restarted while it ran"
             j.pop("note", None)
+            j.pop("started", None)
         self.items = items
         self.n = max((j["id"] for j in items), default=0)
 
@@ -105,8 +113,22 @@ class Jobs:
             return next((j for j in self.items if j["id"] == jid), None)
 
     def snapshot(self):
+        """Every queued/running job plus the newest finished ones (a long overnight queue is listed whole)."""
         with self.lock:
-            return [{k: v for k, v in j.items() if k != "args"} for j in self.items[-KEEP:]]
+            done = [j for j in self.items if j["status"] not in ("queued", "running")][-KEEP:]
+            keep = {id(j) for j in done}
+            return [{k: v for k, v in j.items() if k != "args"} for j in self.items
+                    if id(j) in keep or j["status"] in ("queued", "running")]
+
+    def cancel_where(self, prefix):
+        """Cancel every queued job whose label starts with `prefix` (a whole batch). Returns how many."""
+        n = 0
+        with self.lock:
+            for j in self.items:
+                if j["status"] == "queued" and j["label"].startswith(prefix):
+                    j["status"] = "cancelled"; n += 1
+        self._save()
+        return n
 
     def clear_done(self):
         with self.lock:
@@ -135,7 +157,7 @@ class Jobs:
         with self.lock:
             job = next((j for j in self.items if j["status"] == "queued"), None)
             if job:
-                job["status"] = "running"
+                job["status"], job["started"] = "running", time.time()
         if job:
             self._save()
         return job
@@ -170,7 +192,11 @@ class Jobs:
                 job["status"], job["error"] = "cancelled", None
             else:
                 job["status"], job["error"] = "failed", str(e) or type(e).__name__
+                left = int(a.get("retries") or 0) if isinstance(a, dict) else 0
+                if left > 0:
+                    self.add(job["kind"], {**a, "retries": left - 1}, job["label"].removesuffix(" (retry)") + " (retry)")
         job.pop("cancel", None)
+        job.pop("started", None)
         self._save()
 
     def run(self):

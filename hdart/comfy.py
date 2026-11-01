@@ -242,6 +242,18 @@ def interrupt():
         pass
 
 
+def _drop(pid):
+    """Take our own prompt out of ComfyUI after a timeout: off the queue if it's still waiting, interrupted if it's the
+    one running (never someone else's)."""
+    try:
+        requests.post(f"{url()}/queue", json={"delete": [pid]}, timeout=5)
+        q = requests.get(f"{url()}/queue", timeout=5).json()
+        if any(len(r) > 1 and r[1] == pid for r in q.get("queue_running", [])):
+            requests.post(f"{url()}/interrupt", timeout=5)
+    except (requests.RequestException, ValueError):
+        pass
+
+
 def _http(method, path, **kw):
     """One request to ComfyUI; a dropped connection is a ComfyError like every other failure."""
     try:
@@ -291,7 +303,8 @@ def run(nodes, out_dir, timeout=None):
             if status.get("completed", True):
                 break
         if time.time() - t0 > timeout:
-            raise ComfyError("ComfyUI timed out")
+            _drop(pid)
+            raise ComfyError(f"ComfyUI timed out after {timeout:.0f} s")
         time.sleep(0.2 if URL else 1.0)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)

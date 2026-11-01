@@ -29,5 +29,6 @@ echo.
 echo   Character Workshop  http://127.0.0.1:4321/workshop
 echo   Item Workshop       http://127.0.0.1:4321/items   (Board, Sets, Sprite Studio)
 echo   Dungeon Forge       http://127.0.0.1:4321/dungeon
+echo   Limner              http://127.0.0.1:4321/limner   (icons, portraits, overnight batches)
 echo   Sprite Studio       http://127.0.0.1:4321
 echo   ComfyUI         http://127.0.0.1:8188  (first generation after a start loads the models: ~1 min)
