@@ -19,7 +19,7 @@ import json, shutil, time
 import numpy as np
 from PIL import Image
 
-from . import config, store, workshop as ws, puppet_face as pf, puppet_paint as ppt
+from . import config, store, workshop as ws, puppet_face as pf, puppet_paint as ppt, puppet_template as pt
 from .palette import ramp_from_base
 
 
@@ -94,6 +94,21 @@ def keyed_index(levels, channel, size):
     return idx
 
 
+def live_joints(sp):
+    """{view: joints} from the current template when the paint was painted on the same base body (same `from` and
+    parts), else {}. A joint is only a turning point: the parts keep their pixels and rects, so moving a pivot in the
+    Template editor after painting (e.g. the hips for the walk, 2026-11-01) reaches the game without repainting."""
+    cur = pt.load()
+    if cur.get("from") != sp.get("from"):
+        return {}
+    out = {}
+    for v in VIEWS:
+        C, V = cur["views"].get(v, {}), sp["views"].get(v, {})
+        if set(C.get("joints", {})) == set(V.get("joints", {})) and set(C.get("order", [])) == set(V.get("order", [])):
+            out[v] = C["joints"]
+    return out
+
+
 def _body(race, sex, size, has_faces, d):
     """Export one sex's painted body; returns its puppet.json entry (None when the build has no paint)."""
     try:
@@ -107,9 +122,10 @@ def _body(race, sex, size, has_faces, d):
     # Skin levels = the parts' bands (made from the paint, maybe edited by hand), the key measured on both views.
     cent = ppt.ensure_bands(f"{race}.{sex}", cid); bands = ppt.out_dir(f"{race}.{sex}") / cid / "bands"
     entry = {"paint": cid, "skinKey": cent, "views": {}}
+    cur = live_joints(sp)
     for v in VIEWS:
         V = sp["views"][v]; joints = {}
-        for limb, j in V["joints"].items():
+        for limb, j in (cur.get(v) or V["joints"]).items():
             if isinstance(j, dict):
                 joints[limb] = {n: [round(p[0] * k, 2), round(p[1] * k, 2)] for n, p in j.items() if isinstance(p, list)}
                 if "R" in j:
