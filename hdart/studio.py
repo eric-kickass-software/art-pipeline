@@ -557,6 +557,10 @@ def limner_post(action, b):
         return lm.save_category(cat, b["fields"])
     if action == "style":
         return lm.save_style(b["key"], b["fields"])
+    if action == "add":   # {cat, id?, name, subject?, sub?}
+        return lm.add_entry(cat, b.get("id"), b.get("name"), b.get("subject", ""), b.get("sub", ""))
+    if action == "remove":
+        return lm.remove_entry(cat, b["id"])
     if action == "look":
         return lm.save_look(b["archetype"], b["look"], b.get("text", ""))
     if action == "refinish":

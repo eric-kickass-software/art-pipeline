@@ -152,6 +152,62 @@ assert not watchdog.alive() and watchdog.status()["alive"] is False
 watchdog.log("test line")
 assert watchdog.alive() and watchdog.status()["log"][-1].endswith("test line")
 
+# items vs gear: the game's content decides (a slot = equippable → Gear); delivered ids stay listed
+content = game / "Assets" / "StreamingAssets" / "Content" / "core" / "items"
+content.mkdir(parents=True)
+(content / "items.json").write_text(json.dumps({"items": [
+    {"id": "item.bandage", "name": "Bandage", "kind": "consumable", "text": "Stops bleeding."},
+    {"id": "item.iron_helm", "name": "Iron Helm", "kind": "armor", "slot": "head"},
+    {"id": "item.dagger", "name": "Dagger", "kind": "weapon", "slot": "main", "weaponType": "dagger"}]}), encoding="utf-8")
+e = L.entries()
+assert [x["id"] for x in e["items"]] == ["item.bandage"] and e["items"][0]["draft"] == "Bandage, stops bleeding"
+g = {x["id"]: x for x in e["gear"]}
+assert g["item.iron_helm"]["group"] == "Armour" and g["item.dagger"]["sub"] == "dagger" and "slot.head.cloth" in g
+assert e["gear"][0]["group"] == "Armour" and e["gear"][-1]["group"].startswith("Fallbacks")
+assert len(e["ui"]) == len(L.spec()["subjects"]["ui"]) and all(x["id"].startswith("ui.") for x in e["ui"])
+
+# moving entries keeps everything: candidates (and archived ones), approval, overrides; never overwrites
+helm = L.root() / "items" / "item.iron_helm"
+with FakeComfy():
+    hc = L.generate("items", "item.bandage", 1)   # a real candidate, then pose it as an old Items one of the helm
+shutil.copytree(L.entry_dir("items", "item.bandage") / hc[0], helm / hc[0])
+(data / "archive" / "limner" / "items" / "item.iron_helm" / "old").mkdir(parents=True)
+L.approve("items", "item.iron_helm", hc[0])
+L.save_entry("items", "item.iron_helm", {"subject": "a dented helm"})
+assert L.move_entries("items", "gear", dry_run=True) == {"would_move": ["item.iron_helm"], "clash": []}
+r = L.move_entries("items", "gear")
+assert r["moved"] == ["item.iron_helm"] and not helm.exists() and (L.root() / "gear" / "item.iron_helm" / hc[0] / "icon.png").exists()
+assert (data / "archive" / "limner" / "gear" / "item.iron_helm" / "old").exists()
+assert L._state().load()["approved"]["gear"]["item.iron_helm"] == hc[0] and "item.iron_helm" not in L._state().load()["approved"].get("items", {})
+assert L.subject("gear", "item.iron_helm") == "a dented helm" and "items/item.iron_helm" not in L.spec()["entries"]
+assert L.store.read_meta(L.root() / "gear" / "item.iron_helm" / hc[0])["category"] == "gear"
+assert L.move_entries("items", "gear")["moved"] == []   # idempotent; bandage isn't equippable
+assert L.export(["gear"])["exported"]["gear"] == 1 and (art / "Icons" / "gear" / "item.iron_helm.png").exists()
+
+# your own entries: add (prefix added, id from the name), use, remove (candidates kept), no duplicates across categories
+assert L.add_entry("gear", "", "Silver Dagger!", "a slim silver dagger", "dagger")["id"] == "item.silver_dagger"
+assert L.add_entry("ui", "menu.crafting", "Crafting")["id"] == "ui.menu.crafting"
+x = next(x for x in L.entries()["gear"] if x["id"] == "item.silver_dagger")
+assert x["added"] and x["group"] == "Added here" and x["sub"] == "dagger" and "a slim silver dagger" in L.prompt("gear", x["id"])
+for bad in (lambda: L.add_entry("items", "item.silver_dagger", "x"), lambda: L.add_entry("gear", "item.dagger", "x"),
+            lambda: L.add_entry("statuses", "status.x", "x"), lambda: L.add_entry("ui", "Bad Id!", "")):
+    try:
+        bad(); raise AssertionError("should fail")
+    except ValueError:
+        pass
+with FakeComfy():
+    sc = L.generate("gear", "item.silver_dagger", 1)
+L.approve("gear", "item.silver_dagger", sc[0])
+assert L.export(["gear"])["exported"]["gear"] == 2
+L.remove_entry("gear", "item.silver_dagger")
+assert "item.silver_dagger" not in {x["id"] for x in L.entries()["gear"]} and (L.root() / "gear" / "item.silver_dagger" / sc[0]).exists()
+assert L.export(["gear"])["exported"]["gear"] == 1   # an approval without an entry isn't exported
+try:
+    L.remove_entry("gear", "item.dagger"); raise AssertionError("game entries can't be removed")
+except ValueError:
+    pass
+assert L.doc()["categories"]["ui"]["add_prefix"] == "ui." and L.doc()["categories"]["classes"]["add_prefix"] is None
+
 assert (config.ROOT / "specs" / "limner.json").read_text(encoding="utf-8") == repo_spec, "the test touched the real spec"
 os.environ.pop("HD_PROJECT"); os.environ.pop("HD_DATA"); shutil.rmtree(tmp, ignore_errors=True)
 print("test_limner: ok")

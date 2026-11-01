@@ -1,8 +1,9 @@
 """Limner: icons and hero portraits (Studio page /limner).
 
-Categories: items (every base item the game wants), gear (cloth/leather/plate per armour slot, one per weapon type),
-classes, statuses, damageTypes, skills (placeholders per damage type until the class waves) and portraits (archetype ×
-look × gender, the static set players pick from).
+Categories: items (the game's base items without a slot: consumables, tools, keys), gear (every equippable base item,
+plus fallbacks: cloth/leather/plate per armour slot, one per weapon type), classes, statuses, damageTypes, skills
+(placeholders per damage type until the class waves), ui (menu screens and other UI icons) and portraits (archetype ×
+look × gender, the static set players pick from). Items, gear and ui take Eric's own entries ("added" in the spec).
 
 Everything is tunable after the fact, one layer at a time:
   style    (specs/limner.json "styles")      the look: prefix/suffix words, LoRA strength
@@ -22,8 +23,11 @@ from PIL import Image
 from . import config, contract, jobs, store
 
 SPEC = config.ROOT / "specs" / "limner.json"
-ICON_CATS = ("items", "gear", "classes", "statuses", "damageTypes", "skills")
+ICON_CATS = ("items", "gear", "classes", "statuses", "damageTypes", "skills", "ui")
 CATS = ICON_CATS + ("portraits",)
+EQUIP_KINDS = ("weapon", "armor", "trinket")   # only for wanted rows without content: equippable unless told otherwise
+GEAR_GROUPS = {"armor": "Armour", "weapon": "Weapons & held", "trinket": "Trinkets"}
+ADD_PREFIX = {"items": "item.", "gear": "item.", "ui": "ui."}   # categories you can add entries to in the page
 
 
 def spec():
@@ -66,28 +70,48 @@ def entries(sp=None, req=None):
     subj = sp.get("subjects", {})
     out = {c: [] for c in CATS}
 
-    texts = {}
+    # Every base item of the game (its content files), plus wanted ids the content doesn't have. Not the wanted list
+    # alone: the game drops ids from it once they have an icon. Equippables (a slot) go to Gear, the rest to Items.
     try:
-        texts = {k: (v.get("name"), v.get("text")) for k, v in contract.game_items().items()}
+        rows = {k: dict(v) for k, v in contract.game_items().items()}
     except Exception:
-        pass
+        rows = {}
     for w in wanted.get("items", []):
-        name, text = texts.get(w["id"], (w.get("name"), None))
-        name = name or w.get("name") or w["id"]
+        rows.setdefault(w["id"], {**w, "slot": w.get("slot") or ("?" if w.get("kind") in EQUIP_KINDS else None)})
+    for iid, r in sorted(rows.items()):
+        name, text = r.get("name") or iid, r.get("text")
         draft = f"{name}, {text.rstrip('.').lower()}" if text else name.lower()
-        out["items"].append({"id": w["id"], "name": name, "sub": w.get("kind", ""), "draft": draft})
+        if r.get("slot"):
+            sub = r.get("weaponType") or (r.get("slot") if r.get("slot") != "?" else r.get("kind", ""))
+            out["gear"].append({"id": iid, "name": name, "sub": sub, "group": GEAR_GROUPS.get(r.get("kind"), "Gear"),
+                                "text": text or "", "draft": draft})
+        else:
+            out["items"].append({"id": iid, "name": name, "sub": r.get("kind", ""), "group": "Game items",
+                                 "text": text or "", "draft": draft})
 
     for gid, s in subj.get("gear", {}).items():
         parts = gid.split(".")
         name = f"{parts[2].title()} {parts[1]}" if parts[0] == "slot" else parts[1].title()
-        out["gear"].append({"id": gid, "name": name, "sub": "armour slot" if parts[0] == "slot" else "weapon type", "draft": s})
+        armour = parts[0] == "slot"
+        out["gear"].append({"id": gid, "name": name, "sub": "armour slot" if armour else "weapon type",
+                            "group": "Fallbacks: armour slot × material" if armour else "Fallbacks: weapon type", "draft": s})
 
-    classes = wanted.get("classes") or [{"id": k, "name": k.split(".")[1].replace("_", " ").title()} for k in subj.get("classes", {})]
+    for uid, s in subj.get("ui", {}).items():
+        parts = uid.split(".")   # ui.menu.end_turn → "End turn", label "menu"
+        out["ui"].append({"id": uid, "name": parts[-1].replace("_", " ").capitalize(), "sub": " · ".join(parts[1:-1]),
+                          "group": "Menu & UI", "draft": s})
+
+    # wanted lists shrink as icons are delivered, so the spec's subjects keep the rest listed
+    def _union(rows, keys):
+        have = {r["id"] for r in rows}
+        return list(rows) + [{"id": k, "name": k.split(".")[1].replace("_", " ").title()} for k in keys if k not in have]
+
+    classes = _union(wanted.get("classes") or [], subj.get("classes", {}))
     for c in classes:
         out["classes"].append({"id": c["id"], "name": c["name"], "sub": c.get("role", ""), "text": c.get("text", ""),
                                "draft": subj.get("classes", {}).get(c["id"]) or f"an emblem of the {c['name']}"})
 
-    statuses = wanted.get("statuses") or [{"id": k, "name": k.split(".")[1].title()} for k in subj.get("statuses", {})]
+    statuses = _union(wanted.get("statuses") or [], subj.get("statuses", {}))
     for s in statuses:
         out["statuses"].append({"id": s["id"], "name": s["name"], "sub": "",
                                 "draft": subj.get("statuses", {}).get(s["id"]) or s["name"].lower()})
@@ -107,7 +131,23 @@ def entries(sp=None, req=None):
                 out["portraits"].append({"id": f"portrait.{ak}.{lk}.{gk}", "name": f"{a['name']} · {lk} · {gk.upper()}",
                                          "sub": a["name"], "archetype": ak, "look": lk, "gender": gk,
                                          "draft": f"a {g} human {look}"})
+
+    # Eric's own entries (added in the page): items/gear the game doesn't have yet, extra UI icons, …
+    for cat, es in (sp.get("added") or {}).items():
+        have = {x["id"] for x in out.get(cat, [])}
+        for eid, a in es.items():
+            if cat in out and eid not in have:
+                out[cat].append({"id": eid, "name": a.get("name") or _title(eid), "sub": a.get("sub", ""),
+                                 "group": "Added here", "added": True, "draft": a.get("draft") or (a.get("name") or eid).lower()})
+    order = {"gear": list(GEAR_GROUPS.values()) + ["Gear", "Fallbacks: armour slot × material", "Fallbacks: weapon type"]}
+    for cat, es in out.items():   # stable: groups in a fixed order, entries keep their order inside a group
+        if cat in order:
+            es.sort(key=lambda x: order[cat].index(x["group"]) if x.get("group") in order[cat] else len(order[cat]))
     return out
+
+
+def _title(eid):
+    return eid.split(".", 1)[-1].replace(".", " ").replace("_", " ").capitalize()
 
 
 def _entry(cat, eid, sp=None):
@@ -431,6 +471,93 @@ def save_look(archetype, look, text):
     return {"ok": True}
 
 
+def add_entry(cat, eid, name, subject="", sub=""):
+    """Add (or rename) one of Eric's own entries: an item or gear the game doesn't have yet, a UI icon, …
+    The id gets the category's prefix (item., ui.) when it's missing; the subject is the entry's usual override."""
+    if cat not in ADD_PREFIX:
+        raise ValueError(f"entries can't be added to {cat}")
+    eid = (eid or "").strip().lower()
+    if not eid:
+        eid = re.sub(r"[^a-z0-9]+", "_", (name or "").lower()).strip("_")
+    if not eid.startswith(ADD_PREFIX[cat]):
+        eid = ADD_PREFIX[cat] + eid
+    if not re.fullmatch(re.escape(ADD_PREFIX[cat]) + r"[a-z][a-z0-9_]*(\.[a-z0-9_]+)*", eid):
+        raise ValueError(f"{eid!r}: ids are {ADD_PREFIX[cat]}lowercase_words")
+    sp = spec()
+    for c, es in entries(sp).items():
+        hit = next((x for x in es if x["id"] == eid and not x.get("added")), None)
+        if hit:
+            raise ValueError(f"{eid} is already in {c} (from the game or the spec)")
+
+    def fn(sp):
+        for c in ADD_PREFIX:   # one category per id
+            if c != cat and eid in sp.get("added", {}).get(c, {}):
+                raise ValueError(f"{eid} was already added to {c}")
+        a = {"name": (name or "").strip() or _title(eid)}
+        if sub:
+            a["sub"] = sub.strip()
+        sp.setdefault("added", {}).setdefault(cat, {})[eid] = a
+        if subject and subject.strip():
+            sp.setdefault("entries", {}).setdefault(f"{cat}/{eid}", {})["subject"] = subject.strip()
+    _edit_spec(fn)
+    return {"ok": True, "id": eid}
+
+
+def remove_entry(cat, eid):
+    """Take one of Eric's added entries off the list. Its candidates, approval and overrides stay (re-adding the id
+    brings them back); export skips approvals without an entry."""
+    def fn(sp):
+        if eid not in sp.get("added", {}).get(cat, {}):
+            raise ValueError(f"{eid} wasn't added in the page (game and spec entries can't be removed here)")
+        sp["added"][cat].pop(eid)
+        if not sp["added"][cat]:
+            sp["added"].pop(cat)
+    _edit_spec(fn)
+    return {"ok": True}
+
+
+def move_entries(src, dst, ids=None, dry_run=False):
+    """Move entries between categories, keeping everything: candidate folders (and archived ones), the approval,
+    the per-entry overrides and an added entry. Default: every entry stored under `src` that now lists in `dst`
+    (e.g. items → gear for the equippables). Never overwrites: an id with candidates in both is reported, not moved."""
+    import shutil
+    listed = {x["id"] for x in entries()[dst]}
+    have = {p.name for p in (root() / src).iterdir() if p.is_dir()} if (root() / src).exists() else set()
+    sp = spec()
+    have |= {k.split("/", 1)[1] for k in sp.get("entries", {}) if k.startswith(f"{src}/")}
+    have |= set(_state().load().get("approved", {}).get(src, {}))
+    ids = sorted(i for i in (ids or have) if i in listed and i in have)
+    clash = [i for i in ids if (root() / dst / i).exists() and (root() / src / i).exists()]
+    ids = [i for i in ids if i not in clash]
+    if dry_run:
+        return {"would_move": ids, "clash": clash}
+    for i in ids:
+        for base in (root(), config.data_dir() / "archive" / "limner"):
+            s, d = base / src / _safe(i), base / dst / i
+            if s.exists():
+                d.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(s), str(d))
+        for c in store.folders(root() / dst / i):   # candidate meta says which category it was made in
+            m = store.read_meta(c)
+            if m.get("category") == src:
+                store.write_json(c / "meta.json", {**m, "category": dst, "moved_from": src})
+    with _state().edit() as s:
+        ap = s.setdefault("approved", {})
+        for i in ids:
+            if i in ap.get(src, {}):
+                ap.setdefault(dst, {})[i] = ap[src].pop(i)
+
+    def fn(sp):
+        es = sp.setdefault("entries", {})
+        for i in ids:
+            if f"{src}/{i}" in es:
+                es[f"{dst}/{i}"] = es.pop(f"{src}/{i}")
+            if i in sp.get("added", {}).get(src, {}):
+                sp["added"].setdefault(dst, {})[i] = sp["added"][src].pop(i)
+    _edit_spec(fn)
+    return {"moved": ids, "clash": clash}
+
+
 def doc():
     """Everything the page shows."""
     sp = spec()
@@ -454,7 +581,7 @@ def doc():
                          "candidates": cands, "prompt": prompt(cat, e["id"], sp=sp)})
             rows[-1]["new"] = sum(1 for c in cands if c["new"] and c["cid"] != rows[-1]["approved"])
         cats[cat] = {**sp["categories"][cat], "entries": rows, "reviewed": reviewed.get(cat, 0),
-                     "new": sum(r["new"] for r in rows)}
+                     "new": sum(r["new"] for r in rows), "add_prefix": ADD_PREFIX.get(cat)}
     from . import watchdog
     return {"styles": sp["styles"], "categories": cats, "order": list(CATS), "archetypes": sp["archetypes"],
             "export": str(_export_root()), "batch": BATCH, "watchdog": watchdog.status()}
@@ -491,8 +618,10 @@ def export(cats=None):
     if art is None:
         raise ValueError("the project has no 'art' export path")
     approved, sp, done = _state().load().get("approved", {}), spec(), {}
+    listed = {c: {e["id"] for e in es} for c, es in entries(sp).items()}
     for cat in cats or CATS:
-        ok = {eid: cid for eid, cid in approved.get(cat, {}).items() if (entry_dir(cat, eid) / cid / "meta.json").exists()}
+        ok = {eid: cid for eid, cid in approved.get(cat, {}).items()
+              if (eid in listed[cat] or not listed[cat]) and (entry_dir(cat, eid) / cid / "meta.json").exists()}
         if cat == "portraits":
             folder, index = art / "Portraits", {}
             folder.mkdir(parents=True, exist_ok=True)

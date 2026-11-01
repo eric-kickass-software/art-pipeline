@@ -48,7 +48,7 @@
  "categories": {
   "items": {
    "name": "Items",
-   "hint": "Every base item the game wants: prompted placeholders until real item art can make them.",
+   "hint": "The game's base items without a slot (consumables, tools, keys, loose trinkets), plus your own (+ Add).",
    "style": "pixel",
    "prefix": "",
    "suffix": "",
@@ -68,7 +68,7 @@
   },
   "gear": {
    "name": "Gear",
-   "hint": "Fallback icons: cloth / leather / plate for every armour slot, one per weapon type.",
+   "hint": "Every equippable base item (armour, weapons, held, trinkets), plus fallbacks: cloth / leather / plate per armour slot and one per weapon type. Add your own with + Add.",
    "style": "pixel",
    "prefix": "",
    "suffix": "",
@@ -187,6 +187,26 @@
      0.06,
      0.5
     ]
+   }
+  },
+  "ui": {
+   "name": "UI",
+   "hint": "Menu screens, buttons and HUD icons. Add your own with + Add.",
+   "style": "painted",
+   "prefix": "game menu icon, ",
+   "suffix": "",
+   "gen": {
+    "width": 512,
+    "height": 512,
+    "steps": 4,
+    "remove_bg": true
+   },
+   "finish": {
+    "kind": "icon",
+    "size": 64,
+    "colors": 0,
+    "margin": 4,
+    "outline": ""
    }
   }
  },
@@ -357,6 +377,24 @@
    "wind": "a pale swirling gust spiral",
    "water": "a curling blue wave",
    "earth": "a cracked brown boulder"
+  },
+  "ui": {
+   "ui.menu.play": "a lit lantern at the mouth of a dark dungeon stairway",
+   "ui.menu.heroes": "three small adventurer helmets side by side",
+   "ui.menu.inventory": "a worn leather backpack with buckles",
+   "ui.menu.equipment": "a knight's helmet in front of crossed swords",
+   "ui.menu.skills": "an open spellbook with a glowing rune above it",
+   "ui.menu.party": "three shields overlapping in a row",
+   "ui.menu.stash": "a heavy iron-bound wooden chest",
+   "ui.menu.camp": "a small campfire with logs and a tent behind it",
+   "ui.menu.map": "a rolled parchment dungeon map with a red X",
+   "ui.menu.quests": "a parchment scroll with a wax seal and quill",
+   "ui.menu.settings": "a brass cogwheel",
+   "ui.menu.exit": "a wooden door ajar with light spilling out",
+   "ui.stat.gold": "a small stack of gold coins",
+   "ui.stat.health": "a red heart",
+   "ui.stat.xp": "a glowing blue star",
+   "ui.action.end_turn": "an hourglass with sand running"
   }
  },
  "entries": {
@@ -472,7 +510,11 @@
   },
   "statuses/status.taunt": {
    "subject": "a cartoonish human face sticking their tongue out mockingly, chibi, anime"
+  },
+  "gear/item.backpack": {
+   "subject": "leather backpack with room for a few things. grey scale"
   }
  },
- "_house_style": "Portraits: 'semireal' (Eric, 2026-11-01: 'that top row is gold'). Reference: specs/limner_refs/semireal.jpg (seed 11, 832x1024, 4 steps, no LoRA). Change the house style only on purpose."
+ "_house_style": "Portraits: 'semireal' (Eric, 2026-11-01: 'that top row is gold'). Reference: specs/limner_refs/semireal.jpg (seed 11, 832x1024, 4 steps, no LoRA). Change the house style only on purpose.",
+ "added": {}
 }

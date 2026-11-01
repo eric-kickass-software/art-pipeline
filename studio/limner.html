@@ -75,7 +75,9 @@
   .cand .meta { font-size:10px; color:var(--muted); }
   .bgs { display:flex; gap:3px; } .bgs button { width:18px; height:18px; padding:0; border-radius:3px; }
   #batch { background:var(--panel); border:1px solid var(--accent); border-radius:8px; padding:10px 12px; margin-bottom:10px; }
-  #batch[hidden] { display:none; } #batch .cols { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+  #batch[hidden], #addBox[hidden] { display:none; }
+  #addBox { background:var(--panel); border:1px solid var(--accent); border-radius:8px; padding:10px 12px; margin-bottom:10px; }
+  #addBox .f { grid-template-columns:70px 1fr; max-width:640px; } #addBox .idp { color:var(--info); font-family:ui-monospace, monospace; font-size:11px; } #batch .cols { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
   #batch h3 { margin:0 0 6px; font-size:10px; text-transform:uppercase; letter-spacing:1.2px; color:var(--accent); font-weight:600; }
   #batch .sty label { display:block; color:var(--text); font-size:12px; } #batch textarea { min-height:70px; }
   #batch .est { color:var(--info); } #batch .wd { font-size:11px; color:var(--muted); white-space:pre-wrap; margin-top:6px; max-height:90px; overflow:auto; }
@@ -113,12 +115,14 @@
       <button id="markRev" title="Everything made so far stops counting as new in this category">Mark reviewed</button>
       <span class="hint" title="In the entry panel: left/right = previous/next entry, 1-9 = approve that candidate, Esc closes">keys: ← → 1–9</span>
       <span style="margin-left:auto"></span>
+      <button id="addBtn" title="Add your own entry to this category (an item or gear the game doesn't have yet, a UI icon, …)">＋ Add</button>
       <button id="batchBtn" title="Queue a big run (overnight): entries × styles × variations, with retries and a watchdog">Batch…</button>
       <label>Candidates</label><input type="number" id="genN" value="3" min="1" max="12" style="width:52px">
       <button class="primary" id="genSel" title="Queue candidates for every ticked entry">Generate selected</button>
       <button id="genMissing" title="Queue candidates for every entry with no candidates yet">Generate empty</button>
       <span class="hint" id="count"></span>
     </div>
+    <div id="addBox" hidden></div>
     <div id="batch" hidden></div>
     <div class="grid" id="grid"></div>
   </main>
@@ -143,7 +147,7 @@ const guard = (fn) => async (...a) => { try { err(); await fn(...a); } catch (e)
 
 let D = null, CAT = localStorage.limnerCat || "items", OPEN = null, BUST = Date.now(), BG = localStorage.limnerBg || "#2a2333";
 const SEL = new Set();
-const NAMES = { items: "Items", gear: "Gear", classes: "Classes", statuses: "Statuses", damageTypes: "Damage", skills: "Skills", portraits: "Portraits" };
+const NAMES = { items: "Items", gear: "Gear", classes: "Classes", statuses: "Statuses", damageTypes: "Damage", skills: "Skills", ui: "UI", portraits: "Portraits" };
 const isP = () => CAT === "portraits";
 const img = (cat, id, cid, file) => `/api/limner/img?path=${encodeURIComponent(`${cat}/${id}/${cid}/${file}`)}&v=${BUST}`;
 
@@ -157,7 +161,36 @@ function render() {
     const nw = D.categories[c].new;
     return `<button class="tab ${c === CAT ? "on" : ""}" data-c="${c}">${NAMES[c] || c}<span class="n">${a}/${es.length}</span>${nw ? `<span class="nw" title="new candidates to review">+${nw}</span>` : ""}</button>`; }).join("");
   document.querySelectorAll("#tabs .tab").forEach(b => b.onclick = () => { CAT = localStorage.limnerCat = b.dataset.c; OPEN = null; SEL.clear(); render(); });
-  renderSide(); renderGrid(); renderDetail(); if (!$("batch").hidden) renderBatch();
+  $("addBtn").hidden = !cat().add_prefix; if (!cat().add_prefix) $("addBox").hidden = true;
+  renderSide(); renderGrid(); renderDetail(); if (!$("batch").hidden) renderBatch(); if (!$("addBox").hidden) renderAdd();
+}
+
+// ------------------------------------------------------------------ add your own entry
+const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+$("addBtn").onclick = () => { $("addBox").hidden = !$("addBox").hidden; if (!$("addBox").hidden) { renderAdd(); $("aName").focus(); } };
+function renderAdd() {
+  const c = cat(), pre = c.add_prefix;
+  $("addBox").innerHTML = `<div class="row" style="margin-bottom:6px"><b>Add to ${esc(c.name)}</b>
+      <span class="hint">${CAT === "ui" ? "Any icon for menus, buttons or the HUD." : "An item the game doesn't have yet: its icon exports with the rest; the game uses it once it has that id."}</span>
+      <button style="margin-left:auto" id="aClose">✕</button></div>
+    <div class="f"><label>Name</label><input id="aName" placeholder="${CAT === "ui" ? "e.g. Crafting" : "e.g. Silver Dagger"}"></div>
+    <div class="f"><label>Id</label><span><input id="aId" placeholder="from the name" style="width:240px"> <span class="idp" id="aIdP"></span></span></div>
+    <div class="f"><label>Subject</label><textarea id="aSubj" rows="2" placeholder="what the icon shows (empty = the name)"></textarea></div>
+    <div class="f"><label>Label</label><input id="aSub" placeholder="${CAT === "gear" ? "e.g. head, dagger" : CAT === "ui" ? "e.g. menu" : "e.g. consumable"}" style="width:160px" title="The small grey label on the card"></div>
+    <div class="row" style="margin-top:6px"><button class="primary" id="aGo">Add</button><button id="aGoGen">Add &amp; generate</button><span class="hint" id="aMsg"></span></div>`;
+  const idOf = () => { const typed = $("aId").value.toLowerCase().replace(/[^a-z0-9.]+/g, "_").replace(/^[_.]+|[_.]+$/g, "");
+    const raw = typed || slug($("aName").value); return raw ? (raw.startsWith(pre) ? raw : pre + raw) : ""; };
+  const upd = () => { $("aIdP").textContent = idOf() ? "→ " + idOf() : ""; };
+  $("aName").oninput = upd; $("aId").oninput = upd;
+  $("aClose").onclick = () => { $("addBox").hidden = true; };
+  const add = async (andGen) => {
+    if (!$("aName").value.trim() && !$("aId").value.trim()) throw new Error("Give the new entry a name.");
+    const r = await api("/api/limner/add", { cat: CAT, id: idOf(), name: $("aName").value.trim(), subject: $("aSubj").value.trim(), sub: $("aSub").value.trim() });
+    if (andGen) await gen([r.id], +$("genN").value);
+    OPEN = r.id; $("addBox").hidden = true; await load();
+    document.querySelector(".card.sel")?.scrollIntoView({ block: "nearest" });
+  };
+  $("aGo").onclick = guard(() => add(false)); $("aGoGen").onclick = guard(() => add(true));
 }
 
 // ------------------------------------------------------------------ category settings (left)
@@ -241,9 +274,11 @@ function thumbOf(e) {
 function renderGrid() {
   const es = shown();
   $("grid").className = "grid" + (isP() ? " portraits" : "");
-  let h = "", lastA = null;
+  let h = "", lastA = null, lastG = null;
+  const groups = new Set(cat().entries.map(e => e.group || ""));
   for (const e of es) {
     if (isP() && e.archetype !== lastA) { lastA = e.archetype; const a = D.archetypes[lastA]; h += `<div class="ahead">${esc(a.name)}<span>${esc(a.classes.join(" · "))}</span></div>`; }
+    if (!isP() && groups.size > 1 && (e.group || "") !== lastG) { lastG = e.group || ""; const n = es.filter(x => (x.group || "") === lastG).length; h += `<div class="ahead">${esc(lastG || "Other")}<span>${n}</span></div>`; }
     const t = thumbOf(e), running = ACTIVE.some(j => j.label.startsWith("Limner") && j.label.includes(` · ${CAT} · ${e.id} `));
     h += `<div class="card ${OPEN === e.id ? "sel" : ""} ${running ? "running" : ""}" data-id="${esc(e.id)}">
       <input type="checkbox" class="ck" ${SEL.has(e.id) ? "checked" : ""}>${e.new ? `<span class="newb" title="new candidates">${e.new}</span>` : ""}
@@ -317,7 +352,9 @@ function renderDetail() {
   $("layout").classList.toggle("open", !!e); box.hidden = !e;
   if (!e) return;
   const fp = e.finish.crop || cat().finish.crop;
-  let h = `<div class="row"><h3 style="margin:0">${esc(e.name)}</h3><span class="hint">${esc(e.id)}</span><button style="margin-left:auto" id="dClose">✕</button></div>
+  let h = `<div class="row"><h3 style="margin:0">${esc(e.name)}</h3><span class="hint">${esc(e.id)}</span>
+      ${e.added ? `<button id="dRemove" style="margin-left:auto" title="Take this added entry off the list (its candidates stay on disk; adding the same id again brings them back)">Remove entry</button>` : ""}
+      <button style="${e.added ? "" : "margin-left:auto"}" id="dClose">✕</button></div>
     ${e.text ? `<div class="hint" style="margin-top:4px">${esc(e.text)}</div>` : ""}
     <h3>Subject</h3><textarea id="dSubj" rows="3" placeholder="${esc(e.draft)}">${esc(e.subject)}</textarea>
     <div class="hint">Empty = the draft (shown greyed). What the icon shows; style words are added around it.</div>
@@ -348,6 +385,7 @@ function renderDetail() {
     <div class="f" style="margin-top:8px"><label>Vary strength</label><span><input id="dDen" type="number" step="0.05" min="0.1" max="0.95" value="${localStorage.limnerDen || 0.45}" style="width:62px"> <span class="hint">low = close to the pick</span></span></div>`;
   box.innerHTML = h;
   $("dClose").onclick = () => { OPEN = null; renderGrid(); renderDetail(); };
+  if (e.added) $("dRemove").onclick = guard(async () => { await api("/api/limner/remove", { cat: CAT, id: e.id }); OPEN = null; await load(); });
   const save = async () => {
     const fields = { subject: $("dSubj").value.trim(), style: $("dStyle").value, seed: $("dSeed").value === "" ? null : +$("dSeed").value };
     if (isP()) { const cr = [+$("dCx").value, +$("dCy").value, +$("dCs").value]; if (cr.join() !== fp.join()) { fields.finish = { crop: cr }; BUST = Date.now(); } }
