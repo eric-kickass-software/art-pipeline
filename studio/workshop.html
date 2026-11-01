@@ -550,6 +550,10 @@
               <span class="hint" id="itSlotHint">the game's layer slots (ArtContract/requirements.json)</span></div>
             <label>Game item</label><div class="row" style="margin:0"><input id="itGame" list="itGameIds" style="width:240px" placeholder="(this piece's own id)">
               <datalist id="itGameIds"></datalist><span class="hint" id="itGameHint"></span></div>
+            <label>Design</label><div class="row" style="margin:0;align-items:center">
+              <img id="itDesignImg" style="width:56px;height:56px;object-fit:contain;background:#fff;border-radius:4px;display:none">
+              <select id="itDesign" style="width:240px"></select>
+              <span class="hint" id="itDesignHint">approved Limner › Gear art the item copies its design from</span></div>
             <label>Kind</label><select id="itKind"><option value="">fitted (painted on the body)</option><option value="held">held (attached to a hand)</option></select>
             <label>Fit</label><select id="itFit"><option value="shared">shared: one fit for every build</option><option value="per_sex">per sex: a male and a female fit (gender variant)</option></select>
             <label>Description</label><textarea id="itText" rows="2" placeholder="what FLUX paints, e.g. a simple cloth tunic with sleeves to the mid forearm"></textarea>
@@ -636,6 +640,8 @@
               <label>Held (shield)</label><textarea id="ipHeldShield" rows="2"></textarea>
               <label>Held (focus)</label><textarea id="ipHeldFocus" rows="2"></textarea>
               <label>Material text</label><input id="ipMat">
+              <label>Design (fitted)</label><textarea id="ipDesign" rows="2" title="added to the front prompt when the item has a design reference"></textarea>
+              <label>Design (held)</label><textarea id="ipHeldDesign" rows="2" title="{held} = the held prompt; image 1 = the design reference"></textarea>
             </div>
             <div class="row"><button id="ipSave">Save templates</button></div></details>
         </div>
@@ -2498,6 +2504,7 @@ function itRenderForm() {
   const slots = IT.st.vocab.artSlots, cur = d.slot || "";
   $("itSlot").innerHTML = (slots.includes(cur) || !cur ? "" : `<option value="${cur}">${cur} (not a game slot)</option>`) + slots.map(s => `<option>${s}</option>`).join("");
   $("itSlotHint").textContent = IT.st.vocab.found ? `the game's layer slots (requirements.json ${IT.st.vocab.revision || ""})` : "no requirements.json found: built-in slots";
+  itRenderDesign();
   $("itGame").value = d.item || ""; $("itGameIds").innerHTML = IT.st.vocab.known.map(i => `<option>${i}</option>`).join(""); itGameHint();
   $("itId").value = IT.sel; $("itSlot").value = cur; $("itKind").value = d.kind || ""; $("itFit").value = d.fit || "shared";
   $("itText").value = d.text || ""; $("itDepth").value = d.depth ?? 3; $("itBulk").value = d.bulk ?? 6;
@@ -2514,13 +2521,35 @@ function itRenderForm() {
 $("itSave").onclick = guard(async () => {
   const held = $("itKind").value === "held", num = (id) => $(id).value === "" ? null : +$(id).value;
   const def = { slot: $("itSlot").value, item: $("itGame").value.trim() || null, kind: held ? "held" : null, fit: $("itFit").value, text: $("itText").value.trim(),
-    materials: [...document.querySelectorAll("[data-mat]")].filter(c => c.checked).map(c => c.dataset.mat), depth: num("itDepth") };
+    materials: [...document.querySelectorAll("[data-mat]")].filter(c => c.checked).map(c => c.dataset.mat), depth: num("itDepth"),
+    design: $("itDesign").value || null };
   if (held) Object.assign(def, gripDef());
   else Object.assign(def, { bulk: num("itBulk"), clips: $("itClipHair").checked ? ["hair"] : null, complete: $("itComplete").checked });
   const id = $("itId").value.trim();
   IT.st = await itApi("item/save", { item: id, old_id: IT.sel, def }); IT.sel = id;
   $("itSaved").textContent = "saved"; setTimeout(() => $("itSaved").textContent = "", 1500); await itRefresh();
 });
+// design reference: the approved Limner gear art the item copies (auto = its game item's icon, else the slot x material
+// or weapon-type fallback); shown as a thumbnail, previewed live while picking, saved with the item
+const itDesignImg = (eid) => {
+  const cid = IT.st.designChoices[eid], im = $("itDesignImg");
+  im.style.display = cid ? "" : "none"; if (cid) { im.src = `/api/limner/img?path=gear/${eid}/${cid}/master.png`; im.title = eid; }
+};
+function itRenderDesign() {
+  const d = itDef(), auto = IT.st.design[IT.sel], set = d.design || "";
+  const autoLbl = d.design ? "auto" : `auto: ${auto ? auto.entry + " (" + auto.why + ")" : "nothing approved"}`;
+  $("itDesign").innerHTML = `<option value="">${autoLbl}</option><option value="none">none (prompt only)</option>` +
+    Object.keys(IT.st.designChoices).map(e => `<option>${e}</option>`).join("");
+  $("itDesign").value = set; itDesignChange();
+}
+function itDesignChange() {
+  const v = $("itDesign").value, auto = IT.st.design[IT.sel] && !itDef().design ? IT.st.design[IT.sel] : null;
+  const eid = v === "none" ? null : v || (auto && auto.entry);
+  itDesignImg(eid);
+  $("itDesignHint").textContent = !eid ? "no reference: FLUX paints from the description alone"
+    : (itHeld() ? "redrawn upright in the colour keys" : "front pass copies its cut, trims, straps, plates") + " · save to keep";
+}
+$("itDesign").onchange = () => itDesignChange();
 function itGameHint() {
   const gid = $("itGame").value.trim() || IT.sel, g = IT.st.game[gid];
   const pieces = g ? g.pieces.map(p => p.replace(/^item\./, "")).join(" + ") : "";
@@ -2551,16 +2580,20 @@ async function itRenderPrompts() {
   const sp = IT.st.spec;
   if (document.activeElement?.closest?.("details") == null) {
     $("ipFront").value = sp.prompt || ""; $("ipBack").value = sp.prompt_back || ""; $("ipComplete").value = sp.prompt_complete || "";
-    $("ipHeld").value = sp.prompt_held || ""; $("ipHeldShield").value = sp.prompt_held_shield || ""; $("ipHeldFocus").value = sp.prompt_held_focus || ""; $("ipMat").value = sp.material_text || ""; }
+    $("ipHeld").value = sp.prompt_held || ""; $("ipHeldShield").value = sp.prompt_held_shield || ""; $("ipHeldFocus").value = sp.prompt_held_focus || ""; $("ipMat").value = sp.material_text || "";
+    $("ipDesign").value = sp.prompt_design || ""; $("ipHeldDesign").value = sp.prompt_held_design || ""; }
   if (!IT.sel || !$("itBuild").value) return;
   try { const P = await itApi("prompts", { item: IT.sel, build: $("itBuild").value });
-    $("itPrompt").textContent = itHeld() ? `Held: ${P.held}` : `Front: ${P.front}\n\nBack (front as reference): ${P.back}` +
+    const dz = IT.st.design[IT.sel];
+    $("itPrompt").textContent = itHeld() ? (dz ? `Held, from ${dz.entry}: ${P.held_design}` : `Held: ${P.held}`)
+      : `Front${dz ? ` (+ ${dz.entry} as reference)` : ""}: ${P.front}${dz ? P.design : ""}\n\nBack (front as reference): ${P.back}` +
       (itDef().complete !== false ? `\n\nHidden areas: ${P.complete}` : ""); } catch (e) { $("itPrompt").textContent = e.message; }
 }
 $("itBuild").onchange = () => itRenderPrompts();
 $("ipSave").onclick = guard(async () => {
   await itApi("spec/save", { prompts: { prompt: $("ipFront").value, prompt_back: $("ipBack").value, prompt_complete: $("ipComplete").value,
-    prompt_held: $("ipHeld").value, prompt_held_shield: $("ipHeldShield").value, prompt_held_focus: $("ipHeldFocus").value, material_text: $("ipMat").value } }); await itRefresh(); });
+    prompt_held: $("ipHeld").value, prompt_held_shield: $("ipHeldShield").value, prompt_held_focus: $("ipHeldFocus").value, material_text: $("ipMat").value,
+    prompt_design: $("ipDesign").value, prompt_held_design: $("ipHeldDesign").value } }); await itRefresh(); });
 $("itGen").onclick = guard(async () => {
   if (!itHeld() && ZE.dirty) throw new Error("Save the zone first (or undo your strokes).");
   if (itHeld() && ($("itHeldAs").value !== (itDef().held_as || "weapon") || $("itText").value.trim() !== (itDef().text || "")))

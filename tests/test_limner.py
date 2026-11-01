@@ -20,6 +20,8 @@ os.environ["HD_PROJECT"], os.environ["HD_DATA"] = str(game), str(data)
                          "statuses": [{"id": "status.burn", "name": "Burning"}]}}}), encoding="utf-8")
 L.SPEC = tmp / "limner.json"
 shutil.copyfile(config.ROOT / "specs" / "limner.json", L.SPEC)
+_s = json.loads(L.SPEC.read_text(encoding="utf-8")); _s["added"] = {}   # Eric's own ＋ Add entries would change the lists below
+L.SPEC.write_text(json.dumps(_s), encoding="utf-8")
 repo_spec = (config.ROOT / "specs" / "limner.json").read_text(encoding="utf-8")
 
 # entries: the contract's wanted lists + the spec's gear, skill placeholders per damage type, portraits per look × gender

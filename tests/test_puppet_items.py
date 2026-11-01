@@ -12,11 +12,13 @@ import hdart.workshop as ws
 import hdart.puppet_paint as ppt
 import hdart.puppet_face as pf
 import hdart.puppet_items as pi
+import hdart.limner as lim
 from hdart.fake_comfy import FakeComfy, info
 
 tmp = Path(tempfile.mkdtemp())
 ak.AI_DIR = tmp / "ai"; ws.CAND = ak.AI_DIR / "candidates"; ws.STATE = ak.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "archive"
 shutil.copy(pi.SPEC, tmp / "items.json"); pi.SPEC = tmp / "items.json"
+lim.root = lambda: tmp / "limner"   # design references: no approved Limner art until the design section below
 doc = pi.spec()
 KEY = {m: np.array([int(e["key"][i:i + 2], 16) for i in (1, 3, 5)], float) for m, e in doc["materials"].items()}
 calls, paint_key = [], {"m": None}
@@ -29,7 +31,7 @@ def shaded(key, h, w):
 
 def respond(nodes, uploads):
     i = info(nodes, uploads); calls.append(i["prompt"])
-    if i["init"] is None:   # txt2img: the held item on white, background removed
+    if i["init"] is None or "RemoveBackground" in i["classes"]:   # the held item on white, background removed (txt2img or from its design)
         im = np.zeros((768, 768, 4), np.uint8)
         im[120:560, 360:408, :3] = shaded(KEY["metal"], 440, 48); im[560:660, 368:400, :3] = shaded(KEY["leather"], 100, 32)
         im[120:660, 360:408, 3] = np.where(im[120:660, 360:408, :3].sum(-1) > 0, 255, 0)
@@ -138,5 +140,28 @@ plain = strip(items=[]); assert plain.shape == (256, 256 * 8, 3)
 painted = strip(items=[["item.cloth_trousers", t, None]]); ramped = strip(items=[["item.cloth_trousers", t, {"cloth": "red"}]])
 assert np.any(painted != plain) and np.any(ramped != painted)
 assert np.any(strip(items=[], skin="tan") != plain)
+# design references: approved Limner gear art guides the item (auto: its game item's icon, else slot x material)
+for eid, cid in (("slot.legs.cloth", "c1"), ("item.iron_sword", "c2")):
+    (tmp / "limner" / "gear" / eid / cid).mkdir(parents=True)
+    Image.new("RGBA", (64, 64), (90, 60, 40, 255)).save(tmp / "limner" / "gear" / eid / cid / "master.png")
+(tmp / "limner" / "state.json").write_text(json.dumps({"approved": {"gear": {"slot.legs.cloth": "c1", "item.iron_sword": "c2"}}}))
+its = pi.spec()["items"]
+assert pi.design_auto("item.cloth_trousers", its["item.cloth_trousers"]) == ("slot.legs.cloth", "slot fallback")
+assert pi.design_auto("item.iron_sword", its["item.iron_sword"]) == ("item.iron_sword", "item")
+assert pi.design_ref("item.iron_helm", its["item.iron_helm"]) is None   # nothing approved for a head
+assert pi.design_ref("item.cloth_trousers", {**its["item.cloth_trousers"], "design": "none"}) is None
+st = pi.state("human"); assert st["design"]["item.cloth_trousers"]["entry"] == "slot.legs.cloth" and "item.iron_sword" in st["designChoices"]
+calls.clear(); paint_key["m"] = "cloth"
+t2 = pi.generate("human", "item.cloth_trousers", seed=4); d2 = pi.out_dir("human", "item.cloth_trousers") / t2
+assert json.loads((d2 / "meta.json").read_text())["design"] == {"entry": "slot.legs.cloth", "cid": "c1", "why": "slot fallback"}
+assert (d2 / "design_ref.png").exists() and sum("copies the design" in (c or "") for c in calls) == 1   # the front pass only
+calls.clear(); s2 = pi.generate("human", "item.iron_sword", seed=5); sd2 = pi.out_dir("human", "item.iron_sword") / s2
+assert calls[0].startswith("Redraw the item from image 1")
+hl = np.asarray(Image.open(sd2 / "held_levels.png")); assert {5, 6} <= set(np.unique(hl[..., 1][hl[..., 3] > 0]))
+try:
+    pi.save_item("item.cloth_trousers", {"design": "slot.head.plate"}); raise AssertionError("unapproved design saved")
+except ValueError:
+    pass
+pi.save_item("item.cloth_trousers", {"design": "none"}); assert pi.spec()["items"]["item.cloth_trousers"]["design"] == "none"
 fake.stop(); shutil.rmtree(tmp)
 print("ok")

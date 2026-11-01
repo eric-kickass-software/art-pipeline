@@ -74,23 +74,25 @@ def build_txt2img(prompt, width=1024, height=1024, seed=0, steps=4, lora_strengt
     sampler = g.add("KSamplerSelect", sampler_name="euler")
     out = g.add("SamplerCustomAdvanced", noise=noise[0], guider=guider[0], sampler=sampler[0],
                 sigmas=sigmas[0], latent_image=latent[0])
-    img = g.add("VAEDecode", samples=out[0], vae=vae[0])
+    _save(g, g.add("VAEDecode", samples=out[0], vae=vae[0]), prefix, remove_bg)
+    return g.nodes
+
+
+def _save(g, img, prefix, remove_bg=False):
+    """SaveImage of a decoded image, optionally cut out by BiRefNet (RGBA)."""
     if remove_bg:
         bgm = g.add("LoadBackgroundRemovalModel", bg_removal_name=_m("birefnet"))
         mask = g.add("RemoveBackground", bg_removal_model=bgm[0], image=img[0])
         inv = g.add("InvertMask", mask=mask[0])
-        rgba = g.add("JoinImageWithAlpha", image=img[0], alpha=inv[0])
-        g.add("SaveImage", images=rgba[0], filename_prefix=prefix)
-    else:
-        g.add("SaveImage", images=img[0], filename_prefix=prefix)
-    return g.nodes
+        img = g.add("JoinImageWithAlpha", image=img[0], alpha=inv[0])
+    g.add("SaveImage", images=img[0], filename_prefix=prefix)
 
 
 def build_edit(image_name, prompt, seed=0, steps=4, lora_strength=0.0, prefix="hdart/edit", megapixels=1.0,
-               extra_images=()):
+               extra_images=(), remove_bg=False):
     """FLUX.2-klein image edit: the input image is a reference (layout, pose, colours) and the prompt
     says what to change. `extra_images` are more references ("image 2", ...). Output is the size of the
-    first image scaled to `megapixels`."""
+    first image scaled to `megapixels`; `remove_bg` cuts it out (RGBA) like build_txt2img."""
     g = Graph()
     model, clip, vae = _klein_model(g, lora_strength)
     load = g.add("LoadImage", image=image_name)
@@ -116,7 +118,7 @@ def build_edit(image_name, prompt, seed=0, steps=4, lora_strength=0.0, prefix="h
     sampler = g.add("KSamplerSelect", sampler_name="euler")
     out = g.add("SamplerCustomAdvanced", noise=noise[0], guider=guider[0], sampler=sampler[0], sigmas=sigmas[0],
                 latent_image=latent[0])
-    g.add("SaveImage", images=g.add("VAEDecode", samples=out[0], vae=vae[0])[0], filename_prefix=prefix)
+    _save(g, g.add("VAEDecode", samples=out[0], vae=vae[0]), prefix, remove_bg)
     return g.nodes
 
 

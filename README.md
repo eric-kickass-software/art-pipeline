@@ -530,13 +530,24 @@ Template, so an item fitted once is reused on every build of the race.
 - **Materials = colour keys** (`materials` in the spec: cloth green, leather blue, metal cyan, accent magenta). The
   levels map is R = cel level 0..4 / 254 outline, G = material channel (4..7), A, like the puppet export; any ramp of the
   material's palette group colours it (iron / bronze / gold plate from one generation).
-- **Held item** (`kind: held`): txt2img on white + BiRefNet, keyed the same way, rotated onto the hand bone at its grip
+- **Held item** (`kind: held`): txt2img on white (or redrawn from its design reference, below) + BiRefNet, keyed the same way, rotated onto the hand bone at its grip
   (the leather's middle) and drawn under the hand so the fingers wrap it; mirrored for the back view.
 - Output: `sprites/ai/items/<race>/<item>/<cid>/` (`paint_<view>.png`, `layer_/levels_<view>.png`,
   `parts/<view>/<part>.png`, `plevels/<view>/<part>.png`, `meta.json`). `dressed(build, worn, view, hair)` /
   `render(...)` stack items by `depth` for previews; `clips: ["hair"]` cuts the hair layer under the item.
 - Learned on the helm: a straight zone edge becomes a straight item edge (use curved zones); a soft guide or a high
   denoise lets FLUX draw the item smaller than the chibi head, so the bald skull shows around it.
+- **Design reference (2026-11-01):** approved **Limner › Gear** art steers the item's design (Items tab › Design,
+  spec `design`). Auto: the icon of the piece's game item, else the slot × material fallback (`slot.body.plate`;
+  metal or the words steel / iron / plate → plate, else leather, else cloth), else the weapon type; pick any approved
+  gear entry, or `none`. Fitted: the master (on white, saved as `design_ref.png`) rides the **front** pass as a
+  ReferenceLatent, plus `prompt_design` ("copies the design ... but painted only in the colour keys"); the back still
+  follows the front. Held: the master is redrawn upright in the keys (`build_edit` + `prompt_held_design`, BiRefNet)
+  instead of txt2img. `meta.design` records entry, candidate and why. Tested 2026-11-01: belts, plate segments, straps
+  and rivets carry over while the puppet's style, the zone and the description win on shape (a closed great-helm
+  icon still gives an open-face helm). A blind "recolour the icon into keys" edit was tried and dropped: FLUX picks
+  the materials at random. Details in a material the item doesn't list (a tunic's leather belt) are dropped by keying:
+  add the material.
 
 ### Game items and export (A2, 2026-10-26)
 - **The game's vocabulary wins (R-001):** `hdart/contract.py` reads the active project's `ArtContract/requirements.json`

@@ -141,8 +141,11 @@ def prompts(race, build, item_id, doc=None):
     # an item drawn alone gets the style without the body proportions (chibi, stubby legs): with them FLUX puts a little
     # character behind a shield
     held_style = ppt.style_text({"style_groups": doc.get("held_style_groups", ["style", "rendering"])})
-    return {"front": fill(doc["prompt"]), "back": fill(doc["prompt_back"]), "held": fill(held.replace("{style}", held_style)),
-            "complete": fill(doc.get("prompt_complete", PROMPT_COMPLETE)), "back_edit": fill(doc.get("back_edit", BACK_EDIT))}
+    held = fill(held.replace("{style}", held_style))
+    return {"front": fill(doc["prompt"]), "back": fill(doc["prompt_back"]), "held": held,
+            "complete": fill(doc.get("prompt_complete", PROMPT_COMPLETE)), "back_edit": fill(doc.get("back_edit", BACK_EDIT)),
+            "design": fill(doc.get("prompt_design", PROMPT_DESIGN)),
+            "held_design": doc.get("prompt_held_design", PROMPT_HELD_DESIGN).replace("{held}", held)}
 
 
 BACK_EDIT = ("Show this exact character from behind: a three-quarter back view facing away to the right, seen slightly from "
@@ -166,6 +169,66 @@ PROMPT_HELD_FOCUS = ("{style}. A single {item} on its own, a small object held i
 PROMPT_COMPLETE = ("{style}. A parts sheet for 2D cutout animation: {item}, cut into its separate pieces (body, sleeves, "
                    "legs), laid out apart on a pure white background, each piece drawn whole with rounded ends, only the "
                    "garment, no body, no skin. {materials}")
+
+
+# A design reference: the approved Limner gear art of the item (see design_ref) rides along as a reference image.
+# Fitted: added to the front prompt (FLUX copies cut, trims, straps, plates, rivets; the keys still decide the colours).
+# Held: the reference is redrawn upright in the colour keys (a FLUX edit) instead of painting the item from text.
+PROMPT_DESIGN = (" The {item} copies the design of the item in the reference image: its cut, shape, belts, straps, trims, "
+                 "plates and rivets, but painted only in the colour keys.")
+PROMPT_HELD_DESIGN = "Redraw the item from image 1 with the same shape, proportions and details, as described: {held}"
+DESIGN_CAT = "gear"   # the Limner category the references come from
+
+
+def design_choices():
+    """{Limner gear entry id: approved candidate id}: the art a piece may copy its design from."""
+    from . import limner
+    return dict(limner._state().load().get("approved", {}).get(DESIGN_CAT, {}))
+
+
+def design_auto(item_id, it, choices=None, game=None):
+    """(gear entry id, why) a piece copies its design from when the spec doesn't say: the Limner icon of its game item,
+    else the slot x material fallback (slot.body.plate, ...), else its weapon type; (None, None) if none is approved."""
+    from . import contract
+    choices = design_choices() if choices is None else choices
+    game = contract.game_items() if game is None else game
+    gid = game_id(item_id, it); row = game.get(gid) or {}
+    if gid in choices:
+        return gid, "item"
+    words = f"{it.get('text', '')} {row.get('name', '')} {row.get('text', '')}".lower()
+    if it.get("kind") == "held":
+        wt = row.get("weaponType") or {"shield": "shield", "focus": "focus"}.get(it.get("held_as"))
+        wt = wt or next((w for w in ("sword", "dagger", "axe", "mace", "staff", "wand", "rapier", "whip") if w in words), None)
+        k = f"weapontype.{wt}"
+        return (k, "weapon type") if wt and k in choices else (None, None)
+    slot = row.get("slot") or contract.slot_of(it.get("slot"))
+    mats = set(it.get("materials", [])) | set((row.get("visual") or {}).get("ramps") or {})
+    mat = ("plate" if "metal" in mats or any(w in words for w in ("steel", "iron", "plate", "metal"))
+           else "leather" if "leather" in mats or "leather" in words else "cloth")
+    k = f"slot.{slot}.{mat}"
+    return (k, "slot fallback") if k in choices else (None, None)
+
+
+def design_ref(item_id, it, choices=None, game=None):
+    """{entry, cid, why, path} of the piece's design reference, or None. The spec's `design` picks a gear entry by id,
+    "none" turns it off; unset = design_auto."""
+    from . import limner
+    choices = design_choices() if choices is None else choices
+    want = it.get("design")
+    if want == "none":
+        return None
+    eid, why = (want, "set") if want else design_auto(item_id, it, choices, game)
+    if not eid or eid not in choices:
+        return None
+    p = limner.root() / DESIGN_CAT / eid / choices[eid] / "master.png"
+    return {"entry": eid, "cid": choices[eid], "why": why, "path": p} if p.exists() else None
+
+
+def _design_image(ref, d):
+    """The reference on white (the masters are cut out), saved with the candidate as design_ref.png."""
+    im = Image.open(ref["path"]).convert("RGBA"); bg = Image.new("RGBA", im.size, (255, 255, 255, 255)); bg.alpha_composite(im)
+    p = d / "design_ref.png"; bg.convert("RGB").save(p)
+    return p
 
 
 # ----------------------------------------------------------------------------- zones
@@ -485,8 +548,12 @@ def held_layer(doc, it, sp, view, parts, img, lev_img, grip=None):
     return hand, L, lev
 
 
-def _gen_held(doc, it, P, d, sd):
-    im = comfy.image(comfy.build_txt2img(P["held"], 768, 768, seed=sd, lora_strength=0.0, remove_bg=True, prefix="hdart/item_held"))
+def _gen_held(doc, it, P, d, sd, design=None):
+    if design:   # the approved icon redrawn upright in the colour keys (`design` = its image on white)
+        im = comfy.image(comfy.build_edit(comfy.upload(design), P["held_design"], seed=sd, lora_strength=0.0,
+                                          megapixels=0.59, remove_bg=True, prefix="hdart/item_held"))
+    else:
+        im = comfy.image(comfy.build_txt2img(P["held"], 768, 768, seed=sd, lora_strength=0.0, remove_bg=True, prefix="hdart/item_held"))
     rgba = np.asarray(im.convert("RGBA")).copy(); Image.fromarray(rgba).save(d / "paint_held.png")
     a = ai_kit.clean(rgba[..., 3] > 127, min_area=300); ys, xs = np.nonzero(a)
     rgba = rgba[ys.min():ys.max() + 1, xs.min():xs.max() + 1]; a = a[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
@@ -625,8 +692,11 @@ def generate(race, item_id, build=None, seed=1):
     cid_paint, sp, parts = pf.base(build); P = prompts(race, build, item_id, doc)
     cid, d = store.new(out_dir(race, item_id), seed)
     meta = {"race": race, "item": item_id, "on": build, "paint": cid_paint, "made": int(time.time())}
+    dr = design_ref(item_id, it); design = _design_image(dr, d) if dr else None
+    if dr:
+        meta["design"] = {k: dr[k] for k in ("entry", "cid", "why")}
     if it.get("kind") == "held":
-        img, lev = _gen_held(doc, it, P, d, seed)
+        img, lev = _gen_held(doc, it, P, d, seed, design)
         Image.fromarray(img).save(d / "held.png"); Image.fromarray(lev).save(d / "held_levels.png")
     else:
         ref, cents = None, {}
@@ -638,8 +708,10 @@ def generate(race, item_id, build=None, seed=1):
             if drawn:
                 meta.setdefault("sketch", []).append(v)
             guide.save(d / f"guide_{v}.png")
-            _, after, _, out = pf._crop_pass(guide, region, pf._figure_box(comp), P[v], seed, it.get("denoise", D_ITEM),
-                                             f"item_{item_id}_{cid}_{v}", [ref] if ref else [])
+            use = design if (v == "front" and design) else None   # the back follows the front (an icon is a front view)
+            _, after, _, out = pf._crop_pass(guide, region, pf._figure_box(comp), P[v] + (P["design"] if use else ""), seed,
+                                             it.get("denoise", D_ITEM), f"item_{item_id}_{cid}_{v}",
+                                             [ref] if ref else [use] if use else [])
             out.save(d / f"paint_{v}.png")
             if v == "front":
                 ref = d / "paint_front.png"
@@ -954,7 +1026,11 @@ def state(race):
     from . import contract, item_export as ie
     doc = spec(); st = load_state(race); pal = ws.palettes_doc()["groups"]
     doc.setdefault("prompt_held_shield", PROMPT_HELD_SHIELD); doc.setdefault("prompt_held_focus", PROMPT_HELD_FOCUS)
+    doc.setdefault("prompt_design", PROMPT_DESIGN); doc.setdefault("prompt_held_design", PROMPT_HELD_DESIGN)
     v = contract.vocab(); game = contract.game_items(); gi = {g: ie.info(g, doc, v, game) for g in ie.game_ids(doc)}
+    choices = design_choices()
+    design = {i: (lambda r: r and {k: r[k] for k in ("entry", "cid", "why")})(design_ref(i, it, choices, game))
+              for i, it in doc["items"].items()}
     return {"spec": doc, "approved": st["approved"], "builds": _builds(race),
             "candidates": {i: candidates(race, i) for i in doc["items"]},
             "masks": {i: sorted(f.name[len(i) + 1:-4] for f in ZONES.glob(f"{i}.*.png")) for i in doc["items"]} if ZONES.exists() else {},
@@ -964,6 +1040,8 @@ def state(race):
             "vocab": {"artSlots": contract.art_slots(v), "heldAs": list(contract.HELD_AS), "found": v["found"],
                       "revision": v["revision"], "known": sorted(set(game) | set(v["wanted"])), "slots": v["slots"]},
             "game": gi,
+            # design references: the approved Limner gear art each piece copies (Items tab › Design)
+            "design": design, "designChoices": {e: choices[e] for e in sorted(choices)},
             # the game's items no Workshop piece makes yet (Outfit tab: shown per slot as "no art")
             "noart": {g: {"slot": r.get("slot"), "name": r.get("name") or g, "wanted": g in v["wanted"]}
                       for g, r in game.items() if g not in gi and r.get("slot")},
@@ -982,7 +1060,7 @@ def _swatch(group, name):
 ITEM_KEYS = {"slot": str, "kind": str, "text": str, "materials": list, "depth": (int, float), "bulk": (int, float),
              "clips": list, "fit": str, "hand": str, "length": (int, float), "tilt": (int, float), "zones": list,
              "denoise": (int, float), "complete": bool, "cover": bool, "guide": (int, float),
-             "grip_angle": (int, float), "flip": bool, "grip_at": list, "held_as": str, "item": str}
+             "grip_angle": (int, float), "flip": bool, "grip_at": list, "held_as": str, "item": str, "design": str}
 
 
 def game_id(piece_id, it):
@@ -1024,6 +1102,8 @@ def save_item(item_id, d, old_id=None):
             raise ValueError(bad)
     if it.get("fit", "shared") not in ("shared", "per_sex"):
         raise ValueError("fit is shared or per_sex")
+    if it.get("design") not in (None, "none") and it["design"] not in design_choices():
+        raise ValueError(f"design: {it['design']} has no approved art in Limner › Gear")
     doc["items"][item_id] = it
     _write_spec(doc)
     return doc
@@ -1031,7 +1111,8 @@ def save_item(item_id, d, old_id=None):
 
 def save_prompts(d):
     doc = spec()
-    for k in ("prompt", "prompt_back", "prompt_held", "prompt_held_shield", "prompt_held_focus", "prompt_complete", "material_text"):
+    for k in ("prompt", "prompt_back", "prompt_held", "prompt_held_shield", "prompt_held_focus", "prompt_complete", "material_text",
+              "prompt_design", "prompt_held_design"):
         if k in d:
             if not isinstance(d[k], str) or not d[k].strip():
                 raise ValueError(f"{k} can't be empty")
@@ -1039,6 +1120,8 @@ def save_prompts(d):
     for k in ("prompt", "prompt_back", "prompt_held", "prompt_held_shield", "prompt_held_focus", "prompt_complete"):
         if k in doc and "{item}" not in doc[k]:
             raise ValueError(f"{k} must contain {{item}}")
+    if "{held}" not in doc.get("prompt_held_design", "{held}"):
+        raise ValueError("prompt_held_design must contain {held}")
     _write_spec(doc)
     return doc
 
