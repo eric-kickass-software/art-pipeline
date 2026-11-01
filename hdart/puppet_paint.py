@@ -501,7 +501,15 @@ def _paint_one(build, d, cid, sd, spec, rendered, lays, ramp, P, guide):
 def _spec_for(d):
     """The template a candidate was painted on (pivots/joints match its parts); the current one if not stored."""
     f = d / "template.json"
-    return pt.checked(json.loads(f.read_text(encoding="utf-8")), f) if f.exists() else pt.load()
+    if not f.exists():
+        return pt.load()
+    spec = pt.checked(json.loads(f.read_text(encoding="utf-8")), f)
+    cur = pt.load()   # the draw order is not geometry: always the current template's (same parts), so a reorder applies to old paints
+    for v, V in spec["views"].items():
+        o = cur["views"].get(v, {}).get("order")
+        if o and set(o) == set(V["order"]):
+            V["order"] = list(o)
+    return spec
 
 
 def candidates(build):

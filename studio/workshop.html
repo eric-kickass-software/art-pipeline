@@ -1780,9 +1780,11 @@ function paGhost(t) {   // template shape -> a cyan edge (one-time per part)
 // ---- the Layers panel: one foldable root per group, the rig hierarchy below it (torso > head, arms and legs upper > lower > hand)
 const paParent = n => n === "torso" ? null : n === "head" ? "torso" : n.endsWith(".hand") ? n.replace(/hand$/, "lower")
   : n.endsWith(".lower") ? n.replace(/lower$/, "upper") : n.endsWith(".upper") ? "torso" : null;
+const PA_TORSO_KIDS = ["head", "armA", "armB", "legA", "legB"];   // the torso's children in Layers (fixed, not the draw order)
 function paTree(names) {   // part names (draw order) -> [{n, kids}], the top of the draw order first among siblings
   const set = new Set(names), node = {}, roots = []; names.forEach(n => node[n] = { n, kids: [] });
   names.slice().reverse().forEach(n => { let p = paParent(n); while (p && !set.has(p)) p = paParent(p); (p ? node[p].kids : roots).push(node[n]); });
+  if (node.torso) node.torso.kids.sort((a, b) => PA_TORSO_KIDS.indexOf(a.n.split(".")[0]) - PA_TORSO_KIDS.indexOf(b.n.split(".")[0]));
   return roots;
 }
 function paSaveUi() { try { localStorage.setItem("paUi", JSON.stringify({ fold: [...PA.fold], hidden: [...PA.hidden], ghide: [...PA.ghide], all: [...PA.allParts] })); } catch (e) { } }
