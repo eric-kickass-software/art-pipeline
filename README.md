@@ -548,6 +548,12 @@ Template, so an item fitted once is reused on every build of the race.
   icon still gives an open-face helm). A blind "recolour the icon into keys" edit was tried and dropped: FLUX picks
   the materials at random. Details in a material the item doesn't list (a tunic's leather belt) are dropped by keying:
   add the material.
+- **Queue all Limner gear** (Items tab, under Generate; API `items/design_batch[/plan]`): `limner_intake` adds a piece
+  for every approved Limner gear item the Workshop lacks (held: hand, `HELD_LEN` per weapon type, shield / focus,
+  materials from the game's ramps, text from the game; fitted: zones copied from the piece of the same game slot,
+  `ZONE_FROM`; trinkets and back items are skipped), then `plan_design_batch` queues Candidates × every piece with a
+  design reference (per-sex pieces on both builds), one job per candidate with random seeds and 2 retries, and
+  starts the watchdog. Labels `Item design batch <id> · …`. First click shows the plan, the second queues it.
 
 ### Game items and export (A2, 2026-10-26)
 - **The game's vocabulary wins (R-001):** `hdart/contract.py` reads the active project's `ArtContract/requirements.json`
