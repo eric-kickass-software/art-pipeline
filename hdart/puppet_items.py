@@ -19,7 +19,7 @@ An item is fitted once on a "fitting build" and its per-part layers are reused o
                                               plevels/<view>/<part>.png, meta.json)
     dressed(build, worn, view)            -> the build's parts with the worn items' layers stacked on, for previews
 """
-import fnmatch, json, shutil, time
+import fnmatch, json, re, shutil, time
 from pathlib import Path
 
 import numpy as np
@@ -145,7 +145,7 @@ def prompts(race, build, item_id, doc=None):
     return {"front": fill(doc["prompt"]), "back": fill(doc["prompt_back"]), "held": held,
             "complete": fill(doc.get("prompt_complete", PROMPT_COMPLETE)), "back_edit": fill(doc.get("back_edit", BACK_EDIT)),
             "design": fill(doc.get("prompt_design", PROMPT_DESIGN)),
-            "held_design": doc.get("prompt_held_design", PROMPT_HELD_DESIGN).replace("{held}", held)}
+            "held_design": doc.get("prompt_held_design", PROMPT_HELD_DESIGN).replace("{held}", re.sub(r" \([^)]*\)", "", held))}
 
 
 BACK_EDIT = ("Show this exact character from behind: a three-quarter back view facing away to the right, seen slightly from "
@@ -176,7 +176,10 @@ PROMPT_COMPLETE = ("{style}. A parts sheet for 2D cutout animation: {item}, cut 
 # Held: the reference is redrawn upright in the colour keys (a FLUX edit) instead of painting the item from text.
 PROMPT_DESIGN = (" The {item} copies the design of the item in the reference image: its cut, shape, belts, straps, trims, "
                  "plates and rivets, but painted only in the colour keys.")
-PROMPT_HELD_DESIGN = "Redraw the item from image 1 with the same shape, proportions and details, as described: {held}"
+# {held} is the held prompt without its parenthesised examples: the focus prompt's "(a tome, an orb, ...)" turned a
+# bone effigy into a skull-covered book (2026-11-01); "the same object" keeps what the icon is
+PROMPT_HELD_DESIGN = ("The same object as in image 1, redrawn: keep exactly what it is, its shape, proportions, parts and "
+                      "details; do not turn it into another kind of object. {held}")
 DESIGN_CAT = "gear"   # the Limner category the references come from
 
 

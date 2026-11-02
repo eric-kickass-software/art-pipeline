@@ -156,7 +156,7 @@ t2 = pi.generate("human", "item.cloth_trousers", seed=4); d2 = pi.out_dir("human
 assert json.loads((d2 / "meta.json").read_text())["design"] == {"entry": "slot.legs.cloth", "cid": "c1", "why": "slot fallback"}
 assert (d2 / "design_ref.png").exists() and sum("copies the design" in (c or "") for c in calls) == 1   # the front pass only
 calls.clear(); s2 = pi.generate("human", "item.iron_sword", seed=5); sd2 = pi.out_dir("human", "item.iron_sword") / s2
-assert calls[0].startswith("Redraw the item from image 1")
+assert calls[0].startswith("The same object as in image 1") and "(a tome" not in calls[0]
 hl = np.asarray(Image.open(sd2 / "held_levels.png")); assert {5, 6} <= set(np.unique(hl[..., 1][hl[..., 3] > 0]))
 bid, plan = pi.plan_design_batch(n=2)   # the overnight batch: one retryable job per candidate, per-sex pieces on both builds
 assert sorted({a["item"] for _, a in plan}) == ["item.cloth_trousers", "item.iron_sword"] and len(plan) == 4
