@@ -236,6 +236,17 @@ ZONE_FROM = {"head": "item.iron_helm", "body": "item.cloth_tunic", "legs": "item
 FITTED_SLOT = {"head": "head", "body": "chest", "legs": "legs", "feet": "feet"}   # game slot -> art slot
 
 
+COLOUR_WORDS = r"red|gold|golden|silver|green|blue|white|black|cream|tan|brown|dark|pale|grey|gray|yellow|purple|orange|pink|crimson"
+
+
+def plain_text(text):
+    """An item description FLUX can paint in the colour keys: the game's text without colour words (they fight the keys:
+    "red leather boots with gold buckles" came out magenta, the accent key) and without the flavour after a ';'."""
+    t = text.split(";")[0].strip().rstrip(".")
+    t = re.sub(rf"\b({COLOUR_WORDS})\b\s*", "", t, flags=re.I)
+    return re.sub(r"\s+", " ", t).strip()
+
+
 def limner_intake(dry_run=False):
     """Create Workshop pieces for approved Limner gear items without one.
     Returns {"added": [ids], "skipped": {id: why}, "defs": {id: piece}} (dry_run: what it would add)."""
@@ -247,7 +258,7 @@ def limner_intake(dry_run=False):
         if not row:
             skipped[gid] = "not in the game's content"; continue
         mats = [m for m in (row.get("visual") or {}).get("ramps") or {} if m in doc["materials"]] or ["leather"]
-        text = row.get("text") or row.get("name") or gid
+        text = plain_text(row.get("text") or row.get("name") or gid)
         slot = row.get("slot")
         if slot in ("main", "off"):
             wt = row.get("weaponType") or ""
