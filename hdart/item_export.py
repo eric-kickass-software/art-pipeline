@@ -163,7 +163,7 @@ def export_item(gid, race="human", size=None, doc=None, v=None, game=None, st=No
                     img = np.asarray(Image.open(cd / "held.png").convert("RGBA")); lev = np.asarray(Image.open(cd / "held_levels.png").convert("RGBA"))
                     if view == "back":
                         img, lev = img[:, ::-1].copy(), lev[:, ::-1].copy()
-                    grip = pi.grip_assets(race, b, view).get(it.get("hand", "armA"))
+                    grip = pi.grip_assets(race, b, view).get(pi.held_arm(it, view))
                     hand, _, lv = pi.held_layer(doc, it, sp, view, parts[view], img, lev, grip)
                     rel = f"{short}/{cid}/{b.split('.')[1]}/{view}/held"
                     rect = _layer(d, rel, lv, size, ramps, doc)

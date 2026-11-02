@@ -571,10 +571,18 @@ def _rot(u, deg):
     return np.array([c * u[0] + s_ * u[1], -s_ * u[0] + c * u[1]])
 
 
+def held_arm(it, view):
+    """The arm a held item rides in a view. `hand` names it for the front view; the game's main hand is the right hand
+    (armA facing the camera, armB from behind: Hearthdelve `Puppet.Paths.ArmName`), so the back view uses the other
+    arm. Rough for now (2026-11-01): the back-view grip, angle and mirroring still want a tuning pass."""
+    arm = it.get("hand", "armA")
+    return arm if view != "back" else ("armB" if arm == "armA" else "armA")
+
+
 def held_frame(doc, it, sp, view, parts, img, lev_img, grip=None):
     """Where a held item goes on its hand, before `grip_angle` and `flip`: g = its grip point (px in the image), scale,
     c = the hand's grip point and u0 = the grip axis (rest-pose canvas). held_layer and the Studio's live stage share it."""
-    arm = it.get("hand", "armA")
+    arm = held_arm(it, view)
     a = img[..., 3] > 127; ys, xs = np.nonzero(a); H_, W_ = a.shape
     if it.get("grip_at"):
         gx, gy = it["grip_at"][0] * W_, it["grip_at"][1] * H_
@@ -609,7 +617,7 @@ def held_layer(doc, it, sp, view, parts, img, lev_img, grip=None):
     the hand's grip axis (from the build's approved grip hand, else from the Template), turned by `grip_angle` degrees,
     tip the other way with `flip`. A shield (`held_as`) grips at its middle by default.
     Returns (hand part name, RGBA, levels) on the rest-pose canvas."""
-    hand = f"{it.get('hand', 'armA')}.hand"
+    hand = f"{held_arm(it, view)}.hand"
     f = held_frame(doc, it, sp, view, parts, img, lev_img, grip)
     gx, gy, scale, c = *f["g"], f["scale"], np.array(f["c"])
     u = _rot(np.array(f["u0"]), it.get("grip_angle", 0) * (1 if view == "front" else -1))
@@ -856,7 +864,7 @@ def item_raw(race, item_id, cid, sp, view, parts, grips=None, doc=None):
         img = np.asarray(Image.open(d / "held.png").convert("RGBA")); lev = np.asarray(Image.open(d / "held_levels.png").convert("RGBA"))
         if view == "back":
             img, lev = img[:, ::-1].copy(), lev[:, ::-1].copy()
-        g = (grips or {}).get(it.get("hand", "armA"))
+        g = (grips or {}).get(held_arm(it, view))
         hand, L, lv = held_layer(doc, it, sp, view, parts, img, lev, g)
         lay = {hand: (L, lv)}
     else:
@@ -1011,10 +1019,10 @@ def held_stage(race, item_id, build, cid=None, unsaved=None, ramps=None):
     the item by `grip_angle` / `flip` as held_layer does, so the angle can be dragged live."""
     doc = spec(); it = dict(doc["items"][item_id]); it.pop("grip_at", None)
     it.update({k: v for k, v in (unsaved or {}).items() if k in ("hand", "held_as") and v})
-    arm = it.get("hand", "armA")
     _, sp, parts = pf.base(build); out = {}
     for v in VIEWS:
         P = parts[v]; order = [n for n in sp["views"][v]["order"] if n in P]
+        arm = held_arm(it, v)
         g = grip_assets(race, build, v).get(arm); hn = f"{arm}.hand"
         below, above = Image.new("RGBA", (N, N)), Image.new("RGBA", (N, N)); cv = below
         for n in order:

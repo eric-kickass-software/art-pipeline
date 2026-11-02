@@ -565,7 +565,7 @@
               <label><input type="checkbox" id="itClipHair" style="width:auto"> clips the hair</label>
               <label><input type="checkbox" id="itComplete" style="width:auto"> FLUX pass for hidden joint areas</label></div>
             <label class="itheld">Held</label><div class="row itheld" style="margin:0"><label>as</label><select id="itHeldAs" style="width:110px" title="picks the held prompt (Prompts below) and the default grip point">
-                <option value="weapon">weapon</option><option value="shield">shield</option><option value="focus">focus</option></select><label>hand</label><select id="itHand" style="width:150px"><option value="armB">armB (near hand)</option><option value="armA">armA (far hand)</option></select>
+                <option value="weapon">weapon</option><option value="shield">shield</option><option value="focus">focus</option></select><label>hand</label><select id="itHand" style="width:150px" title="The hand in the front view; the back view uses the other arm (the same hand seen from behind)"><option value="armB">armB (near hand)</option><option value="armA">armA (far hand)</option></select>
               <label>length</label><input id="itLength" type="number" step="0.02" style="width:70px" title="the weapon's height as a fraction of the figure's">
               <label>grip angle°</label><input id="itGripAngle" type="number" step="5" style="width:70px" title="turns the weapon in the fist (counter-clockwise in the front view)">
               <input id="itGripAngleR" type="range" min="-180" max="180" step="1" style="width:160px" title="grip angle: or drag on the stage in the Grip card">
