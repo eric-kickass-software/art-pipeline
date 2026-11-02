@@ -158,6 +158,10 @@ assert (d2 / "design_ref.png").exists() and sum("copies the design" in (c or "")
 calls.clear(); s2 = pi.generate("human", "item.iron_sword", seed=5); sd2 = pi.out_dir("human", "item.iron_sword") / s2
 assert calls[0].startswith("Redraw the item from image 1")
 hl = np.asarray(Image.open(sd2 / "held_levels.png")); assert {5, 6} <= set(np.unique(hl[..., 1][hl[..., 3] > 0]))
+bid, plan = pi.plan_design_batch(n=2)   # the overnight batch: one retryable job per candidate, per-sex pieces on both builds
+assert sorted({a["item"] for _, a in plan}) == ["item.cloth_trousers", "item.iron_sword"] and len(plan) == 4
+assert all(a["n"] == 1 and a["retries"] == 2 and a["kind"] == "item" for _, a in plan)
+assert isinstance(pi.limner_intake(dry_run=True)["added"], list)
 try:
     pi.save_item("item.cloth_trousers", {"design": "slot.head.plate"}); raise AssertionError("unapproved design saved")
 except ValueError:

@@ -630,6 +630,8 @@
             <label>Candidates</label><input id="itN" type="number" value="2" min="1" max="6" style="width:60px">
             <label>Seed</label><input id="itSeed" type="number" value="1" style="width:80px">
             <button class="primary" id="itGen">Generate</button><span class="hint">~1–3 min each; the queue (top right) shows progress.</span></div>
+          <div class="row"><button id="itBatch" title="Adds a piece for every approved Limner gear item the Workshop doesn't have, then queues Candidates × every piece with a design reference (retries + watchdog: fine overnight)">Queue all Limner gear</button>
+            <span class="hint" id="itBatchOut"></span></div>
           <div class="prompt" id="itPrompt"></div>
           <details style="margin-top:6px"><summary class="hint">Prompt templates (shared by every item): {style} {body} {item} {materials}</summary>
             <div class="itform">
@@ -2590,6 +2592,19 @@ async function itRenderPrompts() {
       (itDef().complete !== false ? `\n\nHidden areas: ${P.complete}` : ""); } catch (e) { $("itPrompt").textContent = e.message; }
 }
 $("itBuild").onchange = () => itRenderPrompts();
+$("itBatch").onclick = guard(async () => {   // two clicks: the first shows the plan, the second queues it
+  const n = +$("itN").value, b = $("itBatch");
+  if (!b.dataset.armed) {
+    const p = await itApi("design_batch/plan", { n });
+    $("itBatchOut").textContent = `${p.added.length} new pieces (${p.added.map(i => i.replace(/^item\./, "")).join(", ") || "none"}), ` +
+      `${p.jobs} jobs over ${p.items.length} pieces` + (Object.keys(p.skipped).length ? ` · skipped: ${Object.entries(p.skipped).map(([i, w]) => i.replace(/^item\./, "") + " (" + w + ")").join(", ")}` : "") + ". Click again to queue.";
+    b.dataset.armed = 1; b.textContent = `Queue ${p.jobs} jobs`; setTimeout(() => { delete b.dataset.armed; b.textContent = "Queue all Limner gear"; }, 15000); return;
+  }
+  delete b.dataset.armed; b.textContent = "Queue all Limner gear";
+  const r = await itApi("design_batch", { n });
+  $("itBatchOut").textContent = `queued ${r.jobs} jobs (batch ${r.batch}), ${r.added.length} new pieces; watchdog ${r.watchdog}`;
+  await itRefresh(); pollJobs();
+});
 $("ipSave").onclick = guard(async () => {
   await itApi("spec/save", { prompts: { prompt: $("ipFront").value, prompt_back: $("ipBack").value, prompt_complete: $("ipComplete").value,
     prompt_held: $("ipHeld").value, prompt_held_shield: $("ipHeldShield").value, prompt_held_focus: $("ipHeldFocus").value, material_text: $("ipMat").value,

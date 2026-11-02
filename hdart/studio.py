@@ -196,6 +196,18 @@ def workshop_post(st, action, b):
         import importlib
         importlib.reload(config)   # cheap; picks up config.toml edits
         fresh(puppet, puppet_template, puppet_paint, puppet_face, puppet_items, contract, unity_export, item_export)
+        if action in ("items/design_batch", "items/design_batch/plan"):   # every approved Limner gear item → Workshop pieces → queued
+            dry = action.endswith("/plan")
+            out = puppet_items.limner_intake(dry_run=dry)
+            bid, plan = puppet_items.plan_design_batch(b.get("race", "human"), int(b.get("n", 2)), extra=out.pop("defs") if dry else None)
+            out.pop("defs", None)
+            out.update(batch=bid, jobs=len(plan), items=sorted({a["item"] for _, a in plan}))
+            if not dry:
+                from . import limner
+                for label, a in plan:
+                    JOBS.add("item", a, label)
+                out["watchdog"] = limner.ensure_watchdog() or "already running"
+            return out
         return puppet_items.api(action[6:], b)
     if action.startswith("paint/"):   # puppet Paint step (Races) and Parts editor
         from . import puppet, puppet_template, puppet_paint as ppt

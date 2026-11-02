@@ -19,7 +19,7 @@ An item is fitted once on a "fitting build" and its per-part layers are reused o
                                               plevels/<view>/<part>.png, meta.json)
     dressed(build, worn, view)            -> the build's parts with the worn items' layers stacked on, for previews
 """
-import fnmatch, json, time
+import fnmatch, json, shutil, time
 from pathlib import Path
 
 import numpy as np
@@ -222,6 +222,71 @@ def design_ref(item_id, it, choices=None, game=None):
         return None
     p = limner.root() / DESIGN_CAT / eid / choices[eid] / "master.png"
     return {"entry": eid, "cid": choices[eid], "why": why, "path": p} if p.exists() else None
+
+
+# Limner intake: a Workshop piece for each approved Limner gear item that has none yet. Held items need no zones; a
+# fitted one copies its zones (spec rules and painted zone files) from the Workshop piece of the same game slot.
+HELD_LEN = {"dagger": 0.3, "sword": 0.48, "rapier": 0.5, "twohander": 0.7, "axe": 0.4, "mace": 0.42, "staff": 0.85,
+            "wand": 0.28, "polearm": 0.95, "musket": 0.7, "bow": 0.6, "whip": 0.45, "flask": 0.22, "banner": 0.9,
+            "shield": 0.48, "focus": 0.25}
+ZONE_FROM = {"head": "item.iron_helm", "body": "item.cloth_tunic", "legs": "item.cloth_trousers", "feet": "item.leather_boots"}
+FITTED_SLOT = {"head": "head", "body": "chest", "legs": "legs", "feet": "feet"}   # game slot -> art slot
+
+
+def limner_intake(dry_run=False):
+    """Create Workshop pieces for approved Limner gear items without one.
+    Returns {"added": [ids], "skipped": {id: why}, "defs": {id: piece}} (dry_run: what it would add)."""
+    from . import contract
+    doc = spec(); game = contract.game_items(); have = {game_id(k, v) for k, v in doc["items"].items()}
+    added, skipped, defs = [], {}, {}
+    for gid in sorted(e for e in design_choices() if e.startswith("item.") and e not in have):
+        row = game.get(gid)
+        if not row:
+            skipped[gid] = "not in the game's content"; continue
+        mats = [m for m in (row.get("visual") or {}).get("ramps") or {} if m in doc["materials"]] or ["leather"]
+        text = row.get("text") or row.get("name") or gid
+        slot = row.get("slot")
+        if slot in ("main", "off"):
+            wt = row.get("weaponType") or ""
+            held_as = "shield" if wt == "shield" else "focus" if wt == "focus" else "weapon"
+            d = {"slot": "mainhand" if slot == "main" else "offhand", "kind": "held", "materials": mats, "text": text,
+                 "hand": "armA" if slot == "main" else "armB", "length": HELD_LEN.get(wt, 0.48), "held_as": held_as,
+                 "grip_angle": 0 if held_as != "weapon" else -45, "flip": False, "fit": "shared", "depth": 3 if slot == "main" else 8}
+        elif slot in ZONE_FROM and ZONE_FROM[slot] in doc["items"]:
+            src = ZONE_FROM[slot]; t = doc["items"][src]
+            d = {k: t[k] for k in ("depth", "bulk", "fit", "clips", "zones") if k in t}
+            d.update(slot=FITTED_SLOT[slot], materials=mats, text=text, depth=4 if slot == "body" else t.get("depth", 3))
+        else:
+            skipped[gid] = f"no art slot for '{slot}'" if slot in (None, "trinket") else f"no zones to copy for the {slot} slot: add it by hand and paint its zones"
+            continue
+        added.append(gid); defs[gid] = d
+        if dry_run:
+            continue
+        save_item(gid, d)
+        if d.get("kind") != "held":
+            for f in ZONES.glob(f"{src}.*.png"):
+                rest = f.name[len(src):]
+                if not rest.endswith(".sketch.png") and not (ZONES / (gid + rest)).exists():
+                    shutil.copyfile(f, ZONES / (gid + rest))
+    return {"added": added, "skipped": skipped, "defs": defs}
+
+
+def plan_design_batch(race="human", n=2, items=None, extra=None):
+    """One retryable job per candidate for every piece with a design reference (per-sex pieces on both builds), random
+    seeds. `extra`: pieces not in the spec yet (a dry-run intake). Returns (batch id, [(label, job args)])."""
+    import random
+    doc = spec(); choices = design_choices(); bid = time.strftime("d%m%d_%H%M%S"); plan = []
+    for i, it in {**doc["items"], **(extra or {})}.items():
+        if (items and i not in items) or not design_ref(i, it, choices):
+            continue
+        builds = [f"{race}.male", f"{race}.female"] if it.get("fit") == "per_sex" else [f"{race}.male"]
+        for b in builds:
+            for _ in range(n):
+                s = random.randint(1, 2 ** 31 - 1)
+                plan.append((f"Item design batch {bid} · {i} · {b} s{s}",
+                             {"kind": "item", "action": "generate", "race": race, "item": i, "build": b, "n": 1, "seed": s,
+                              "retries": 2, "batch": bid}))
+    return bid, plan
 
 
 def _design_image(ref, d):
