@@ -204,6 +204,10 @@ def layout(parts, order, V):
             reg |= m; place[n] = (px, py)
         if ok:
             break
+    if not ok:   # still touching at the widest push (pieces sharing a centre, e.g. a boot's shin and foot): one row
+        x, place = 0, {}
+        for n in order:
+            place[n] = (x, 0); x += crops[n][2] - crops[n][0] + 2 * GAP
     X0 = min(place[n][0] for n in order); Y0 = min(place[n][1] for n in order)
     X1 = max(place[n][0] + crops[n][2] - crops[n][0] for n in order); Y1 = max(place[n][1] + crops[n][3] - crops[n][1] for n in order)
     k = min((SHEET - 2 * MARGIN) / (X1 - X0), (SHEET - 2 * MARGIN) / (Y1 - Y0))
