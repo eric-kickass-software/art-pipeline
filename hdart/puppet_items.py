@@ -285,6 +285,100 @@ def limner_intake(dry_run=False):
     return {"added": added, "skipped": skipped, "defs": defs}
 
 
+# Gear sets: a Workshop piece for every armour slot in cloth, leather and plate, each copying its Limner icon (the
+# game item's, else the slot x material fallback) and with its own zones. Pieces that exist are left alone (cloth tunic,
+# trousers and cape; leather trousers and boots; iron helm, breastplate and greaves). New ids go to the game as intake
+# on export. "zones": preset rules ("cut" takes an area out); "zones_from": the painted zones of another piece, plus
+# any rules in "zones" baked into the copied masks. There's no plate back piece (and no Limner icon for one).
+GEAR_SETS = {
+    "cloth": {
+        "head": ("item.cloth_hood", {"slot": "head", "materials": ["cloth"], "depth": 7, "bulk": 14, "clips": ["hair"],
+                 "text": "a simple cloth hood covering the head, ears and neck, the face left open",
+                 "zones": [{"part": "head", "view": "front", "ellipse": [0.55, 0.3, 0.7, 0.72]},
+                           {"part": "head", "view": "front", "ellipse": [0.6, 0.66, 0.36, 0.34], "cut": True},
+                           {"part": "head", "view": "back", "ellipse": [0.5, 0.4, 0.78, 0.8]},
+                           {"part": "torso", "rows": [0, 0.14]}]}),
+        "feet": ("item.cloth_shoes", {"slot": "feet", "materials": ["cloth"], "depth": 2, "bulk": 5,
+                 "text": "simple cloth shoes with bindings wrapped around the ankles",
+                 "zones": [{"part": "leg*.hand"}, {"part": "leg*.lower", "t": [0.85, 1]}]}),
+        "hands": ("item.cloth_wraps", {"slot": "gloves", "materials": ["cloth"], "depth": 2, "bulk": 3,
+                  "text": "cloth hand wraps around the palms and wrists, the fingers bare",
+                  "zones": [{"part": "arm*.hand", "rows": [0, 0.7]}, {"part": "arm*.lower", "t": [0.78, 1]}]}),
+    },
+    "leather": {
+        "head": ("item.leather_cap", {"slot": "head", "depth": 7, "bulk": 10, "clips": ["hair"],
+                 "zones": [{"part": "head", "view": "front", "ellipse": [0.56, 0.1, 0.56, 0.34]},
+                           {"part": "head", "view": "back", "ellipse": [0.5, 0.12, 0.66, 0.5]}]}),
+        "body": ("item.leather_armor", {"slot": "chest", "depth": 4, "bulk": 8, "fit": "per_sex",
+                 "zones": [{"part": "torso"}, {"part": "arm*.upper", "t": [0, 0.3]}]}),
+        "hands": ("item.leather_gloves", {"slot": "gloves", "depth": 2, "bulk": 5,
+                  "zones": [{"part": "arm*.hand"}, {"part": "arm*.lower", "t": [0.86, 1]}]}),
+        "back": ("item.leather_cloak", {"slot": "back", "materials": ["leather"], "depth": 3, "bulk": 0, "fit": "shared",
+                 "text": "a leather cloak hanging from the shoulders, its hood down on the back",
+                 "zones_from": "item.cloth_cape", "zones": [{"part": "torso", "rows": [0, 0.12]}]}),
+    },
+    "plate": {
+        "feet": ("item.iron_sabatons", {"slot": "feet", "materials": ["metal", "leather"], "depth": 2, "bulk": 10,
+                 "text": "steel plate sabatons over the feet and ankles, strapped on",
+                 "zones": [{"part": "leg*.hand"}, {"part": "leg*.lower", "t": [0.62, 1]}]}),
+        "hands": ("item.iron_gauntlets", {"slot": "gloves", "materials": ["metal", "leather"], "depth": 2, "bulk": 9,
+                  "text": "steel plate gauntlets with flared cuffs",
+                  "zones": [{"part": "arm*.hand"}, {"part": "arm*.lower", "t": [0.55, 1]}]}),
+    },
+}
+
+
+def gear_set_pieces():
+    """{piece id: (material, game slot)} of every piece in GEAR_SETS."""
+    return {pid: (mat, slot) for mat, slots in GEAR_SETS.items() for slot, (pid, _) in slots.items()}
+
+
+def gear_set_intake(dry_run=False):
+    """Create the GEAR_SETS pieces the Workshop doesn't have. Text and ramps come from the game item when there is one.
+    Returns {"added": [ids], "skipped": {id: why}, "defs": {id: piece}}."""
+    from . import contract
+    doc = spec(); game = contract.game_items(); choices = design_choices()
+    added, skipped, defs = [], {}, {}
+    for pid, (mat, slot) in gear_set_pieces().items():
+        if pid in doc["items"]:
+            continue
+        d = {k: v for k, v in GEAR_SETS[mat][slot][1].items() if k != "zones_from"}
+        src = GEAR_SETS[mat][slot][1].get("zones_from")
+        row = game.get(pid) or {}
+        if row:
+            d.setdefault("text", plain_text(row.get("text") or row.get("name") or pid))
+            d.setdefault("materials", [m for m in (row.get("visual") or {}).get("ramps") or {} if m in doc["materials"]] or
+                         ["metal" if mat == "plate" else mat])
+        if pid not in choices and f"slot.{slot}.{mat}" in choices:   # no approved icon of its own: the set's fallback
+            d["design"] = f"slot.{slot}.{mat}"
+        if not design_ref(pid, d, choices, game):
+            skipped[pid] = f"no approved Limner icon (slot.{slot}.{mat})"; continue
+        if src:
+            d["zones"] = []   # the rules are baked into the copied masks below
+        added.append(pid); defs[pid] = d
+        if dry_run:
+            continue
+        save_item(pid, d)
+        if src:
+            _bake_zones(pid, src, GEAR_SETS[mat][slot][1].get("zones", []))
+    return {"added": added, "skipped": skipped, "defs": defs}
+
+
+def _bake_zones(item_id, src, extra):
+    """Painted zones of `src` (each view, each sex variant) plus the rules `extra`, saved as item_id's painted zones."""
+    doc = spec(); s = doc["items"][src]
+    for f in sorted(ZONES.glob(f"{src}.*.png")):
+        rest = f.name[len(src) + 1:-4].split(".")   # [view] or [sex, view]; skip sketches
+        if rest[-1] == "sketch" or (ZONES / f"{item_id}.{'.'.join(rest)}.png").exists():
+            continue
+        view, sex = rest[-1], (rest[0] if len(rest) == 2 else None)
+        _, sp, parts = pf.base(f"human.{sex or 'male'}")
+        _, Z = zones_for(sp, view, parts[view], src, s, sex)
+        for m in zone_masks(sp, view, parts[view], extra).values():
+            Z = Z | m
+        Image.fromarray(np.where(Z, 255, 0).astype(np.uint8)).convert("1").save(mask_path(item_id, view, sex))
+
+
 def plan_design_batch(race="human", n=2, items=None, extra=None):
     """One retryable job per candidate for every piece with a design reference (per-sex pieces on both builds), random
     seeds. `extra`: pieces not in the spec yet (a dry-run intake). Returns (batch id, [(label, job args)])."""
@@ -339,6 +433,10 @@ def zone_masks(sp, view, parts, zones):
             if "seam" in z:
                 wy = V["seams"]["waist"]["y"] * S + z.get("seam_px", 0)
                 m &= (yy >= wy) if z["seam"] == "below_waist" else (yy < wy)
+            if z.get("cut"):   # takes its area out of what the zones before it added (a hood's face opening)
+                if n in out:
+                    out[n] &= ~m
+                continue
             out[n] = out.get(n, np.zeros((N, N), bool)) | m
     return out
 

@@ -167,5 +167,20 @@ try:
 except ValueError:
     pass
 pi.save_item("item.cloth_trousers", {"design": "none"}); assert pi.spec()["items"]["item.cloth_trousers"]["design"] == "none"
+
+# gear sets: a "cut" zone takes its area out (the hood's face opening); every set piece has a unique zone
+_, gsp, gparts = pf.base("human.male")
+hood = pi.GEAR_SETS["cloth"]["head"][1]["zones"]
+whole = pi.zone_masks(gsp, "front", gparts["front"], [z for z in hood if not z.get("cut")])["head"]
+cut = pi.zone_masks(gsp, "front", gparts["front"], hood)["head"]
+assert cut.sum() < whole.sum() * 0.8 and not (cut & ~whole).any()
+seen = set()
+for pid, (mat, slot) in pi.gear_set_pieces().items():
+    d = pi.GEAR_SETS[mat][slot][1]
+    if "zones_from" in d:
+        continue
+    z = np.any(list(pi.zone_masks(gsp, "front", gparts["front"], d["zones"]).values()), 0)
+    assert z.any() and z.tobytes() not in seen, pid; seen.add(z.tobytes())
+assert "item.cloth_wraps" in pi.gear_set_intake(dry_run=True)["skipped"]   # nothing approved for hands in this temp Limner
 fake.stop(); shutil.rmtree(tmp)
 print("ok")

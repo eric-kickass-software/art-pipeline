@@ -631,6 +631,7 @@
             <label>Seed</label><input id="itSeed" type="number" value="1" style="width:80px">
             <button class="primary" id="itGen">Generate</button><span class="hint">~1–3 min each; the queue (top right) shows progress.</span></div>
           <div class="row"><button id="itBatch" title="Adds a piece for every approved Limner gear item the Workshop doesn't have, then queues Candidates × every piece with a design reference (retries + watchdog: fine overnight)">Queue all Limner gear</button>
+            <button id="itSets" title="Adds the missing pieces of the cloth, leather and plate sets (hood, shoes, wraps, cap, jerkin, gloves, cloak, sabatons, gauntlets), each with its own zones and its Limner icon as the design, then queues Candidates × those new pieces">Queue gear sets</button>
             <span class="hint" id="itBatchOut"></span></div>
           <div class="prompt" id="itPrompt"></div>
           <details style="margin-top:6px"><summary class="hint">Prompt templates (shared by every item): {style} {body} {item} {materials}</summary>
@@ -2603,6 +2604,20 @@ $("itBatch").onclick = guard(async () => {   // two clicks: the first shows the 
   delete b.dataset.armed; b.textContent = "Queue all Limner gear";
   const r = await itApi("design_batch", { n });
   $("itBatchOut").textContent = `queued ${r.jobs} jobs (batch ${r.batch}), ${r.added.length} new pieces; watchdog ${r.watchdog}`;
+  await itRefresh(); pollJobs();
+});
+$("itSets").onclick = guard(async () => {   // two clicks, like Queue all Limner gear
+  const n = +$("itN").value, b = $("itSets"), short = i => i.replace(/^item\./, "");
+  if (!b.dataset.armed) {
+    const p = await itApi("set_batch/plan", { n });
+    if (!p.jobs) { $("itBatchOut").textContent = "Every set piece already exists" + (Object.keys(p.skipped).length ? ` · skipped: ${Object.entries(p.skipped).map(([i, w]) => short(i) + " (" + w + ")").join(", ")}` : "") + "."; return; }
+    $("itBatchOut").textContent = `${p.added.length} new set pieces (${p.added.map(short).join(", ")}), ${p.jobs} jobs` +
+      (Object.keys(p.skipped).length ? ` · skipped: ${Object.entries(p.skipped).map(([i, w]) => short(i) + " (" + w + ")").join(", ")}` : "") + ". Click again to queue.";
+    b.dataset.armed = 1; b.textContent = `Queue ${p.jobs} jobs`; setTimeout(() => { delete b.dataset.armed; b.textContent = "Queue gear sets"; }, 15000); return;
+  }
+  delete b.dataset.armed; b.textContent = "Queue gear sets";
+  const r = await itApi("set_batch", { n });
+  $("itBatchOut").textContent = `queued ${r.jobs} jobs (batch ${r.batch}), new pieces: ${r.added.map(short).join(", ")}; watchdog ${r.watchdog}`;
   await itRefresh(); pollJobs();
 });
 $("ipSave").onclick = guard(async () => {
