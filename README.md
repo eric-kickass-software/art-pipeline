@@ -554,6 +554,13 @@ Template, so an item fitted once is reused on every build of the race.
   `ZONE_FROM`; trinkets and back items are skipped), then `plan_design_batch` queues Candidates × every piece with a
   design reference (per-sex pieces on both builds), one job per candidate with random seeds and 2 retries, and
   starts the watchdog. Labels `Item design batch <id> · …`. First click shows the plan, the second queues it.
+- **Queue gear sets** (next to it; API `items/set_batch[/plan]`): `GEAR_SETS` in `puppet_items.py` names one piece per
+  armour slot (head, body, legs, feet, hands = art slot `gloves`, back) in cloth, leather and plate; `gear_set_intake`
+  adds the missing ones (game items keep the game's text and ramps; new ids go to the game as intake on export), each
+  with its own preset zones and `design` = its Limner `slot.<slot>.<material>` icon unless the item's own icon is
+  approved; `zones_from` bakes another piece's painted zones (+ rules) into the new piece's masks (the leather cloak
+  from the cloth cape). Then the same design batch, only for the new pieces. Zone rules take `"cut": true` to remove
+  an area (the hood's face opening). No plate back piece.
 
 ### Game items and export (A2, 2026-10-26)
 - **The game's vocabulary wins (R-001):** `hdart/contract.py` reads the active project's `ArtContract/requirements.json`
