@@ -24,6 +24,7 @@ from . import ai_kit, comfy, jobs, store, workshop as ws, puppet as pp, puppet_t
 
 S, SHEET, GAP, MARGIN = 2, 1024, 14, 24
 D_FIGURE, D_COMPLETE = 0.8, 0.9
+W_SKULL, EAR_GROW, D_BLANK, FACE_INSET = 0.8, 70, 0.6, 14   # head pass: skull weight, px the ears may leave the template; face removal
 OUTLINE_W, OUTLINE_BAND = 4, 7
 LINE = (40, 32, 30)
 BRIEFS = ((92, 94, 100), (176, 178, 184))
@@ -59,7 +60,9 @@ def save_spec(doc):
         raise ValueError("face_guide is keyed, faint or marks")
     out = {"_doc": old.get("_doc", ""), "face_guide": doc.get("face_guide", old.get("face_guide", "keyed")),
            "style_groups": doc.get("style_groups") or old["style_groups"],
-           "figure": doc["figure"], "back_reference": str(doc.get("back_reference", "")), "complete": doc["complete"],
+           "figure": doc["figure"], "back_reference": str(doc.get("back_reference", "")),
+           "mannequin_reference": str(doc.get("mannequin_reference", old.get("mannequin_reference", ""))),
+           "head": doc.get("head", old.get("head", {})), "blank": str(doc.get("blank", old.get("blank", ""))), "complete": doc["complete"],
            "fix": doc["fix"], "sexes": doc.get("sexes") or old["sexes"]}
     SPEC.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8", newline="\n")
     return out
@@ -84,18 +87,46 @@ def composed(build, doc=None):
     """The full prompts the Paint step will send for a build, per view: figure pass and completion pass."""
     doc = doc or spec(); body, clothes = prompts(build, doc); style = style_text(doc)
     fill = lambda t: t.replace("{body}", body).replace("{clothes}", clothes)
+    r = ws.races_doc()["races"][build.split(".", 1)[0]]
+    race_text = ", ".join(x.strip() for x in (r.get("traits", ""), r.get("description", "")) if x and x.strip())
     out = {}
     for v in VIEWS:
         fig = f"{style}. {fill(doc['figure'][v])}"
         if v == "back" and doc.get("back_reference"):
             fig += " " + doc["back_reference"]
-        out[v] = {"figure": fig, "complete": f"{style}. {fill(doc['complete'][v])}"}
+        if v == "front" and doc.get("mannequin_reference") and mannequin(build.split(".", 1)[0]):
+            fig += " " + doc["mannequin_reference"]
+        out[v] = {"figure": fig, "complete": f"{style}. {fill(doc['complete'][v])}",
+                  "head": f"{style}. " + doc.get("head", {}).get(v, "").replace("{race}", race_text)}
     out["fix"] = f"{style}. {fill(doc['fix'])}"
+    out["blank"] = f"{style}. " + doc.get("blank", "").replace("{race}", race_text)
     return out
 
 
+def mannequin(race):
+    """The approved unisex front a race paints from (`paint_from_mannequin` in specs/races.json), else None. The template
+    is the same for every race, so a race far from human needs this to keep its look: the init tint decides the skin
+    colour at D_FIGURE, and the reference carries the sculpting."""
+    if not ws.races_doc()["races"].get(race, {}).get("paint_from_mannequin"):
+        return None
+    f = ws._approved(ws.load_state(), ws.race_build(race, "unisex"), "front")
+    return ai_kit.AI_DIR / f if f else None
+
+
+def mannequin_tint(path):
+    """(dark, light) of an image's skin: the medians of the darkest and lightest quarter, outline and background left out."""
+    c = np.asarray(Image.open(path).convert("RGB")).reshape(-1, 3).astype(int)
+    c = c[(c.sum(1) > 150) & (c.min(1) < 215)]
+    lum = c.sum(1); lo, hi = np.percentile(lum, (25, 75))
+    return tuple(int(x) for x in np.median(c[lum <= lo], 0)), tuple(int(x) for x in np.median(c[lum >= hi], 0))
+
+
 def skin_ramp(race):
-    """(dark, light) init tint from the race's first skin ramp (specs/palettes.json), else a neutral skin."""
+    """(dark, light) init tint: the race's mannequin if it paints from one, else its first skin ramp (specs/palettes.json),
+    else a neutral skin."""
+    man = mannequin(race)
+    if man:
+        return mannequin_tint(man)
     try:
         grp = ws.palettes_doc()["groups"].get("skin", {})
         for e in grp.values():
@@ -241,8 +272,9 @@ def unsheet_one(painted, base, lay, n):
 
 def _run(init, mask, prompt, seed, denoise, tag, refs=()):
     """One masked img2img pass (`tag` names it in logs only); `refs` are image paths."""
+    m = np.asarray(mask)   # float = per-pixel weights (Differential Diffusion), else redraw / keep
     out = comfy.img2img(init, prompt, seed=seed, denoise=denoise, refs=[Image.open(r).convert("RGB") for r in refs],
-                        mask=np.asarray(mask, dtype=bool), prefix="hdart/paint")
+                        mask=m if m.dtype.kind == "f" else m.astype(bool), prefix="hdart/paint")
     return out.resize(init.size, Image.LANCZOS)
 
 
@@ -269,6 +301,66 @@ def figure_pass(order, inits, prompt, seed, tag, refs=()):
     painted = _run(init, np.asarray(m.filter(ImageFilter.MaxFilter(5))) > 0, prompt, seed, D_FIGURE, tag, refs)
     back = Image.new("RGB", (N, N), (255, 255, 255)); back.paste(painted.resize((side, side), Image.LANCZOS), box[:2])
     return painted, np.asarray(back)
+
+
+def _head_run(px, box, weights, prompt, seed, denoise, tag, refs=()):
+    """A masked pass on the square `box` of the rest-pose RGB `px` at sheet size; returns the painted full-size RGB."""
+    side = box[2] - box[0]; crop = lambda a: Image.fromarray(a).crop(box)
+    init = crop(px).resize((SHEET, SHEET), Image.LANCZOS)
+    w = np.asarray(crop((weights * 255).astype(np.uint8)).resize((SHEET, SHEET), Image.BILINEAR), np.float32) / 255
+    out = np.asarray(px).copy()
+    out[box[1]:box[3], box[0]:box[2]] = np.asarray(_run(init, w, prompt, seed, denoise, tag, refs).resize((side, side), Image.LANCZOS))
+    return out
+
+
+def _with_head(parts, inits, alpha):
+    """Copies of parts and inits whose head covers `alpha`: only the head's shape changes, never a joint or pivot."""
+    parts = dict(parts); inits = dict(inits); h = parts["head"][0].copy(); h[..., 3] = alpha
+    parts["head"] = (h,) + tuple(parts["head"][1:]); i = inits["head"].copy(); i[..., 3] = alpha; inits["head"] = i
+    return parts, inits
+
+
+def ear_band(parts, order):
+    """Where a race's ears may leave the template head: beside it, between the crown and the jaw, off the other parts."""
+    ha = parts["head"][0][..., 3] > 127; ys = np.nonzero(ha)[0]; y0, h = ys.min(), ys.max() - ys.min()
+    yy = np.arange(ha.shape[0])[:, None]; others = np.any([parts[n][0][..., 3] > 127 for n in order if n != "head"], 0)
+    return _grow(ha, EAR_GROW) & ~ha & ~others & (yy > y0 + 0.15 * h) & (yy < y0 + 0.8 * h)
+
+
+def reshape_head(parts, inits, order, fig_px, prompt, seed, tag, refs):
+    """Head pass: the skull redrawn at W_SKULL (it keeps its place and outline), the ear band at full strength. Returns
+    the figure and parts + inits with the head widened to what was painted there."""
+    from . import puppet_face as pf
+    ha = parts["head"][0][..., 3] > 127; band = ear_band(parts, order); box, _ = pf._head_box({"head": parts["head"][0]})
+    painted = _head_run(fig_px, box, ha * W_SKULL + band * 1.0, prompt, seed, 1.0, tag, refs)
+    c = painted.astype(int); solid = band & ~((c.min(-1) > 225) & (c.max(-1) - c.min(-1) < 26))
+    alpha = main_piece(np.dstack([painted, np.where(ha | solid, 255, 0).astype(np.uint8)]))[..., 3]
+    fig = fig_px.copy(); fig[ha] = painted[ha]; fig[band] = 255; ears = band & (alpha > 127); fig[ears] = painted[ears]
+    return (fig,) + _with_head(parts, inits, alpha)
+
+
+def blank_head(parts, spec_, fig_px, prompt, seed, tag):
+    """Takes the face off: the head's inside filled from its own skin shading (dark lines, teeth and eyes left out of the
+    average), then a light pass redraws it, so nothing is left for FLUX to keep. The ears lie outside and stay."""
+    from . import puppet_face as pf
+    head = parts["head"][0]
+    inside = _erode(pt.render(spec_, "front", S)["head"][0][..., 3] > 127, FACE_INSET); box, _ = pf._head_box({"head": head})
+    px = fig_px.astype(float); med = np.median(px[inside], 0); w = inside & (np.abs(px - med).sum(-1) < 110)
+    blur = lambda a: np.asarray(Image.fromarray(a.astype(np.uint8)).filter(ImageFilter.GaussianBlur(36)), float)
+    wt = blur(w * 255)[..., None]; fill = np.dstack([blur(px[..., i] * w) for i in range(3)]) * 255 / np.maximum(wt, 1)
+    soft = np.asarray(Image.fromarray((inside * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(5)), float)[..., None] / 255
+    init = np.clip(px * (1 - soft) + fill * soft, 0, 255).astype(np.uint8)
+    painted = _head_run(init, box, soft[..., 0], prompt, seed, D_BLANK, tag)
+    return np.clip(px * (1 - soft) + painted * soft, 0, 255).astype(np.uint8)
+
+
+def approved_head(race, view):
+    """(template head, painted head) of the race's approved unisex paint: the gendered paints take its shape, ears and all."""
+    cid = ws.load_state()["builds"].get(ws.race_build(race, "unisex"), {}).get("paint", {}).get("approved")
+    d = out_dir(ws.race_build(race, "unisex")) / str(cid); f = d / "template" / view / "head.png"
+    if not cid or not f.exists():
+        return None
+    return tuple(np.asarray(Image.open(x).convert("RGBA")) for x in (f, d / "parts" / view / "head.png"))
 
 
 def complete_pass(order, lay, inits, fig_px, vis, prompt, seed, tag, refs=()):
@@ -469,15 +561,29 @@ def paint(build, n=1, seed=1):
 def _paint_one(build, d, cid, sd, spec, rendered, lays, ramp, P, guide):
     """One paint candidate (figure + completion pass per view, cleanup, outline, previews), reporting its progress."""
     if True:
-        ref = None; prompts = {}
+        race, sex = build.split(".", 1); man = mannequin(race)
+        ref = man; prompts = {}   # the front's reference; the back's is the painted front
+        rendered, lays = dict(rendered), dict(lays)   # a race's head shape is this candidate's own
         step = 0
         for v in VIEWS:
             V = spec["views"][v]; order = V["order"]; parts = rendered[v]
             inits = inits_for(spec, v, parts, ramp, guide)
+            shape = approved_head(race, v) if man and sex != "unisex" else None
+            if shape:   # the unisex's silhouette: its ears go in the init, the figure pass paints them with the rest
+                parts, inits = _with_head(parts, inits, shape[0][..., 3])
+                extra = (shape[0][..., 3] > 127) & (rendered[v]["head"][0][..., 3] <= 127)
+                inits["head"][extra, :3] = shape[1][extra, :3]
             fprompt = P[v]["figure"]
             step += 1; _progress(d, step, 5, f"figure pass ({v})", sd)
             fpaint, fig_px = figure_pass(order, inits, fprompt, sd, f"{build}_{cid}_{v}_fig", [ref] if ref else [])
             fpaint.save(d / f"figure_{v}.png")
+            if man:
+                if not shape:
+                    fig_px, parts, inits = reshape_head(parts, inits, order, fig_px, P[v]["head"], sd, f"{build}_{cid}_{v}_head", [ref])
+                if v == "front":
+                    fig_px = blank_head(parts, spec, fig_px, P["blank"], sd, f"{build}_{cid}_blank")
+                rendered[v] = parts; lays[v] = layout(parts, order, V)
+                Image.fromarray(fig_px).save(d / f"figure_{v}.png")
             if v == "front":
                 ref = d / "figure_front.png"
             cprompt = P[v]["complete"]

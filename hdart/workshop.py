@@ -478,10 +478,12 @@ PALETTES = ROOT / "specs" / "palettes.json"
 
 
 def skin_mask(a):
-    """Skin pixels of an RGB array: warm (red over blue) and saturated enough, not the grey clothes or the outline."""
+    """Skin pixels of an RGB array: warm (red over blue) or cool (green or blue over red: orcs and the like; human skin
+    never is) and saturated enough, not the grey clothes or the outline."""
     a = a.astype(int)
     mx, mn = a.max(-1), a.min(-1)
-    m = (a[..., 0] > a[..., 2] + 18) & ((mx - mn) > 0.16 * np.maximum(mx, 1)) & (mx > 70)
+    hue = (a[..., 0] > a[..., 2] + 18) | (np.maximum(a[..., 1], a[..., 2]) > a[..., 0] + 8)
+    m = hue & ((mx - mn) > 0.16 * np.maximum(mx, 1)) & (mx > 70)
     lum = a.mean(-1)
     grey = ((mx - mn) < 0.12 * np.maximum(mx, 1)) & (lum < 200)
     near = np.roll(m, 1, 0) | np.roll(m, -1, 0) | np.roll(m, 1, 1) | np.roll(m, -1, 1)
