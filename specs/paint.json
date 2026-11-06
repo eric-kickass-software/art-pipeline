@@ -1,5 +1,5 @@
 {
-  "_doc": "Prompts of the puppet Paint step (hdart/puppet_paint.py, Workshop Race tab: the Paint block of each gender row and the Shared prompts card). A paint prompt is the Race tab's style groups + `figure` (or `complete`) with {body} = race traits + description + the gender body text (specs/races.json) + `sexes.<sex>.extra`, and {clothes} = `sexes.<sex>.clothes`. The back adds `back_reference`; the front of a race with `paint_from_mannequin` (specs/races.json) adds `mannequin_reference`. `head` and `blank` only run for a race with `paint_from_mannequin`: the head pass (ears may leave the template) and the face removal, {race} = its traits + description. `fix` is the Parts editor's AI fix. `face_guide`: keyed (default: the head gets its own face, painted with the whole character, irises in the magenta key; each paint's face is harvested into the race's face candidates, Face tab), marks (the same, irises not keyed) or faint (a faceless head; faces only from the Face tab's own face pass).",
+  "_doc": "Prompts of the puppet Paint step (hdart/puppet_paint.py, Workshop Race tab: the Paint block of each gender row and the Shared prompts card). A paint prompt is the Race tab's style groups + `figure` (or `complete`) with {body} = race traits + description + the gender body text (specs/races.json) + `sexes.<sex>.extra`, and {clothes} = `sexes.<sex>.clothes`. The back adds `back_reference`; the front of a race with `paint_from_mannequin` (specs/races.json) adds `mannequin_reference`. `blank` is the face removal of a race with `paint_from_mannequin` (its mannequin art is cut up by the template and painted over lightly), {race} = its traits + description. `fix` is the Parts editor's AI fix. `face_guide`: keyed (default: the head gets its own face, painted with the whole character, irises in the magenta key; each paint's face is harvested into the race's face candidates, Face tab), marks (the same, irises not keyed) or faint (a faceless head; faces only from the Face tab's own face pass).",
   "face_guide": "faint",
   "style_groups": [
     "style",
@@ -12,10 +12,6 @@
   },
   "back_reference": "The same character as in the reference image, now seen from behind.",
   "mannequin_reference": "The same character as in the reference image: same skin colour, same face, same ears, same nose and tusks.",
-  "head": {
-    "front": "The head of the same character as in the reference image, three-quarter view facing left, seen slightly from above: a bald head of a {race}, the same ears as the reference sticking out to the sides, on a pure white background.",
-    "back": "The back of the head of the same character as in the reference image, three-quarter back view, seen slightly from above: a bald head of a {race}, the same ears as the reference sticking out to the sides, no face visible, on a pure white background."
-  },
   "blank": "A bald head of a {race} with a completely blank smooth face: no eyes, no eyebrows, no nose, no mouth, no teeth, only plain smooth skin with the same colour and shading.",
   "complete": {
     "front": "A character parts sheet for 2D cutout animation: the separate body parts of one {body}, {clothes}, laid out apart on a pure white background, each part drawn whole with rounded joint ends; complete the hidden ends of every part in the same skin, colours and outline. Every part seen in a three-quarter view facing left, from slightly above.",

@@ -67,47 +67,14 @@ mi = np.full((64, 64, 3), 255, np.uint8); mi[8:32, 8:56] = (40, 100, 40); mi[32:
 Image.fromarray(mi).save(mf)
 with ws.edit_state() as s_:
     s_["builds"].setdefault("human.unisex", {"race": "human", "sex": "unisex", "front": {}, "back": {}})["front"]["approved"] = ws.rel(mf)
+    s_["builds"]["human.unisex"]["back"]["approved"] = ws.rel(mf)
 assert ppt.mannequin("human") == ak.AI_DIR / ws.rel(mf) and ppt.skin_ramp("human") == ((40, 100, 40), (90, 200, 90))
 assert ppt.composed("human.female")["front"]["figure"].endswith(ppt.spec()["mannequin_reference"])
 n0 = len(calls); ppt.paint("human.female", n=1, seed=5)
 assert calls[n0][1], "front figure pass has the mannequin as reference"
-assert len(calls) - n0 == 7                                    # + head pass (front, back) + face removal (front)
-assert ppt.composed("human.female")["front"]["head"] and ppt.composed("human.female")["blank"]
-
-# ears may leave the template: the head widens where the head pass painted, joints and the other parts stay
-from hdart import puppet_template as pt_
-tspec = pt_.load(); tparts = pt_.render(tspec, "front", ppt.S); torder = tspec["views"]["front"]["order"]
-band = ppt.ear_band(tparts, torder); ha0 = tparts["head"][0][..., 3] > 127
-assert band.any() and not (band & ha0).any()
-ys_, xs_ = np.nonzero(band); ear = np.zeros_like(band); ear[ys_.min() + 40:ys_.max() - 40, xs_.max() - 45:] = True; ear &= band
-real_run = ppt._head_run
-def eared(px, box, w, *a, **k):
-    assert w.dtype.kind == "f" and abs(w[ha0].max() - ppt.W_SKULL) < 1e-6 and w[band].min() == 1.0   # skull held back, ears free
-    o = np.array(px); o[ear] = (60, 140, 60); return o
-ppt._head_run = eared
-fig0 = np.full(ha0.shape + (3,), 255, np.uint8); fig0[ha0] = (60, 140, 60)
-fig1, p1, i1 = ppt.reshape_head(tparts, ppt.inits_for(tspec, "front", tparts, ppt.SKIN_DEFAULT, "faint"), torder, fig0, "x", 1, "t", [])
-ppt._head_run = real_run
-a1 = p1["head"][0][..., 3] > 127
-assert ear.sum() > 200 and (a1 & ear).sum() > 0.9 * ear.sum() and (a1 & ha0).sum() == ha0.sum() and not (a1 & band & ~ear).any()
-assert (tparts["head"][0][..., 3] > 127).sum() == ha0.sum() and p1["torso"][0] is tparts["torso"][0]   # the shared parts aren't touched
-
-# the gendered paints take the approved unisex paint's head silhouette, stored as their own template head
-ud = ppt.out_dir("human.unisex") / "s1_x"
-for v in ("front", "back"):
-    (ud / "template" / v).mkdir(parents=True); (ud / "parts" / v).mkdir(parents=True)
-    wide = pt_.render(tspec, v, ppt.S)["head"][0].copy(); wide[ear] = (60, 140, 60, 255)
-    Image.fromarray(wide).save(ud / "template" / v / "head.png"); Image.fromarray(wide).save(ud / "parts" / v / "head.png")
-assert ppt.approved_head("human", "front") is None             # nothing approved yet
+assert len(calls) - n0 == 5                                    # + the face removal (front)
 with ws.edit_state() as s_:
-    s_["builds"]["human.unisex"]["paint"] = {"approved": "s1_x"}
-n0 = len(calls); c2 = ppt.paint("human.female", n=1, seed=6)[0]
-assert len(calls) - n0 == 5                                    # no head pass: the shape is given; face removal stays
-t2 = np.asarray(Image.open(ppt.out_dir("human.female") / c2 / "template" / "front" / "head.png"))[..., 3] > 127
-p2 = np.asarray(Image.open(ppt.out_dir("human.female") / c2 / "parts" / "front" / "head.png"))[..., 3] > 127
-assert (t2 & ear).sum() == ear.sum() and (p2 & ear).sum() > 0.5 * ear.sum()
-with ws.edit_state() as s_:
-    s_["builds"]["human.unisex"]["front"].pop("approved")
+    s_["builds"]["human.unisex"]["front"].pop("approved"); s_["builds"]["human.unisex"]["back"].pop("approved")
 
 # faceless puppets by default (faint guide): faces are their own layer (Face tab), nothing harvested from the paint
 import hdart.puppet_face as pf

@@ -1268,6 +1268,10 @@ function progressCard(pr, arcAttrs) {   // a candidate still being made (or fail
     <div class="pbar"><i style="width:${pct}%;${failed ? "background:var(--bad)" : ""}"></i></div></div>
     ${failed || stalled ? `<div class="row" style="margin:0"><button ${arcAttrs} title="Archive it" style="width:auto;padding:2px 8px">✕ archive</button></div>` : ""}</div>`;
 }
+function fitWarn(fit) {   // parts of the mannequin that sat badly on the template: FLUX painted those from the template shape
+  const bad = Object.entries(fit || {}).flatMap(([v, f]) => Object.entries(f).filter(([, s]) => s < 0.8).map(([n, s]) => `${v} ${n} ${s}`));
+  return bad.length ? ` · <span style="color:var(--warn)" title="${bad.join(", ")}">${bad.length} part${bad.length > 1 ? "s" : ""} off the template</span>` : "";
+}
 function paintBlock(sex) {   // the Paint step: the clean template painted as this build (figure first, then hidden areas)
   const p = (RC.paint || {})[sex], build = `${RC.race}.${sex}`, ps = RC.pspec;
   if (!p || !ps) return "";
@@ -1278,7 +1282,7 @@ function paintBlock(sex) {   // the Paint step: the clean template painted as th
     const has = (f) => c.files.includes(f);
     return `<div class="pcand ${on ? "on" : ""}">
       <div class="row" style="gap:4px;margin:0;flex-wrap:nowrap">${["rest_front.png", "rest_back.png"].filter(has).map(f => `<a href="${u(f.replace("rest_", "walk_").replace(".png", ".gif"))}" target="_blank" title="click: the walk"><img loading="lazy" src="${u(f)}" style="background:#c4c6cc;border-radius:3px"></a>`).join("")}</div>
-      <div class="hint">seed ${c.meta.seed ?? "?"}${c.edited ? " · hand-edited" : ""}${c.stale ? ` · <span style="color:var(--warn)">painted on an older template</span>` : ""}</div>
+      <div class="hint">seed ${c.meta.seed ?? "?"}${c.edited ? " · hand-edited" : ""}${c.stale ? ` · <span style="color:var(--warn)">painted on an older template</span>` : ""}${fitWarn(c.meta.fit)}</div>
       <div class="row" style="gap:4px;margin:0"><button data-ppapp="${c.id}" data-sex="${sex}" data-on="${on ? 0 : 1}" style="flex:1">${on ? "✓ approved" : "Approve"}</button>
         <button data-ppedit="${c.id}" data-sex="${sex}" title="Open in the Parts editor">Edit parts</button>
         ${on ? "" : `<button data-pparc="${c.id}" data-sex="${sex}" title="Archive (moves to archive/workshop/paint/)" style="width:auto;padding:2px 8px">✕</button>`}</div></div>`; }).join("");
