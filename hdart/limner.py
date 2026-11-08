@@ -155,14 +155,21 @@ def entries(sp=None, req=None):
             fam = (r.get("family") or "").replace("family.", "")
             name = r.get("name") or _title(mid)
             draft = looks.get(mid) or (f"{name}, {r['text'].rstrip('.').lower()}" if r.get("text") else name.lower())
-            group = f"{fam.title()}" if fam else "NPCs"
-            sub = " · ".join(x for x in (r.get("role"), "boss" if ph.get("scale", 1) >= 1.5 else "") if x)
+            tags = r.get("tags") or []
+            rank = "boss" if "boss" in tags or ph.get("scale", 1) >= 1.5 else "miniboss" if "miniboss" in tags else ""
+            group = {"boss": "Bosses", "miniboss": "Mini-bosses"}.get(rank) or (fam.title() if fam else "NPCs")
+            sub = " · ".join(x for x in (r.get("role"), rank.replace("miniboss", "mini-boss")) if x)
             shape = (sp.get("shape_overrides") or {}).get(mid) or ph.get("shape", "humanoid")   # e.g. mass: swarms, blobs
             row = {"id": mid, "name": name, "sub": sub, "group": group, "shape": shape,
                    "family": fam, "role": r.get("role", ""), "scale": ph.get("scale", 1), "text": r.get("text", ""),
                    "draft": draft, "archetype": "monster" if kind == "monsters" else "npc"}
             out[cat].append(row)
             out["tokens"].append({**row, "group": f"Monsters · {group}" if kind == "monsters" else "NPCs"})
+    for cat in ("monsters", "tokens"):   # one block per group: families as the content lists them, then mini-bosses, bosses, NPCs
+        seen = list(dict.fromkeys(x["group"] for x in out[cat]))
+        last = [g for k in ("Mini-bosses", "Bosses", "NPCs") for g in seen if g.endswith(k)]
+        rank = {g: i for i, g in enumerate([g for g in seen if g not in last] + last)}
+        out[cat].sort(key=lambda x: rank[x["group"]])
 
     # Eric's own entries (added in the page): items/gear the game doesn't have yet, extra UI icons, …
     for cat, es in (sp.get("added") or {}).items():

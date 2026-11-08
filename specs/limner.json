@@ -526,7 +526,13 @@
    "monster.ruin_wraith": "the pale blue-white ghost of an ancient priest, translucent robes trailing into mist, hollow glowing eyes",
    "monster.cult_ritualist": "a cult healer in red robes and a hood, a ritual knife and a bowl of glowing blood, painted sigils",
    "monster.lich": "a lich, a crowned skeletal sorcerer in rich decayed robes, purple soul fire in the eye sockets, a staff with a glowing gem",
-   "monster.goblin_warchief": "Warchief Grizzlegut, a huge muscular goblin warlord, a massive cleaver, bone and skull trophies, scarred green skin, crude spiked armour"
+   "monster.goblin_warchief": "Warchief Grizzlegut, a huge muscular goblin warlord, a massive cleaver, bone and skull trophies, scarred green skin, crude spiked armour",
+   "monster.bonelord_varrik": "Bonelord Varrik, a skeleton captain in a battered crested helm and old officer's armour, a long sword raised to drill his dead, a tattered red sash, cold blue light in the eye sockets",
+   "monster.brood_mother": "the Brood Mother, a giant black spider the size of a cart, a swollen egg sac, thick webbing, many glowing violet eyes, tiny spiderlings clinging to her legs",
+   "monster.foreman_grit": "Foreman Grit, a stout goblin foreman in a dented mining helmet with a candle, a bandolier of blasting-powder bombs, a lit fuse in one hand, a scowl",
+   "monster.golem_overseer": "the Golem Overseer, a big old stone-and-iron foreman golem, riveted plates over cracked rock, a glowing rune on its chest, one fist a heavy hammer",
+   "monster.wraith_queen": "the Wraith Queen, the pale ghost of a queen in a tall crown and flowing translucent gown, a hollow wailing mouth, blue-white mist",
+   "monster.stone_colossus": "the Stone Colossus, a towering sandstone temple guardian statue, huge carved shoulders, a stone spear, cracks glowing with faint gold"
   },
   "npcs": {
    "npc.trader": "a cheerful travelling peddler with a huge overstuffed pack, pots and trinkets hanging from it, a fat coin purse",
@@ -683,14 +689,20 @@
   "gear/item.chainmail": {
    "subject": "a chainmail shirt, rings of steel linked together to make a light flexible armor"
   },
-  "monsters/monster.slimeling": {
-   "subject": "a small blob of transparent green ooze, with a small rat floating inside it, small air bubbles floating inside. No face, no limbs, no mouth"
-  },
   "npcs/npc.witch_doctor": {
    "subject": "a shady old hag of a voodoo witch doctor out in the swamp, thick matted hair with streaks of gray. haunted by the souls of the lost"
   },
   "npcs/npc.sage": {
    "subject": "an old sage in prestigious robes holding a thick tome of arcane knowledge"
+  },
+  "tokens/npc.sage": {
+   "subject": "an old sage in prestigious robes holding a thick tome of arcane knowledge"
+  },
+  "tokens/npc.witch_doctor": {
+   "subject": "a shady old hag of a voodoo witch doctor out in the swamp, thick matted hair with streaks of gray. haunted by the souls of the lost"
+  },
+  "tokens/monster.web_spider": {
+   "subject": "a giant fuzzy spider, with a tiny sunken between its legs, head covered in small black eyes, two dripping fangs"
   }
  },
  "_house_style": "Portraits: 'semireal' (Eric, 2026-11-01: 'that top row is gold'). Reference: specs/limner_refs/semireal.jpg (seed 11, 832x1024, 4 steps, no LoRA). Change the house style only on purpose.",
