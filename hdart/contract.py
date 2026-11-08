@@ -71,6 +71,22 @@ def game_items():
     return out
 
 
+def game_content(kind, prefix=None):
+    """{id: row} of one content kind (every <pack>/<kind>/*.json), e.g. game_content("monsters", "monster.")."""
+    c = getattr(config.project(), "content", None); out = {}
+    if not c or not c.exists():
+        return out
+    for f in sorted(c.glob(f"*/{kind}/*.json")):
+        try:
+            d = json.loads(f.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        for row in d if isinstance(d, list) else d.get(kind, []) if isinstance(d, dict) else []:
+            if isinstance(row, dict) and row.get("id") and (not prefix or str(row["id"]).startswith(prefix)):
+                out[row["id"]] = row
+    return out
+
+
 def id_problem(item_id, v=None):
     v = v or vocab()
     if not re.match(v["idRule"], item_id or ""):

@@ -43,6 +43,30 @@
    "lora": 0.0,
    "prefix": "hyper realistic dark fantasy character portrait, cinematic photography, 85mm lens, dramatic chiaroscuro lighting, skin pores, intricate costume detail, ",
    "suffix": ", moody smoky background"
+  },
+  "token": {
+   "name": "Token (board standee)",
+   "lora": 0.0,
+   "prefix": "hand-painted dark fantasy board game token art, ",
+   "suffix": ", bold readable silhouette, soft rim light, no base, no pedestal, no ground, plain white background, single figure, game asset"
+  },
+  "creature": {
+   "name": "Creature (beasts)",
+   "lora": 0.0,
+   "prefix": "semi-realistic digital painting, dark fantasy creature art, painterly brushwork, cinematic lighting, ",
+   "suffix": ", an animal-like monster, not a person, deep shadows, atmospheric background with glowing particles, masterpiece"
+  },
+  "token_beast": {
+   "name": "Token, beasts",
+   "lora": 0.0,
+   "prefix": "hand-painted dark fantasy creature art, ",
+   "suffix": ", an animal-like monster, not a person, bold readable silhouette, soft rim light, no base, no pedestal, no ground, plain white background, game asset"
+  },
+  "token_mass": {
+   "name": "Token, swarms and blobs",
+   "lora": 0.0,
+   "prefix": "hand-painted dark fantasy game art, ",
+   "suffix": ", a shapeless mass with no legs and no body of its own, soft rim light, no base, no pedestal, plain white background, game asset"
   }
  },
  "categories": {
@@ -207,6 +231,93 @@
     "colors": 0,
     "margin": 4,
     "outline": ""
+   }
+  },
+  "monsters": {
+   "name": "Monsters",
+   "hint": "A portrait per monster (the turn-order bar, hover cards). Exported with the hero portraits, archetype: monster.",
+   "style": "semireal",
+   "prefix": "close-up portrait from the chest up, ",
+   "suffix": ", menacing, facing the viewer",
+   "shapes": {
+    "beast": {
+     "style": "creature",
+     "prefix": "close-up of a monster, ",
+     "suffix": ", menacing"
+    },
+    "mass": {
+     "style": "creature",
+     "prefix": "close-up of a monster, ",
+     "suffix": ", menacing"
+    }
+   },
+   "gen": {
+    "width": 832,
+    "height": 1024,
+    "steps": 4,
+    "remove_bg": false
+   },
+   "finish": {
+    "kind": "portrait",
+    "width": 512,
+    "thumb": 128,
+    "crop": [
+     0.25,
+     0.06,
+     0.5
+    ]
+   }
+  },
+  "npcs": {
+   "name": "NPCs",
+   "hint": "Friendly NPCs' portraits (the shop window). Exported with the hero portraits, archetype: npc.",
+   "style": "semireal",
+   "prefix": "close-up bust portrait from the chest up, ",
+   "suffix": ", friendly, looking at the viewer",
+   "gen": {
+    "width": 832,
+    "height": 1024,
+    "steps": 4,
+    "remove_bg": false
+   },
+   "finish": {
+    "kind": "portrait",
+    "width": 512,
+    "thumb": 128,
+    "crop": [
+     0.25,
+     0.06,
+     0.5
+    ]
+   }
+  },
+  "tokens": {
+   "name": "Tokens",
+   "hint": "Board tokens for monsters and NPCs: one full-body 3/4 standee, facing right (Mirror in the finish when it faces left), feet at the bottom. The game mirrors it for facing and animates it.",
+   "style": "token",
+   "prefix": "full body character standee, three-quarter view facing right, standing on the ground, the whole figure in frame from head to feet, ",
+   "suffix": "",
+   "shapes": {
+    "beast": {
+     "style": "token_beast",
+     "prefix": "full body side view facing right, the whole monster in frame, "
+    },
+    "mass": {
+     "style": "token_mass",
+     "prefix": "low and wide, seen from the side, the whole thing in frame, "
+    }
+   },
+   "gen": {
+    "width": 768,
+    "height": 1024,
+    "steps": 4,
+    "remove_bg": true
+   },
+   "finish": {
+    "kind": "token",
+    "size": 512,
+    "margin": 8,
+    "normal": 2.0
    }
   }
  },
@@ -395,6 +506,34 @@
    "ui.stat.health": "a red heart",
    "ui.stat.xp": "a glowing blue star",
    "ui.action.end_turn": "an hourglass with sand running"
+  },
+  "monsters": {
+   "monster.skeleton": "an undead skeleton warrior, old ivory bones in scraps of rusted armour, a notched rusty sword, faint pale light in the empty eye sockets",
+   "monster.ghoul": "a hunched ghoul, grey-green rotting skin, long black claws, a feral starving face, crouched like a beast",
+   "monster.rat_swarm": "a writhing heap of a dozen filthy brown rats piled on top of each other, many small red eyes, bared teeth, only rats",
+   "monster.goblin_cutthroat": "a wiry goblin cutthroat in a dark ragged hood, green skin, a long knife in each hand, a sly grin",
+   "monster.cult_zealot": "a fanatic cultist in blood-red robes, a curved sacrificial blade, wild zealous eyes",
+   "monster.slime": "a gelatinous mound of green translucent slime, a dome-shaped wobbling blob, bones and coins floating inside, glistening, no face, no arms, no legs",
+   "monster.goblin_hexer": "a goblin shaman, wrinkled green skin, bone fetishes and feathers, a gnarled staff with a glowing green tip",
+   "monster.cult_adept": "a cult adept in deep purple robes, a dark tome in one hand and a ritual dagger in the other, faint violet magic",
+   "monster.grave_priest": "an undead priest in tattered black and grey vestments, a swinging censer with pale green smoke, a withered face",
+   "monster.web_spider": "a giant dark spider with long hairy legs, many glinting eyes, dripping fangs",
+   "monster.slimeling": "a small dome-shaped blob of pale-green translucent slime, wobbly, no face, no arms, no legs",
+   "monster.goblin_sapper": "a goblin sapper with a satchel of black blasting-powder bombs, a lit fuse, soot-stained leather and goggles",
+   "monster.cave_crawler": "a many-legged tunnel bug, segmented purple-grey carapace, long antennae, snapping mandibles",
+   "monster.rock_golem": "a rock golem, a hulking walking boulder of brown-grey stone, cracks with faint amber light, huge stone fists",
+   "monster.stone_guardian": "a sandstone temple guardian statue come to life, carved armour, a stone halberd, weathered and cracked",
+   "monster.ruin_wraith": "the pale blue-white ghost of an ancient priest, translucent robes trailing into mist, hollow glowing eyes",
+   "monster.cult_ritualist": "a cult healer in red robes and a hood, a ritual knife and a bowl of glowing blood, painted sigils",
+   "monster.lich": "a lich, a crowned skeletal sorcerer in rich decayed robes, purple soul fire in the eye sockets, a staff with a glowing gem",
+   "monster.goblin_warchief": "Warchief Grizzlegut, a huge muscular goblin warlord, a massive cleaver, bone and skull trophies, scarred green skin, crude spiked armour"
+  },
+  "npcs": {
+   "npc.trader": "a cheerful travelling peddler with a huge overstuffed pack, pots and trinkets hanging from it, a fat coin purse",
+   "npc.blacksmith": "a burly blacksmith in a scorched leather apron, a heavy hammer, soot on the arms, a portable anvil",
+   "npc.sage": "an old scholar sage in blue robes, a long white beard, rolled scrolls and a glowing magic trinket",
+   "npc.witch_doctor": "a masked witch doctor healer in green, a carved wooden mask, herbs, bones and potion bottles",
+   "npc.tester": "an arena master duellist in red leather and a crimson cloak, a rapier, a confident challenging smile"
   }
  },
  "entries": {
@@ -553,5 +692,26 @@
     "sub": "consumable"
    }
   }
+ },
+ "races": {
+  "human": {
+   "name": "Human",
+   "noun": "human"
+  },
+  "halforc": {
+   "name": "Half-orc",
+   "noun": "half-orc",
+   "traits": "green-grey skin, a heavy square jaw, small lower tusks, a broad nose, spade-shaped ears"
+  },
+  "elf": {
+   "name": "Elf",
+   "noun": "elf",
+   "traits": "long pointed elf ears, slender graceful features, high cheekbones"
+  }
+ },
+ "shape_overrides": {
+  "monster.rat_swarm": "mass",
+  "monster.slime": "mass",
+  "monster.slimeling": "mass"
  }
 }

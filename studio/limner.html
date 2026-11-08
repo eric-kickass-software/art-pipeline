@@ -54,6 +54,9 @@
   .grid.portraits .card .pic { aspect-ratio:13/16; }
   .card .pic img { width:100%; height:100%; object-fit:contain; image-rendering:pixelated; }
   .grid.portraits .card .pic img { image-rendering:auto; object-fit:cover; }
+  .grid.tokens { grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); }
+  .grid.tokens .card .pic img, .cand.token .big img, .cand.token .sizes img { image-rendering:auto; object-fit:contain; }
+  .cand.token .big img { width:100%; height:100%; }
   .card .pic.ghost img { opacity:.35; } .card .pic .none { color:var(--muted); font-size:11px; }
   .card .nm { font-size:12px; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .card .sb { font-size:10px; color:var(--muted); display:flex; justify-content:space-between; }
@@ -147,8 +150,10 @@ const guard = (fn) => async (...a) => { try { err(); await fn(...a); } catch (e)
 
 let D = null, CAT = localStorage.limnerCat || "items", OPEN = null, BUST = Date.now(), BG = localStorage.limnerBg || "#2a2333";
 const SEL = new Set();
-const NAMES = { items: "Items", gear: "Gear", classes: "Classes", statuses: "Statuses", damageTypes: "Damage", skills: "Skills", ui: "UI", portraits: "Portraits" };
-const isP = () => CAT === "portraits";
+const NAMES = { items: "Items", gear: "Gear", classes: "Classes", statuses: "Statuses", damageTypes: "Damage", skills: "Skills", ui: "UI", portraits: "Portraits", monsters: "Monsters", npcs: "NPCs", tokens: "Tokens" };
+const isP = () => cat().finish.kind === "portrait";
+const isT = () => cat().finish.kind === "token";
+const FILE = () => isP() ? "portrait.png" : isT() ? "token.png" : "icon.png";
 const img = (cat, id, cid, file) => `/api/limner/img?path=${encodeURIComponent(`${cat}/${id}/${cid}/${file}`)}&v=${BUST}`;
 
 async function load() { D = await api("/api/limner/doc"); render(); }
@@ -220,6 +225,11 @@ function renderSide() {
       <div class="f"><label>Thumb</label><input id="fT" type="number" value="${f.thumb}"></div>
       <div class="f"><label>Face crop</label><span><input id="fCx" type="number" step="0.01" value="${f.crop[0]}" style="width:52px"><input id="fCy" type="number" step="0.01" value="${f.crop[1]}" style="width:52px"><input id="fCs" type="number" step="0.01" value="${f.crop[2]}" style="width:52px"></span></div>
       <div class="hint">x, y, size as fractions of the width (each portrait can override it).</div>`;
+  } else if (f.kind === "token") {
+    h += `<div class="f"><label>Box px</label><input id="fSize" type="number" value="${f.size}" title="The token fits a box this big (tall figures and wide blobs alike)"></div>
+      <div class="f"><label>Margin</label><input id="fMar" type="number" min="0" max="32" value="${f.margin}"></div>
+      <div class="f"><label>Normals</label><input id="fNor" type="number" step="0.5" min="0" max="8" value="${f.normal ?? 2}" title="Normal map strength (from the shading)"></div>
+      <div class="hint">Feet at the bottom centre (the pivot); facing right. An entry that faces left: Mirror in its panel.</div>`;
   } else {
     h += `<div class="f"><label>Icon px</label><input id="fSize" type="number" value="${f.size}"></div>
       <div class="f"><label>Colours</label><input id="fCol" type="number" min="0" max="64" value="${f.colors}" title="0 = smooth (no pixel quantize)"></div>
@@ -227,10 +237,13 @@ function renderSide() {
       <div class="f"><label>Outline</label><input id="fOut" value="${esc(f.outline)}" placeholder="none" title="#rrggbb, empty = none"></div>`;
   }
   h += `<div class="row"><button id="fSave">Save &amp; re-finish</button></div>
-    <h3>Export</h3><div class="hint">Approved only → ${esc(D.export)}\\${isP() ? "Portraits" : "Icons\\" + CAT}</div>
+    <h3>Export</h3><div class="hint">Approved only → ${esc(D.export)}\\${isP() ? "Portraits (heroes, monsters and NPCs together)" : isT() ? "Monsters\\<id>\\token.png" : "Icons\\" + CAT}</div>
     <div class="row" style="margin-top:4px"><button class="primary" id="exCat">Export ${esc(c.name)}</button><button id="exAll">Export all</button></div>
     <div class="hint" id="exMsg"></div>`;
-  if (isP()) {
+  if (CAT === "portraits") {
+    h += `<h3>Races</h3><div class="hint">Every archetype × look × gender is made for each race. The traits go after the look.</div>` +
+      Object.entries(D.races).map(([rk, r]) => `<div class="look"><span class="hint">${esc(r.name)}</span><textarea data-r="${rk}" placeholder="${rk === "human" ? "(none)" : "skin, ears, face…"}">${esc(r.traits || "")}</textarea><span></span></div>`).join("") +
+      `<div class="look"><input placeholder="new key" class="raceKey"><textarea placeholder="traits, e.g. stocky, braided beard…" class="raceNew"></textarea><button class="raceAdd" title="Add a race">＋</button></div>`;
     h += `<h3>Archetypes</h3><div class="hint">Each look makes a male and a female portrait. Add looks freely: more portraits to pick from.</div>`;
     for (const [ak, a] of Object.entries(D.archetypes)) {
       h += `<div class="arch"><b>${esc(a.name)}</b> <span class="cls">${esc(a.classes.join(", "))}</span><div class="hint">${esc(a.summary)}</div>` +
@@ -248,6 +261,7 @@ function renderSide() {
     gen: { width: +$("gW").value, height: +$("gH").value, steps: +$("gSteps").value } } }); await load(); });
   $("fSave").onclick = guard(async () => {
     const fin = f.kind === "portrait" ? { width: +$("fW").value, thumb: +$("fT").value, crop: [+$("fCx").value, +$("fCy").value, +$("fCs").value] }
+      : f.kind === "token" ? { size: +$("fSize").value, margin: +$("fMar").value, normal: +$("fNor").value }
       : { size: +$("fSize").value, colors: +$("fCol").value, margin: +$("fMar").value, outline: $("fOut").value.trim() };
     $("fSave").disabled = true; await api("/api/limner/category", { cat: CAT, fields: { finish: fin } }); BUST = Date.now(); await load(); });
   const ex = async (cats) => { const r = await api("/api/limner/export", { cats }); $("exMsg").textContent = "Exported: " + Object.entries(r.exported).map(([k, v]) => `${k} ${v}`).join(", "); };
@@ -258,6 +272,11 @@ function renderSide() {
     const box = b.closest(".look"), key = box.querySelector(".lookKey").value.trim().toLowerCase(), text = box.querySelector(".lookNew").value.trim();
     if (!key || !text) throw new Error("A look needs a one-word key and a description.");
     await api("/api/limner/look", { archetype: b.dataset.a, look: key, text }); await load(); }));
+  document.querySelectorAll("textarea[data-r]").forEach(t => t.onchange = guard(async () => { await api("/api/limner/race", { key: t.dataset.r, fields: { traits: t.value.trim() } }); await load(); }));
+  document.querySelectorAll(".raceAdd").forEach(b => b.onclick = guard(async () => {
+    const box = b.closest(".look"), key = box.querySelector(".raceKey").value.trim().toLowerCase(), traits = box.querySelector(".raceNew").value.trim();
+    if (!key) throw new Error("A race needs a one-word key (e.g. dwarf).");
+    await api("/api/limner/race", { key, fields: { traits } }); await load(); }));
 }
 function confirmLook(l) { return true; }   // its candidates stay on disk; re-adding the key brings them back
 
@@ -269,16 +288,16 @@ function shown() {
 }
 function thumbOf(e) {
   const cid = e.approved || e.candidates[0]?.cid; if (!cid) return null;
-  return { src: img(CAT, e.id, cid, isP() ? "portrait.png" : "icon.png"), ghost: !e.approved };
+  return { src: img(CAT, e.id, cid, FILE()), ghost: !e.approved };
 }
 function renderGrid() {
   const es = shown();
-  $("grid").className = "grid" + (isP() ? " portraits" : "");
+  $("grid").className = "grid" + (isP() ? " portraits" : isT() ? " tokens" : "");
   let h = "", lastA = null, lastG = null;
   const groups = new Set(cat().entries.map(e => e.group || ""));
   for (const e of es) {
-    if (isP() && e.archetype !== lastA) { lastA = e.archetype; const a = D.archetypes[lastA]; h += `<div class="ahead">${esc(a.name)}<span>${esc(a.classes.join(" · "))}</span></div>`; }
-    if (!isP() && groups.size > 1 && (e.group || "") !== lastG) { lastG = e.group || ""; const n = es.filter(x => (x.group || "") === lastG).length; h += `<div class="ahead">${esc(lastG || "Other")}<span>${n}</span></div>`; }
+    if (CAT === "portraits" && e.group !== lastA) { lastA = e.group; const a = D.archetypes[e.archetype]; h += `<div class="ahead">${esc(e.group)}<span>${esc(a.classes.join(" · "))}</span></div>`; }
+    if (CAT !== "portraits" && groups.size > 1 && (e.group || "") !== lastG) { lastG = e.group || ""; const n = es.filter(x => (x.group || "") === lastG).length; h += `<div class="ahead">${esc(lastG || "Other")}<span>${n}</span></div>`; }
     const t = thumbOf(e), running = ACTIVE.some(j => j.label.startsWith("Limner") && j.label.includes(` · ${CAT} · ${e.id} `));
     h += `<div class="card ${OPEN === e.id ? "sel" : ""} ${running ? "running" : ""}" data-id="${esc(e.id)}">
       <input type="checkbox" class="ck" ${SEL.has(e.id) ? "checked" : ""}>${e.new ? `<span class="newb" title="new candidates">${e.new}</span>` : ""}
@@ -361,6 +380,7 @@ function renderDetail() {
     <div class="f"><label>Style</label><select id="dStyle">${styleOpts(e.style, true)}</select></div>
     <div class="f"><label>Seed</label><span><input id="dSeed" type="number" value="${e.seed ?? ""}" placeholder="random" style="width:110px"> <span class="hint">fixed seed: candidates use seed, seed+1…</span></span></div>
     ${isP() ? `<div class="f"><label>Face crop</label><span><input id="dCx" type="number" step="0.01" value="${fp[0]}" style="width:52px"><input id="dCy" type="number" step="0.01" value="${fp[1]}" style="width:52px"><input id="dCs" type="number" step="0.01" value="${fp[2]}" style="width:52px"> <button id="dCrop" title="Clear this portrait's own crop">default</button></span></div>` : ""}
+    ${isT() ? `<div class="f"><label>Mirror</label><span><label style="color:var(--text)"><input type="checkbox" id="dMirror" ${e.finish.mirror ? "checked" : ""}> the art faces left (flips every candidate's token; no GPU)</label></span></div>` : ""}
     <div class="row"><button id="dSave">Save</button><label>Candidates</label><input id="dN" type="number" value="${$("genN").value}" min="1" max="12" style="width:52px"><button class="primary" id="dGen">Generate</button></div>
     <div class="ptext" title="The full prompt the next candidate gets">${esc(e.prompt)}</div>
     <h3>Candidates <span class="hint" style="text-transform:none;letter-spacing:0">${e.candidates.length}</span>
@@ -368,9 +388,9 @@ function renderDetail() {
     <div class="cands">`;
   for (const c of e.candidates) {
     const app = e.approved === c.cid;
-    const main = img(CAT, e.id, c.cid, isP() ? "portrait.png" : "icon.png");
+    const main = img(CAT, e.id, c.cid, FILE());
     const k = e.candidates.indexOf(c) + 1;
-    h += `<div class="cand ${isP() ? "portrait" : ""} ${app ? "app" : ""} ${c.new && !app ? "new" : ""}" title="${esc(c.prompt || "")}">
+    h += `<div class="cand ${isP() ? "portrait" : isT() ? "token" : ""} ${app ? "app" : ""} ${c.new && !app ? "new" : ""}" title="${esc(c.prompt || "")}">
       <div class="big" data-z="${img(CAT, e.id, c.cid, "master.png")}" style="background:${BG}"><img src="${main}" loading="lazy"></div>
       <div class="sizes">${isP() ? `<img src="${img(CAT, e.id, c.cid, "thumb.png")}" width="64" height="64" style="image-rendering:auto"><img src="${img(CAT, e.id, c.cid, "thumb.png")}" width="32" height="32" style="image-rendering:auto">`
         : `<img src="${main}" width="64" height="64" style="background:${BG}"><img src="${main}" width="32" height="32" style="background:${BG}">`}</div>
@@ -392,11 +412,12 @@ function renderDetail() {
     await api("/api/limner/entry", { cat: CAT, id: e.id, fields });
   };
   $("dSave").onclick = guard(async () => { await save(); await load(); });
+  if (isT()) $("dMirror").onchange = guard(async () => { await api("/api/limner/entry", { cat: CAT, id: e.id, fields: { finish: { mirror: $("dMirror").checked || null } } }); BUST = Date.now(); await load(); });
   $("dGen").onclick = guard(async () => { await save(); await gen([e.id], +$("dN").value); await load(); });
   if (isP()) $("dCrop").onclick = guard(async () => { await api("/api/limner/entry", { cat: CAT, id: e.id, fields: { finish: { crop: null } } }); BUST = Date.now(); await load(); });
   $("dDen").onchange = () => localStorage.limnerDen = $("dDen").value;
   box.querySelectorAll("[data-bg]").forEach(b => b.onclick = () => { BG = localStorage.limnerBg = b.dataset.bg; renderGrid(); renderDetail(); });
-  box.querySelectorAll(".big").forEach(b => b.onclick = () => { const z = $("zoom"); z.querySelector("img").src = b.dataset.z; z.querySelector("img").className = isP() ? "" : "px"; z.classList.add("on"); });
+  box.querySelectorAll(".big").forEach(b => b.onclick = () => { const z = $("zoom"); z.querySelector("img").src = b.dataset.z; z.querySelector("img").className = isP() || isT() ? "" : "px"; z.classList.add("on"); });
   box.querySelectorAll(".acts button").forEach(b => b.onclick = guard(async () => {
     const a = b.dataset.a, cid = b.dataset.c;
     if (a === "approve") await api("/api/limner/approve", { cat: CAT, id: e.id, cid, on: e.approved !== cid });

@@ -24,7 +24,8 @@ from . import config, contract, jobs, store
 
 SPEC = config.ROOT / "specs" / "limner.json"
 ICON_CATS = ("items", "gear", "classes", "statuses", "damageTypes", "skills", "ui")
-CATS = ICON_CATS + ("portraits",)
+PORTRAIT_CATS = ("portraits", "monsters", "npcs")   # all export into Art/Portraits with one index.json
+CATS = ICON_CATS + PORTRAIT_CATS + ("tokens",)
 EQUIP_KINDS = ("weapon", "armor", "trinket")   # only for wanted rows without content: equippable unless told otherwise
 GEAR_GROUPS = {"armor": "Armour", "weapon": "Weapons & held", "trinket": "Trinkets"}
 ADD_PREFIX = {"items": "item.", "gear": "item.", "ui": "ui."}   # categories you can add entries to in the page
@@ -125,12 +126,43 @@ def entries(sp=None, req=None):
         out["skills"].append({"id": f"placeholder.{dt}.passive", "name": f"{dt.title()} passive", "sub": "placeholder · passive",
                               "draft": f"{motif} engraved on a round stone medallion, soft aura"})
 
-    for ak, a in sp.get("archetypes", {}).items():
-        for lk, look in a.get("looks", {}).items():
-            for gk, g in sp.get("genders", {"m": "male", "f": "female"}).items():
-                out["portraits"].append({"id": f"portrait.{ak}.{lk}.{gk}", "name": f"{a['name']} · {lk} · {gk.upper()}",
-                                         "sub": a["name"], "archetype": ak, "look": lk, "gender": gk,
-                                         "draft": f"a {g} human {look}"})
+    # Player portraits per race (Eric, 2026-11-07): humans keep their ids portrait.<archetype>.<look>.<g>, the other
+    # races are portrait.<race>.<archetype>.<look>.<g>. The race's traits go after the look.
+    races = sp.get("races") or {"human": {"name": "Human", "noun": "human"}}
+    for rk, r in races.items():
+        for ak, a in sp.get("archetypes", {}).items():
+            for lk, look in a.get("looks", {}).items():
+                for gk, g in sp.get("genders", {"m": "male", "f": "female"}).items():
+                    pid = f"portrait.{ak}.{lk}.{gk}" if rk == "human" else f"portrait.{rk}.{ak}.{lk}.{gk}"
+                    traits = f", {r['traits']}" if r.get("traits") else ""
+                    out["portraits"].append({"id": pid, "name": f"{a['name']} · {lk} · {gk.upper()}", "sub": a["name"],
+                                             "race": rk, "archetype": ak, "look": lk, "gender": gk,
+                                             "group": f"{r['name']} · {a['name']}",
+                                             "draft": f"a {g} {r.get('noun', rk)} {look}{traits}"})
+
+    # Monsters and friendly NPCs (R-011, R-013, R-014): a portrait each, and a board token (one ¾ standee) each.
+    # Rows come from the game's content; the look from subjects.monsters / subjects.npcs, else the name and text.
+    looks = {**subj.get("monsters", {}), **subj.get("npcs", {})}
+    for kind, cat, pre in (("monsters", "monsters", "monster."), ("npcs", "npcs", "npc.")):
+        try:
+            rows = contract.game_content(kind, pre)
+        except Exception:
+            rows = {}
+        for mid, r in rows.items():
+            ph = (r.get("visual") or {}).get("placeholder") or {}
+            if ph.get("shape") == "block":   # not a creature (the restoring pond): Dungeon Forge makes it
+                continue
+            fam = (r.get("family") or "").replace("family.", "")
+            name = r.get("name") or _title(mid)
+            draft = looks.get(mid) or (f"{name}, {r['text'].rstrip('.').lower()}" if r.get("text") else name.lower())
+            group = f"{fam.title()}" if fam else "NPCs"
+            sub = " · ".join(x for x in (r.get("role"), "boss" if ph.get("scale", 1) >= 1.5 else "") if x)
+            shape = (sp.get("shape_overrides") or {}).get(mid) or ph.get("shape", "humanoid")   # e.g. mass: swarms, blobs
+            row = {"id": mid, "name": name, "sub": sub, "group": group, "shape": shape,
+                   "family": fam, "role": r.get("role", ""), "scale": ph.get("scale", 1), "text": r.get("text", ""),
+                   "draft": draft, "archetype": "monster" if kind == "monsters" else "npc"}
+            out[cat].append(row)
+            out["tokens"].append({**row, "group": f"Monsters · {group}" if kind == "monsters" else "NPCs"})
 
     # Eric's own entries (added in the page): items/gear the game doesn't have yet, extra UI icons, …
     for cat, es in (sp.get("added") or {}).items():
@@ -169,7 +201,9 @@ def subject(cat, eid, sp=None):
 
 def style_of(cat, eid, sp=None):
     sp = sp or spec()
-    return override(sp, cat, eid).get("style") or sp["categories"][cat]["style"]
+    c = sp["categories"][cat]
+    shaped = c.get("shapes", {}).get(_entry(cat, eid, sp).get("shape"), {}).get("style") if c.get("shapes") else None
+    return override(sp, cat, eid).get("style") or shaped or c["style"]
 
 
 def prompt(cat, eid, style=None, sp=None, extra=None):
@@ -178,6 +212,8 @@ def prompt(cat, eid, style=None, sp=None, extra=None):
     c = sp["categories"][cat]
     st = sp["styles"][style or style_of(cat, eid, sp)]
     subj = subject(cat, eid, sp) + (f", {extra.strip()}" if extra and extra.strip() else "")
+    if c.get("shapes"):   # monsters: beasts get their own framing ("bust from the chest up" makes anything a person)
+        c = {**c, **c["shapes"].get(_entry(cat, eid, sp).get("shape"), {})}
     return st["prefix"] + c.get("prefix", "") + subj + c.get("suffix", "") + st["suffix"]
 
 
@@ -221,13 +257,40 @@ def finish_portrait(master, f):
     return big, img.crop(box).resize((t, t), Image.LANCZOS)
 
 
+def finish_token(master, f):
+    """A board token: the figure cut to its outline, `size` px tall (feet `margin` px above the bottom, centred),
+    mirrored when the art faces left (finish.mirror), and a normal map from its shading. Returns (token, normal, pivot)."""
+    import numpy as np
+    from .pixel import alpha_bbox, height_to_normal
+    img = master.convert("RGBA")
+    a = np.asarray(img)[..., 3]
+    img.putalpha(Image.fromarray(np.where(a < 24, 0, a).astype(np.uint8)))   # BiRefNet haze around the figure
+    img = img.crop(alpha_bbox(img))
+    if f.get("mirror"):
+        img = img.transpose(Image.FLIP_LEFT_RIGHT)
+    size, margin = int(f.get("size", 512)), int(f.get("margin", 8))
+    s = (size - 2 * margin) / max(img.width, img.height)   # fits a size × size box: tall figures and wide blobs alike
+    img = img.resize((max(1, round(img.width * s)), max(1, round(img.height * s))), Image.LANCZOS)
+    tok = Image.new("RGBA", (img.width + 2 * margin, img.height + 2 * margin))
+    tok.alpha_composite(img, (margin, margin))
+    flat = Image.new("RGB", tok.size, (128, 128, 128))
+    flat.paste(tok, mask=tok.getchannel("A"))
+    nm = height_to_normal(flat, float(f.get("normal", 2.0))).convert("RGBA")
+    nm.putalpha(tok.getchannel("A"))
+    return tok, nm, [0.5, round(margin / tok.height, 4)]
+
+
 def finish(cat, eid, d, sp=None):
     """(Re)make a candidate's finished image(s) from its kept master."""
     d = Path(d)
     f = finish_params(cat, eid, sp)
     with Image.open(d / "master.png") as m:
         m.load()
-        if f["kind"] == "portrait":
+        if f["kind"] == "token":
+            tok, nm, _ = finish_token(m, f)
+            tok.save(d / "token.png")
+            nm.save(d / "token.n.png")
+        elif f["kind"] == "portrait":
             big, thumb = finish_portrait(m, f)
             big.save(d / "portrait.png")
             thumb.save(d / "thumb.png")
@@ -330,7 +393,7 @@ def _job_vary(a):
 
 # ----------------------------------------------------------------------------- overnight batches
 
-BATCH = {"retries": 2, "timeout": {"icon": 240, "portrait": 420}, "secs": {"icon": 4, "portrait": 6}}
+BATCH = {"retries": 2, "timeout": {"icon": 240, "portrait": 420, "token": 300}, "secs": {"icon": 4, "portrait": 6, "token": 6}}
 
 
 def plan_batch(cat, ids, styles=None, variants=None, n=2, seeds="random", seed=None, sp=None):
@@ -471,6 +534,24 @@ def save_look(archetype, look, text):
     return {"ok": True}
 
 
+def save_race(key, fields):
+    """Add or change a race of the player portraits (name, noun, traits); every archetype × look × gender gets one."""
+    if not re.fullmatch(r"[a-z][a-z0-9]*", key or ""):
+        raise ValueError("race keys are one lowercase word (e.g. halforc)")
+
+    def fn(sp):
+        races = sp.setdefault("races", {"human": {"name": "Human", "noun": "human"}})
+        r = races.setdefault(key, {"name": key.title(), "noun": key})
+        for k in ("name", "noun", "traits"):
+            if k in fields:
+                if fields[k]:
+                    r[k] = fields[k].strip()
+                elif k == "traits":
+                    r.pop(k, None)
+    _edit_spec(fn)
+    return {"ok": True}
+
+
 def add_entry(cat, eid, name, subject="", sub=""):
     """Add (or rename) one of Eric's own entries: an item or gear the game doesn't have yet, a UI icon, …
     The id gets the category's prefix (item., ui.) when it's missing; the subject is the entry's usual override."""
@@ -584,6 +665,7 @@ def doc():
                      "new": sum(r["new"] for r in rows), "add_prefix": ADD_PREFIX.get(cat)}
     from . import watchdog
     return {"styles": sp["styles"], "categories": cats, "order": list(CATS), "archetypes": sp["archetypes"],
+            "races": sp.get("races") or {},
             "export": str(_export_root()), "batch": BATCH, "watchdog": watchdog.status()}
 
 
@@ -618,23 +700,59 @@ def export(cats=None):
     if art is None:
         raise ValueError("the project has no 'art' export path")
     approved, sp, done = _state().load().get("approved", {}), spec(), {}
-    listed = {c: {e["id"] for e in es} for c, es in entries(sp).items()}
-    for cat in cats or CATS:
-        ok = {eid: cid for eid, cid in approved.get(cat, {}).items()
-              if (eid in listed[cat] or not listed[cat]) and (entry_dir(cat, eid) / cid / "meta.json").exists()}
+    es_all = entries(sp)
+    listed = {c: {e["id"] for e in es} for c, es in es_all.items()}
+
+    def ok_of(cat):
+        return {eid: cid for eid, cid in approved.get(cat, {}).items()
+                if (eid in listed[cat] or not listed[cat]) and (entry_dir(cat, eid) / cid / "meta.json").exists()}
+    cats = list(cats or CATS)
+    if any(c in PORTRAIT_CATS for c in cats):   # one folder, one index: always rebuilt from all three together
+        cats = [c for c in cats if c not in PORTRAIT_CATS] + ["portraits"]
+    for cat in cats:
+        ok = ok_of(cat)
         if cat == "portraits":
             folder, index = art / "Portraits", {}
             folder.mkdir(parents=True, exist_ok=True)
-            byid = {e["id"]: e for e in entries(sp)["portraits"]}
-            for eid, cid in sorted(ok.items()):
-                if eid not in byid:
-                    continue
-                d, e = entry_dir(cat, eid) / cid, byid[eid]
-                shutil.copyfile(d / "portrait.png", folder / f"{eid}.png")
-                shutil.copyfile(d / "thumb.png", folder / f"{eid}.thumb.png")
-                index[eid] = {"file": f"{eid}.png", "thumb": f"{eid}.thumb.png", "archetype": e["archetype"],
-                              "gender": e["gender"], "look": e["look"]}
+            for pc in PORTRAIT_CATS:
+                byid = {e["id"]: e for e in es_all[pc]}
+                for eid, cid in sorted(ok_of(pc).items()):
+                    if eid not in byid:
+                        continue
+                    d, e = entry_dir(pc, eid) / cid, byid[eid]
+                    shutil.copyfile(d / "portrait.png", folder / f"{eid}.png")
+                    shutil.copyfile(d / "thumb.png", folder / f"{eid}.thumb.png")
+                    row = {"file": f"{eid}.png", "thumb": f"{eid}.thumb.png", "archetype": e["archetype"]}
+                    if pc == "portraits":   # a hero portrait: the creator offers these (archetype: one of the five)
+                        row.update(race=e.get("race", "human"), gender=e["gender"], look=e["look"])
+                    else:                   # archetype: monster | npc (the turn-order bar, hover cards, the shop)
+                        row.update(name=e["name"], family=e.get("family", ""), role=e.get("role", ""))
+                    index[eid] = row
+                    done[pc] = done.get(pc, 0) + 1
             _clear(folder, {f for v in index.values() for f in (v["file"], v["thumb"])})
+            store.write_json(folder / "index.json", index)
+            continue
+        if cat == "tokens":   # Art/Monsters/<id>/token.png + token.n.png (NPCs too), index: id → file, normal, pivot
+            folder, index = art / "Monsters", {}
+            folder.mkdir(parents=True, exist_ok=True)
+            byid = {e["id"]: e for e in es_all["tokens"]}
+            for eid, cid in sorted(ok.items()):
+                d = entry_dir(cat, eid) / cid
+                f = finish_params(cat, eid, sp)
+                (folder / eid).mkdir(exist_ok=True)
+                shutil.copyfile(d / "token.png", folder / eid / "token.png")
+                shutil.copyfile(d / "token.n.png", folder / eid / "token.n.png")
+                with Image.open(d / "token.png") as t:
+                    w, h = t.size
+                index[eid] = {"file": f"{eid}/token.png", "normal": f"{eid}/token.n.png", "size": [w, h],
+                              "pivot": [0.5, round(int(f.get("margin", 8)) / h, 4)], "facing": "right",
+                              "scale": byid.get(eid, {}).get("scale", 1)}
+            for sub in folder.iterdir():   # tokens Limner doesn't approve any more
+                if sub.is_dir() and sub.name not in index and (sub / "token.png").exists():
+                    shutil.rmtree(sub)
+            store.write_json(folder / "index.json", index)
+            done[cat] = len(index)
+            continue
         else:
             folder, index = art / "Icons" / cat, {}
             folder.mkdir(parents=True, exist_ok=True)

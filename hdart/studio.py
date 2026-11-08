@@ -582,6 +582,8 @@ def limner_post(action, b):
         return lm.remove_entry(cat, b["id"])
     if action == "look":
         return lm.save_look(b["archetype"], b["look"], b.get("text", ""))
+    if action == "race":   # {key, fields: {name?, noun?, traits?}}
+        return lm.save_race(b["key"], b["fields"])
     if action == "refinish":
         return lm.refinish(cat, b.get("ids"))
     if action == "export":

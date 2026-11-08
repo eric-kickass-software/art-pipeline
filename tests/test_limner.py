@@ -30,7 +30,7 @@ assert [x["id"] for x in e["items"]] == ["item.bandage"] and e["items"][0]["draf
 assert [x["id"] for x in e["skills"]] == ["placeholder.fire.active", "placeholder.fire.passive",
                                           "placeholder.holy.active", "placeholder.holy.passive"]
 sp = L.spec()
-n_looks = sum(len(a["looks"]) for a in sp["archetypes"].values())
+n_looks = sum(len(a["looks"]) for a in sp["archetypes"].values()) * len(sp["races"])   # per race (2026-11-07)
 assert len(e["portraits"]) == 2 * n_looks and len(e["gear"]) == len(sp["subjects"]["gear"])
 assert e["classes"][0]["draft"] == sp["subjects"]["classes"]["class.acolyte"]
 
@@ -100,7 +100,7 @@ assert "status.burn" not in L._state().load()["approved"].get("statuses", {})
 # looks: add and remove (each makes two portrait entries)
 ak = next(iter(sp["archetypes"]))
 L.save_look(ak, "test", "a test look")
-assert len(L.entries()["portraits"]) == 2 * n_looks + 2
+assert len(L.entries()["portraits"]) == 2 * n_looks + 2 * len(sp["races"])
 L.save_look(ak, "test", "")
 assert len(L.entries()["portraits"]) == 2 * n_looks
 
@@ -209,6 +209,53 @@ try:
 except ValueError:
     pass
 assert L.doc()["categories"]["ui"]["add_prefix"] == "ui." and L.doc()["categories"]["classes"]["add_prefix"] is None
+
+# player portraits per race: humans keep their old ids, other races get portrait.<race>.…; the traits follow the look
+ids = {x["id"]: x for x in L.entries()["portraits"]}
+ak, lk = next(iter(sp["archetypes"])), next(iter(sp["archetypes"][next(iter(sp["archetypes"]))]["looks"]))
+assert f"portrait.{ak}.{lk}.m" in ids and ids[f"portrait.{ak}.{lk}.m"]["race"] == "human"
+assert ids[f"portrait.halforc.{ak}.{lk}.f"]["draft"].startswith("a female half-orc ") and "tusks" in ids[f"portrait.halforc.{ak}.{lk}.f"]["draft"]
+L.save_race("dwarf", {"traits": "stocky, braided beard"})
+assert f"portrait.dwarf.{ak}.{lk}.m" in {x["id"] for x in L.entries()["portraits"]}
+
+# monsters + NPCs from the game's content: a portrait and a token each; beasts and masses get their own framing
+mon = game / "Assets" / "StreamingAssets" / "Content" / "core"
+(mon / "monsters").mkdir(parents=True); (mon / "npcs").mkdir(parents=True)
+(mon / "monsters" / "m.json").write_text(json.dumps([
+    {"id": "monster.skeleton", "name": "Skeleton", "role": "brute", "family": "family.undead", "visual": {"placeholder": {"shape": "humanoid"}}},
+    {"id": "monster.web_spider", "name": "Web Spider", "role": "controller", "family": "family.vermin", "visual": {"placeholder": {"shape": "beast"}}},
+    {"id": "monster.slime", "name": "Slime", "family": "family.slimes", "visual": {"placeholder": {"shape": "beast"}}},
+    {"id": "monster.lich", "name": "Lich", "family": "family.undead", "visual": {"placeholder": {"shape": "humanoid", "scale": 1.5}}}]), encoding="utf-8")
+(mon / "npcs" / "n.json").write_text(json.dumps([
+    {"id": "npc.trader", "name": "Trader", "text": "A friendly trader.", "visual": {"placeholder": {"shape": "humanoid"}}},
+    {"id": "npc.restoring_pond", "name": "Pond", "visual": {"placeholder": {"shape": "block"}}}]), encoding="utf-8")
+e = L.entries()
+assert [x["id"] for x in e["monsters"]] == ["monster.skeleton", "monster.web_spider", "monster.slime", "monster.lich"]
+assert [x["id"] for x in e["npcs"]] == ["npc.trader"] and len(e["tokens"]) == 5   # the pond is a board object
+assert e["monsters"][3]["sub"] == "boss" and e["monsters"][2]["shape"] == "mass" and e["tokens"][0]["group"] == "Monsters · Undead"
+assert L.style_of("monsters", "monster.skeleton") == "semireal" and L.style_of("monsters", "monster.web_spider") == "creature"
+assert L.style_of("tokens", "monster.slime") == "token_mass" and "bust portrait" not in L.prompt("monsters", "monster.web_spider")
+with FakeComfy():
+    tc = L.generate("tokens", "monster.skeleton", 1)[0]
+    mc = L.generate("monsters", "monster.skeleton", 1)[0]
+    nc = L.generate("npcs", "npc.trader", 1)[0]
+td = L.entry_dir("tokens", "monster.skeleton") / tc
+tok = Image.open(td / "token.png")
+assert max(tok.size) <= 512 and Image.open(td / "token.n.png").size == tok.size
+L.save_entry("tokens", "monster.skeleton", {"finish": {"mirror": True}})   # refinish, no GPU
+assert Image.open(td / "token.png").size == tok.size
+for c_, i_, x_ in (("tokens", "monster.skeleton", tc), ("monsters", "monster.skeleton", mc), ("npcs", "npc.trader", nc)):
+    L.approve(c_, i_, x_)
+r = L.export(["monsters", "tokens"])
+idx = json.loads((art / "Portraits" / "index.json").read_text())
+assert idx["monster.skeleton"]["archetype"] == "monster" and idx["npc.trader"]["archetype"] == "npc" and pid in idx   # one index
+assert idx[pid]["race"] == "human" and r["exported"]["monsters"] == 1 and r["exported"]["npcs"] == 1
+ti = json.loads((art / "Monsters" / "index.json").read_text())
+assert ti["monster.skeleton"]["file"] == "monster.skeleton/token.png" and (art / "Monsters" / "monster.skeleton" / "token.n.png").exists()
+assert ti["monster.skeleton"]["pivot"][0] == 0.5 and ti["monster.skeleton"]["facing"] == "right"
+L.approve("tokens", "monster.skeleton", tc, on=False)
+L.export(["tokens"])
+assert not (art / "Monsters" / "monster.skeleton").exists()
 
 assert (config.ROOT / "specs" / "limner.json").read_text(encoding="utf-8") == repo_spec, "the test touched the real spec"
 os.environ.pop("HD_PROJECT"); os.environ.pop("HD_DATA"); shutil.rmtree(tmp, ignore_errors=True)
