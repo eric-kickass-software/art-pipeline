@@ -45,10 +45,10 @@
    "suffix": ", moody smoky background"
   },
   "token": {
-   "name": "Token (board standee)",
+   "name": "Token, chibi (matches the puppets)",
    "lora": 0.0,
-   "prefix": "hand-painted dark fantasy board game token art, ",
-   "suffix": ", bold readable silhouette, soft rim light, no base, no pedestal, no ground, plain white background, single figure, game asset"
+   "prefix": "dark fantasy chibi game character, anime, stylized, ",
+   "suffix": ", chibi, super deformed, about 2.5 heads tall, oversized head, small body, short stubby limbs, clean dark outlines, two-tone cel shading, hard edges, stylized, hand painted, single character, no base, no pedestal, nothing beneath the feet, plain white background, game asset"
   },
   "creature": {
    "name": "Creature (beasts)",
@@ -57,16 +57,16 @@
    "suffix": ", an animal-like monster, not a person, deep shadows, atmospheric background with glowing particles, masterpiece"
   },
   "token_beast": {
-   "name": "Token, beasts",
+   "name": "Token, chibi beasts",
    "lora": 0.0,
-   "prefix": "hand-painted dark fantasy creature art, ",
-   "suffix": ", an animal-like monster, not a person, bold readable silhouette, soft rim light, no base, no pedestal, no ground, plain white background, game asset"
+   "prefix": "dark fantasy chibi game monster, cute but menacing, stylized, ",
+   "suffix": ", chibi creature, super deformed, oversized head, small round body, short stubby legs, an animal-like monster, not a person, clean dark outlines, two-tone cel shading, hard edges, stylized, hand painted, no base, nothing beneath it, plain white background, game asset"
   },
   "token_mass": {
-   "name": "Token, swarms and blobs",
+   "name": "Token, chibi swarms and blobs",
    "lora": 0.0,
-   "prefix": "hand-painted dark fantasy game art, ",
-   "suffix": ", a shapeless mass with no legs and no body of its own, soft rim light, no base, no pedestal, plain white background, game asset"
+   "prefix": "dark fantasy chibi game monster, cute but menacing, super deformed, oversized heads, ",
+   "suffix": ", a shapeless mass with no legs and no body of its own, chunky simplified shapes, clean dark outlines, two-tone cel shading, hard edges, stylized, hand painted, no base, plain white background, game asset"
   }
  },
  "categories": {
@@ -293,7 +293,7 @@
   },
   "tokens": {
    "name": "Tokens",
-   "hint": "Board tokens for monsters and NPCs: one full-body 3/4 standee, facing right (Mirror in the finish when it faces left), feet at the bottom. The game mirrors it for facing and animates it.",
+   "hint": "Board tokens for monsters and NPCs, chibi like the player puppets (simple tokens, detailed portraits): one full-body 3/4 figure facing right (Mirror in the entry when it faces left), feet at the bottom. The game mirrors it for facing and animates it.",
    "style": "token",
    "prefix": "full body character standee, three-quarter view facing right, standing on the ground, the whole figure in frame from head to feet, ",
    "suffix": "",
@@ -682,6 +682,15 @@
   },
   "gear/item.chainmail": {
    "subject": "a chainmail shirt, rings of steel linked together to make a light flexible armor"
+  },
+  "monsters/monster.slimeling": {
+   "subject": "a small blob of transparent green ooze, with a small rat floating inside it, small air bubbles floating inside. No face, no limbs, no mouth"
+  },
+  "npcs/npc.witch_doctor": {
+   "subject": "a shady old hag of a voodoo witch doctor out in the swamp, thick matted hair with streaks of gray. haunted by the souls of the lost"
+  },
+  "npcs/npc.sage": {
+   "subject": "an old sage in prestigious robes holding a thick tome of arcane knowledge"
   }
  },
  "_house_style": "Portraits: 'semireal' (Eric, 2026-11-01: 'that top row is gold'). Reference: specs/limner_refs/semireal.jpg (seed 11, 832x1024, 4 steps, no LoRA). Change the house style only on purpose.",
