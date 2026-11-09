@@ -62,7 +62,7 @@ for v in ("front", "back"):
 # editor saves: validated, the upper cap width sets the joint radius, bad input refused
 import copy, json, tempfile
 from pathlib import Path
-tmp = Path(tempfile.mkdtemp()) / "puppet_template.json"; tmp.write_text(json.dumps(spec)); pt.SPEC = tmp
+pt.spec_path().write_text(json.dumps(spec))   # the fixture copy
 e = copy.deepcopy(spec); e["views"]["front"]["limbs"]["armB.upper"]["points"][2] = [0.5, 30]
 out = pt.save(e)
 assert out["views"]["front"]["limbs"]["armB.upper"]["points"][2] == [0.5, 30] and out["edited"] and out["from"] == spec["from"]
@@ -91,7 +91,7 @@ assert refused(lambda b: b["views"]["front"]["limbs"]["legA.lower"].__setitem__(
 assert refused(lambda b: b["views"]["front"]["limbs"]["legA.lower"]["points"].__setitem__(0, [9, 0]))
 assert refused(lambda b: b["views"]["back"]["shapes"]["torso"].__setitem__("points", [[1, 1]] * 3))
 assert refused(lambda b: b["views"]["front"]["joints"]["neck"].__setitem__(0, "x"))
-assert json.loads(tmp.read_text())["views"]["front"]["limbs"]["armB.upper"]["points"][2] == [0.5, 30]   # refused saves wrote nothing
+assert json.loads(pt.spec_path().read_text())["views"]["front"]["limbs"]["armB.upper"]["points"][2] == [0.5, 30]   # refused saves wrote nothing
 
 # limb outlines live in their bone's frame: moving a joint carries the outline along
 V = copy.deepcopy(spec["views"]["front"]); L = V["limbs"]["armB.lower"]

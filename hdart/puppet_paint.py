@@ -15,6 +15,7 @@ The back view uses the painted front figure as its reference image.
     approve / archive / state / save_parts (Workshop Parts editor) / preview
 """
 import json, shutil
+from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
@@ -30,17 +31,21 @@ LINE = (40, 32, 30)
 BRIEFS = ((92, 94, 100), (176, 178, 184))
 SKIN_DEFAULT = ((150, 92, 66), (232, 176, 138))
 VIEWS = ("front", "back")
-SPEC = config.specs_dir() / "paint.json"   # the paint prompts (edited in the Workshop's Race tab)
+
+
+def spec_path() -> Path:
+    """specs/paint.json: the paint prompts (edited in the Workshop's Race tab)."""
+    return config.specs_dir() / "paint.json"
 
 
 def out_dir(build):
-    return ws.AI_DIR / "paint" / build
+    return ws.ai_dir() / "paint" / build
 
 
 # ----------------------------------------------------------------------------- prompts and colours
 
 def spec():
-    return json.loads(SPEC.read_text(encoding="utf-8"))
+    return json.loads(spec_path().read_text(encoding="utf-8"))
 
 
 def save_spec(doc):
@@ -64,7 +69,7 @@ def save_spec(doc):
            "mannequin_reference": str(doc.get("mannequin_reference", old.get("mannequin_reference", ""))),
            "blank": str(doc.get("blank", old.get("blank", ""))), "complete": doc["complete"],
            "fix": doc["fix"], "sexes": doc.get("sexes") or old["sexes"]}
-    SPEC.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8", newline="\n")
+    spec_path().write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8", newline="\n")
     return out
 
 
@@ -110,7 +115,7 @@ def mannequin(race, view="front"):
     f = races.approved(ws.load_state(), races.race_build(race, "unisex"), view)
     if not f and view == "back" and mannequin(race):
         raise ValueError(f"{race} paints from its mannequin: approve the unisex back too.")
-    return ws.AI_DIR / f if f else None
+    return ws.ai_dir() / f if f else None
 
 
 def mannequin_tint(path):
@@ -756,12 +761,12 @@ def approve(build, cid, on=True):
 
 def archive(build, cid):
     """Move a candidate to archive/workshop/paint/<build>/<id> (nothing is deleted)."""
-    with store.lock(ws.STATE):
+    with store.lock(ws.state_path()):
         if state(build)["approved"] == cid:
             raise ValueError("That's the approved paint. Approve another one first.")
         if not (out_dir(build) / cid).exists():
             raise ValueError(f"No paint candidate {cid}.")
-        store.archive(out_dir(build) / cid, ws.ARCHIVE / "workshop" / "paint" / build / cid)
+        store.archive(out_dir(build) / cid, config.archive_dir() / "workshop" / "paint" / build / cid)
     return state(build)
 
 

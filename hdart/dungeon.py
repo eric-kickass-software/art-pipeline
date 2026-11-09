@@ -19,16 +19,22 @@ from PIL import Image, ImageFilter, ImageOps
 from . import imageops, comfy, config, iso, jobs, patterns, store
 from .locks import CELLS as _CELL_CACHE, DUNGEON as LOCK, HARMONY as _REF_CACHE
 
-ROOT = Path(__file__).resolve().parent.parent
-DUN = config.data_dir() / "sprites" / "dungeon"
-ARCHIVE = config.data_dir() / "archive"  # git-ignored: archived sets, candidates and spec history, for removal by hand later
-STYLE = config.specs_dir() / "dungeon_style.json"
 SCALE = 8  # generation is done at 8x the native pixel size
 ORDER = ("medium", "style", "view", "rendering", "framing", "biome")
 
 
+def dun_dir() -> Path:
+    """<data>/sprites/dungeon: one folder per set (state.json, candidates/), plus _meshes/ and tmp/."""
+    return config.data_dir() / "sprites" / "dungeon"
+
+
+def style_path() -> Path:
+    """specs/dungeon_style.json: the shared dungeon style groups."""
+    return config.specs_dir() / "dungeon_style.json"
+
+
 def style():
-    return json.loads(STYLE.read_text(encoding="utf-8"))
+    return json.loads(style_path().read_text(encoding="utf-8"))
 
 
 def style_text(st=None, groups=ORDER):
@@ -86,7 +92,11 @@ def template(piece, tile):
 
 
 THIN = ("run", "post", "mesh")  # thin-wall pieces (hdart/iso.py geometry)
-MESHES = DUN / "_meshes"
+
+
+def meshes_dir() -> Path:
+    """<data>/sprites/dungeon/_meshes: cached Blender normal passes of the mesh pieces."""
+    return config.data_dir() / "sprites" / "dungeon" / "_meshes"
 
 
 def thin_boxes(piece, length, h):
@@ -108,13 +118,13 @@ def thin_boxes(piece, length, h):
 def mesh_pass(piece, tile, h, length):
     """Blender normal pass of a mesh piece (cached) -> (piece-space normals, mask)."""
     name = f"{piece['mesh']}_t{tile}_h{h:g}_l{length}"
-    png = MESHES / f"{name}.normal.png"
+    png = meshes_dir() / f"{name}.normal.png"
     if not png.exists():
         import subprocess
         extra = [a for k in ("opening", "spring") if k in piece for a in (f"--{k}", str(piece[k]))]
-        subprocess.run([config.blender(), "-b", "-P", str(ROOT / "blender" / "mesh_template.py"), "--",
+        subprocess.run([config.blender(), "-b", "-P", str(config.ROOT / "blender" / "mesh_template.py"), "--",
                         "--mesh", piece["mesh"], "--tile", str(tile), "--height", f"{h:g}", "--length", str(length),
-                        "--scale", str(SCALE), "--thickness", str(piece.get("thickness", 0.25)), "--out", str(MESHES),
+                        "--scale", str(SCALE), "--thickness", str(piece.get("thickness", 0.25)), "--out", str(meshes_dir()),
                         *extra], check=True, capture_output=True)
     a = np.asarray(Image.open(png).convert("RGBA")).astype(np.float32) / 255
     mask = a[..., 3] > 0.5
@@ -200,7 +210,7 @@ def gen_floor(piece, tile=64, seed=1, lora=0.0, st=None):
               f"square dungeon floor tile, {piece['prompt']}, the tile fills the entire image edge to edge, "
               f"flat even lighting")
     p = comfy.run(comfy.build_txt2img(prompt, 512, 512, seed=seed, lora_strength=lora, prefix="hdart/dun_floor"),
-                  DUN / "tmp")[0]
+                  dun_dir() / "tmp")[0]
     src = np.asarray(Image.open(p).convert("RGB")).astype(np.float32)
     S = src.shape[0]
     _, mask, _ = template({"shape": "floor"}, tile)
@@ -229,7 +239,7 @@ def gen_atlas(piece, seed=1, lora=0.0, st=None, size=1024):
               f"no frame, no walls, flat even lighting")
     big = int(size * 1.125) // 16 * 16
     p = comfy.run(comfy.build_txt2img(prompt, big, big, seed=seed, lora_strength=lora, prefix="hdart/dun_atlas"),
-                  DUN / "tmp")[0]
+                  dun_dir() / "tmp")[0]
     src = Image.open(p).convert("RGB")
     m = (src.width - size) // 2  # FLUX still likes a darker rim at the image edge: drop it
     src = src.crop((m, m, m + size, m + size))
@@ -439,7 +449,7 @@ def gen_master(piece, seed=1, lora=0.0, st=None, draft=False):
             src = _i2i(init, prompt, seed, float(tpl.get("strength", 0.7)), lora, steps=DRAFT_STEPS)
         else:
             p = comfy.run(comfy.build_txt2img(prompt, 576, 576, seed=seed, steps=DRAFT_STEPS, lora_strength=lora,
-                                              prefix="hdart/dun_draft"), DUN / "tmp")[0]
+                                              prefix="hdart/dun_draft"), dun_dir() / "tmp")[0]
             src = Image.open(p).convert("RGB").crop((32, 32, 544, 544))
         return _even(piece, periodic_smooth(flatten_light(src.resize((MASTER_PX, MASTER_PX), Image.LANCZOS))))
     if tpl:
@@ -448,7 +458,7 @@ def gen_master(piece, seed=1, lora=0.0, st=None, draft=False):
         return _even(piece, make_seamless(src, prompt, seed, lora))
     big = 1152  # FLUX likes a darker rim at the image edge: generate larger, keep the middle
     p = comfy.run(comfy.build_txt2img(prompt, big, big, seed=seed, lora_strength=lora, prefix="hdart/dun_master"),
-                  DUN / "tmp")[0]
+                  dun_dir() / "tmp")[0]
     src = Image.open(p).convert("RGB")
     m = (big - 1024) // 2
     src = src.crop((m, m, m + 1024, m + 1024)).resize((MASTER_PX, MASTER_PX), Image.LANCZOS)
@@ -582,7 +592,7 @@ def gen_prop(piece, seed=1, lora=0.0, st=None, size=512):
              f"{style_text(st, ('style', 'rendering', 'biome') if piece.get('biome', True) else ('style', 'rendering'))}, " \
              f"{view}, {piece['prompt']}, {st['prop_framing']}"
     p = comfy.run(comfy.build_txt2img(prompt, size, size, seed=seed, lora_strength=lora, remove_bg=True,
-                                      prefix="hdart/dun_prop"), DUN / "tmp")[0]
+                                      prefix="hdart/dun_prop"), dun_dir() / "tmp")[0]
     rgba = np.asarray(Image.open(p).convert("RGBA"))
     mask = imageops.clean(rgba[..., 3] > 127, min_area=300)
     rgb = rgba[..., :3].copy()
@@ -646,7 +656,9 @@ def pixel_steps(spec):
 
 # ----------------------------------------------------------------------------- sets: candidates, approval, export
 
-SETS = config.specs_dir() / "dungeon_sets"
+def sets_dir() -> Path:
+    """specs/dungeon_sets: one spec per set."""
+    return config.specs_dir() / "dungeon_sets"
 
 
 def export_root():
@@ -654,11 +666,11 @@ def export_root():
 
 
 def load_set(name):
-    return json.loads((SETS / f"{name}.json").read_text(encoding="utf-8"))
+    return json.loads((sets_dir() / f"{name}.json").read_text(encoding="utf-8"))
 
 
 def set_dir(name):
-    return DUN / name
+    return dun_dir() / name
 
 
 def state(name):
@@ -1156,7 +1168,7 @@ def fit_prop(img, mask, footprint, tile=64):
 # ----------------------------------------------------------------------------- tooling (Studio > Dungeon)
 
 def list_sets():
-    return sorted(p.stem for p in SETS.glob("*.json"))
+    return sorted(p.stem for p in sets_dir().glob("*.json"))
 
 
 def save_style(groups=None, prop_view=None, prop_framing=None, prop_medium=None):
@@ -1170,7 +1182,7 @@ def save_style(groups=None, prop_view=None, prop_framing=None, prop_medium=None)
         st["prop_view"] = prop_view
     if prop_framing is not None:
         st["prop_framing"] = prop_framing
-    STYLE.write_text(json.dumps(st, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    style_path().write_text(json.dumps(st, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return st
 
 
@@ -1182,7 +1194,7 @@ def _backup_spec(path):
     """Keep the last 40 versions of each set spec in archive/history/<set>/, so a lost piece can be recovered."""
     if not path.exists():
         return
-    hist = ARCHIVE / "history" / path.stem
+    hist = config.archive_dir() / "history" / path.stem
     hist.mkdir(parents=True, exist_ok=True)
     shutil.copy2(path, hist / f"{_stamp()}_{time.time_ns() % 1000000:06d}.json")
     for old in sorted(hist.glob("*.json"))[:-40]:
@@ -1195,7 +1207,7 @@ def save_set(name, spec):
     if len(ids) != len(set(ids)):
         raise ValueError("duplicate piece ids")
     with LOCK:
-        path = SETS / f"{name}.json"
+        path = sets_dir() / f"{name}.json"
         old = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
         out = {"_doc": old.get("_doc", spec.get("_doc", "")), **{k: v for k, v in spec.items() if k != "_doc"}, "id": name}
         _backup_spec(path)
@@ -1209,7 +1221,7 @@ def new_set(name, title=None, biome="", copy_from="crypt"):
     if not name.replace("_", "").isalnum():
         raise ValueError("set id: letters, digits and _ only")
     with LOCK:
-        if (SETS / f"{name}.json").exists():
+        if (sets_dir() / f"{name}.json").exists():
             raise ValueError(f"set {name} exists")
         src = load_set(copy_from)
         pieces = []
@@ -1280,7 +1292,7 @@ def upsert_piece(name, piece, old_id=None):
 
 def _archive_candidate(name, rel):
     src = candidate_path(name, rel)
-    dst = ARCHIVE / "dungeon" / name / rel
+    dst = config.archive_dir() / "dungeon" / name / rel
     dst.parent.mkdir(parents=True, exist_ok=True)
     for f in (src, src.with_suffix(".npy")):
         if f.exists():
@@ -1387,10 +1399,10 @@ def archive_set(name):
         others = [n for n in list_sets() if n != name]
         if not others:
             raise ValueError("can't archive the only set")
-        path = SETS / f"{name}.json"
+        path = sets_dir() / f"{name}.json"
         if not path.exists():
             raise ValueError(f"no set {name}")
-        dst = ARCHIVE / "sets" / f"{name}_{_stamp()}"
+        dst = config.archive_dir() / "sets" / f"{name}_{_stamp()}"
         dst.mkdir(parents=True)
         shutil.move(str(path), str(dst / "spec.json"))
         if set_dir(name).exists():
@@ -1417,7 +1429,7 @@ def archive_family(name, master_id):
             raise ValueError(f"{master_id} is not a family master")
         ids = family_members(spec, master_id)
         boards = set(wall_family_settings(master, spec)["boards"].values()) if master["method"] == "wall_master" else set()
-        dst = ARCHIVE / "families" / f"{name}_{_slug_id(master_id)}_{_stamp()}"
+        dst = config.archive_dir() / "families" / f"{name}_{_slug_id(master_id)}_{_stamp()}"
         dst.mkdir(parents=True)
         s = state(name)
         (dst / "family.json").write_text(json.dumps({
@@ -1762,7 +1774,7 @@ def gen_wall_master(spec, piece, seed=1, lora=0.0, draft=False):
             img = _i2i(init.resize((dw, dh), Image.LANCZOS), prompt, seed, float(tpl.get("strength", 0.7)), lora, steps=DRAFT_STEPS)
         else:
             p = comfy.run(comfy.build_txt2img(prompt, dw, dh, seed=seed, steps=DRAFT_STEPS, lora_strength=lora,
-                                              prefix="hdart/dun_wdraft"), DUN / "tmp")[0]
+                                              prefix="hdart/dun_wdraft"), dun_dir() / "tmp")[0]
             img = Image.open(p).convert("RGB")
         return periodic_smooth_x(flatten_light_x(img.resize((w, h), Image.LANCZOS)))
     if tpl:  # start from the layout template (img2img), like floor masters
@@ -1770,7 +1782,7 @@ def gen_wall_master(spec, piece, seed=1, lora=0.0, draft=False):
         img = _i2i(init, prompt, seed, float(tpl.get("strength", 0.7)), lora).resize((w, h), Image.LANCZOS)
         return make_seamless_x(img, prompt, seed)
     gw, gh = 640, int(round(640 * h / w / 16)) * 16  # FLUX gets ~1 MP, then it's scaled to the elevation
-    p = comfy.run(comfy.build_txt2img(prompt, gw, gh, seed=seed, lora_strength=lora, prefix="hdart/dun_wallm"), DUN / "tmp")[0]
+    p = comfy.run(comfy.build_txt2img(prompt, gw, gh, seed=seed, lora_strength=lora, prefix="hdart/dun_wallm"), dun_dir() / "tmp")[0]
     img = Image.open(p).convert("RGB").resize((w, h), Image.LANCZOS)
     return make_seamless_x(img, prompt, seed)
 
@@ -2734,7 +2746,10 @@ def matching_wall_family(name, floor_id, slug=None):
 # template, switches) or a set's floor + wall families together, optionally with the set's material sheet. Start new
 # families from one instead of from scratch. Board ids and images are never part of a recipe.
 
-RECIPES = ROOT / "library" / "recipes"
+def recipes_dir() -> Path:
+    """library/recipes: saved family recipes (in git)."""
+    return config.library_dir() / "recipes"
+
 _RECIPE_DROP = ("boards",)  # set-specific
 
 
@@ -2753,19 +2768,19 @@ def save_recipe(name, master_ids, title, with_sheet=True, notes=""):
            "families": [_family_recipe(piece_of(spec, m)) for m in master_ids]}
     if with_sheet and spec.get("sheet"):
         rec["sheet"] = {k: v for k, v in sheet(spec).items() if k != "floor"}
-    RECIPES.mkdir(parents=True, exist_ok=True)
-    (RECIPES / f"{rid}.json").write_text(json.dumps(rec, indent=2) + "\n", encoding="utf-8")
+    recipes_dir().mkdir(parents=True, exist_ok=True)
+    (recipes_dir() / f"{rid}.json").write_text(json.dumps(rec, indent=2) + "\n", encoding="utf-8")
     return rec
 
 
 def list_recipes():
-    return [json.loads(f.read_text(encoding="utf-8")) for f in sorted(RECIPES.glob("*.json"))] if RECIPES.exists() else []
+    return [json.loads(f.read_text(encoding="utf-8")) for f in sorted(recipes_dir().glob("*.json"))] if recipes_dir().exists() else []
 
 
 def apply_recipe(name, rid, use_sheet=True):
     """New families in a set from a recipe (ids made unique), and its sheet when the set has none yet (or
     use_sheet="replace"). Linked templates take the set's sheet. Returns the new master ids."""
-    f = RECIPES / f"{re.sub(r'[^a-z0-9_]+', '_', rid)}.json"
+    f = recipes_dir() / f"{re.sub(r'[^a-z0-9_]+', '_', rid)}.json"
     if not f.exists():
         raise ValueError(f"no recipe {rid}")
     rec = json.loads(f.read_text(encoding="utf-8"))
@@ -2827,7 +2842,7 @@ def export_status(name, spec):
     f = export_root() / spec["id"] / "set.json"
     if not f.exists():
         return "none"
-    newest = max((p.stat().st_mtime for p in (set_dir(name) / "state.json", SETS / f"{name}.json") if p.exists()), default=0)
+    newest = max((p.stat().st_mtime for p in (set_dir(name) / "state.json", sets_dir() / f"{name}.json") if p.exists()), default=0)
     return "stale" if newest > f.stat().st_mtime + 1 else "ok"
 
 
@@ -3220,25 +3235,28 @@ def room_preview(name, tile=None, scale=3, include=None, grid=None, floor_board=
     return out.resize((out.width * scale, out.height * scale), Image.NEAREST)
 
 
-CAPTURES = config.data_dir() / "work" / "protov"
+def captures_dir() -> Path:
+    """<data>/work/protov: Unity Prototype V captures (review images and the log)."""
+    return config.data_dir() / "work" / "protov"
+
 
 
 def capture(name, tiles=(32, 64)):
     """Export the set and run Prototype V's batch capture with it. Returns the screenshot file names."""
     import subprocess
     export(name, tiles)
-    CAPTURES.mkdir(parents=True, exist_ok=True)
-    log = CAPTURES / "capture.log"
+    captures_dir().mkdir(parents=True, exist_ok=True)
+    log = captures_dir() / "capture.log"
     proj = config.project()
     if not proj.unity:
         raise RuntimeError(f"no Unity exe for project {proj.name} (config.toml: projects.{proj.name}.unity)")
     r = subprocess.run([str(proj.unity), "-batchmode", "-projectPath", str(proj.path), "-executeMethod",
-                        "Hearthdelve.Editor.PrototypeVSetup.Capture", "-reviewOut", str(CAPTURES), "-artSet", name,
+                        "Hearthdelve.Editor.PrototypeVSetup.Capture", "-reviewOut", str(captures_dir()), "-artSet", name,
                         "-logFile", str(log), "-quit"], timeout=1800)
     if r.returncode != 0:
         tail = log.read_text(encoding="utf-8", errors="replace").splitlines()[-25:] if log.exists() else []
         raise RuntimeError(f"Unity exited {r.returncode} (is this project open in the editor?)\n" + "\n".join(tail))
-    return sorted(p.name for p in CAPTURES.glob("v0*.png"))
+    return sorted(p.name for p in captures_dir().glob("v0*.png"))
 
 
 # ----------------------------------------------------------------------------- Studio job kinds (hdart.jobs)

@@ -1,5 +1,6 @@
 """Wall family geometry in hdart.dungeon (no GPU): elevation projection, masks, door slice. Run: uv run python tests/test_walls.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
+import os
 import numpy as np
 from PIL import Image
 import hdart.dungeon as d
@@ -70,7 +71,7 @@ assert 'continues past' in d.wall_texture_prompt(d.style(), 'x') and d.WALL_SEAM
 import shutil, tempfile
 from pathlib import Path
 tmp = Path(tempfile.mkdtemp())
-shutil.copytree(d.SETS, tmp / "sets"); d.SETS = tmp / "sets"; d.DUN = tmp / "dun"; d.ARCHIVE = tmp / "archive"
+os.environ["HD_DATA"] = str(tmp)   # sprites/dungeon and archive in a temp folder; the sets are the fixture copy
 d.new_set("zw", biome="test")
 mid = "tile.zw_wall_master"
 d.upsert_piece("zw", {"id": mid, "kind": "elevation", "shape": "elevation", "method": "wall_master", "variants": 1, "prompt": "bricks"})

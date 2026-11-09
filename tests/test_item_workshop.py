@@ -4,7 +4,7 @@ and re-keyed. The fake paints every masked area in the item material's key colou
 several cel levels) and returns the txt2img sword as a leather grip + metal blade cut-out.
 Run: uv run python tests/test_item_workshop.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
-import json, shutil, tempfile
+import json, os, shutil, tempfile
 from pathlib import Path
 import numpy as np
 from PIL import Image
@@ -17,8 +17,7 @@ import hdart.limner as lim
 from hdart.fake_comfy import FakeComfy, info
 
 tmp = Path(tempfile.mkdtemp())
-ws.AI_DIR = tmp / "ai"; ws.CAND = ws.AI_DIR / "candidates"; ws.STATE = ws.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "archive"
-shutil.copy(iw.SPEC, tmp / "items.json"); iw.SPEC = tmp / "items.json"
+os.environ["HD_DATA"] = str(tmp)   # the data root (sprites/ai, archive, ...) is a temp folder
 lim.root = lambda: tmp / "limner"   # design references: no approved Limner art until the design section below
 doc = iw.spec()
 KEY = {m: np.array([int(e["key"][i:i + 2], 16) for i in (1, 3, 5)], float) for m, e in doc["materials"].items()}
@@ -64,7 +63,7 @@ assert (d / "prev_male_front.png").exists()
 # details sketch: saved with the zone (snapped to the palette, hard alpha; material strokes are zone in the UI), stamped on
 # the guide FLUX starts from; an empty sketch removes the file, reset removes both
 import base64, io
-iw.ZONES = tmp / "zones"
+zones_kept = shutil.move(iw.zones_dir(), tmp / "zones_kept")   # start with no painted zones
 _, sp, parts = pf.base("human.male")
 _, Z = iw.zones_for(sp, "front", parts["front"], "item.cloth_trousers", doc["items"]["item.cloth_trousers"])
 ys, xs = np.nonzero(Z); y0, xc = ys.min(), int(xs.mean())
@@ -87,7 +86,7 @@ assert g[y0 + 25, xc].sum() < 150                                               
 iw.save_zone("item.cloth_trousers", "front", u(np.dstack([np.where(Z, 255, 0).astype(np.uint8)] * 3)), sketch=u(np.zeros_like(sk)))
 assert not iw.sketch_path("item.cloth_trousers", "front").exists() and iw.mask_path("item.cloth_trousers", "front").exists()
 iw.reset_zone("item.cloth_trousers", "front"); assert not iw.mask_path("item.cloth_trousers", "front").exists()
-iw.archive("human", "item.cloth_trousers", t2); iw.ZONES = config.specs_dir() / "item_zones"
+iw.archive("human", "item.cloth_trousers", t2); shutil.rmtree(iw.zones_dir()); shutil.move(zones_kept, iw.zones_dir())
 
 # held: the cut-out keyed per material (leather grip, metal blade) and framed
 paint_key["m"] = None

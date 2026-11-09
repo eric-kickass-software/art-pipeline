@@ -13,7 +13,7 @@ from hdart import config
 from hdart.fake_comfy import FakeComfy
 
 tmp = Path(tempfile.mkdtemp())
-ws.AI_DIR = tmp / "ai"; ws.CAND = ws.AI_DIR / "candidates"; ws.STATE = ws.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "archive"
+os.environ["HD_DATA"] = str(tmp)   # the data root (sprites/ai, archive, ...) is a temp folder
 os.environ["HD_PROJECT"] = str(tmp / "game")   # the export lands in this fake project, not the real game
 
 with FakeComfy():

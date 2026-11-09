@@ -24,7 +24,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-PAGES = Path(__file__).resolve().parent.parent / "studio"
+from . import config
+
+PAGES = config.ROOT / "studio"   # the page files ship with the code
 PAGE_FILES = {"/workshop": "workshop.html", "/items": "workshop.html", "/editor": "workshop.html",
               "/dungeon": "dungeon.html", "/limner": "limner.html"}
 

@@ -1,7 +1,7 @@
 """Face tab backend (hdart.puppet_face), on the fake ComfyUI: paint passes return their init; hair passes paint the masked
 area in the green key, face passes draw a dark eye with a magenta iris. Run: uv run python tests/test_puppet_face.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
-import json, shutil, tempfile
+import json, os, shutil, tempfile
 from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
@@ -10,8 +10,7 @@ import hdart.puppet_paint as ppt
 import hdart.puppet_face as pf
 
 tmp = Path(tempfile.mkdtemp())
-ws.AI_DIR = tmp / "ai"; ws.CAND = ws.AI_DIR / "candidates"; ws.STATE = ws.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "archive"
-shutil.copy(pf.SPEC, tmp / "face.json"); pf.SPEC = tmp / "face.json"
+os.environ["HD_DATA"] = str(tmp)   # the data root (sprites/ai, archive, ...) is a temp folder
 from hdart.fake_comfy import FakeComfy, info
 calls = []
 

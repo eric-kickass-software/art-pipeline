@@ -54,7 +54,7 @@ def cmd_export(a):
 def cmd_dungeon_capture(a):
     from . import dungeon
     for f in dungeon.capture(a.set):
-        print(dungeon.CAPTURES / f)
+        print(dungeon.captures_dir() / f)
 
 
 def cmd_backup(a):

@@ -2,7 +2,7 @@
 standard meta.json, unique candidate ids, archiving, approvals; and that the Paint/Face/Item tools use it (approve and
 archive through their own functions). Run: uv run python tests/test_store.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
-import json, subprocess, sys, tempfile, threading, time
+import json, os, subprocess, sys, tempfile, threading, time
 from pathlib import Path
 from hdart import store
 
@@ -82,19 +82,20 @@ assert lst == ["b"]
 
 # the tools on the store: Paint approve/archive, Item approve/archive (to archive/workshop/items/...)
 import hdart.workshop as ws
+from hdart import config
 import hdart.puppet_paint as ppt
 import hdart.item_workshop as iw
-ws.AI_DIR = tmp / "ai"; ws.STATE = ws.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "warchive"
+os.environ["HD_DATA"] = str(tmp / "wdata")   # the Workshop's data root: a temp folder
 c1, d1 = store.new(ppt.out_dir("human.male"), 1); store.write_meta(d1, "paint", seed=1, build="human.male")
 c2, d2 = store.new(ppt.out_dir("human.male"), 2); store.write_meta(d2, "paint", seed=2, build="human.male")
 assert ppt.approve("human.male", c1)["approved"] == c1
-assert json.loads(ws.STATE.read_text())["builds"]["human.male"]["paint"]["approved"] == c1
+assert json.loads(ws.state_path().read_text())["builds"]["human.male"]["paint"]["approved"] == c1
 try:
     ppt.archive("human.male", c1); raise AssertionError("archived the approved paint")
 except ValueError:
     pass
 ppt.archive("human.male", c2)
-assert (ws.ARCHIVE / "workshop" / "paint" / "human.male" / c2 / "meta.json").exists() and not d2.exists()
+assert (config.archive_dir() / "workshop" / "paint" / "human.male" / c2 / "meta.json").exists() and not d2.exists()
 assert ppt.approve("human.male", c1, on=False)["approved"] is None
 
 i1, e1 = store.new(iw.out_dir("human", "item.hat"), 5); store.write_meta(e1, "item", seed=5, on="human.male")
@@ -102,5 +103,5 @@ assert iw.approve("human", "item.hat", i1) == {"item.hat": {"all": i1}}
 assert [c["id"] for c in iw.candidates("human", "item.hat")] == [i1]
 iw.archive("human", "item.hat", i1)
 assert iw.load_state("human")["approved"]["item.hat"] == {} and iw.candidates("human", "item.hat") == []
-assert (ws.ARCHIVE / "workshop" / "items" / "human" / "item.hat" / i1 / "meta.json").exists()
+assert (config.archive_dir() / "workshop" / "items" / "human" / "item.hat" / i1 / "meta.json").exists()
 print("store ok")

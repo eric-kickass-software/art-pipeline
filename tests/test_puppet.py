@@ -2,7 +2,7 @@
 needs real mannequin art): runs end to end, writes the files, records state, and refuses without an approved front and
 back. Run: uv run python tests/test_puppet.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
-import json, shutil, tempfile
+import json, os, shutil, tempfile
 from pathlib import Path
 import hdart.workshop as ws
 
@@ -16,12 +16,12 @@ if not (src["front"] and src["back"]):
     raise SystemExit(0)
 
 tmp = Path(tempfile.mkdtemp())
-ws.AI_DIR = tmp / "ai"; ws.CAND = ws.AI_DIR / "candidates"; ws.STATE = ws.AI_DIR / "workshop.json"
+os.environ["HD_DATA"] = str(tmp)   # the data root (sprites/ai, archive, ...) is a temp folder
 import hdart.puppet as pp
 
-(ws.CAND / "test" / "male").mkdir(parents=True)
+(ws.candidates_dir() / "test" / "male").mkdir(parents=True)
 for f in ("front", "back"):
-    shutil.copy(REAL / src[f], ws.CAND / "test" / "male" / f"{f}.png")
+    shutil.copy(REAL / src[f], ws.candidates_dir() / "test" / "male" / f"{f}.png")
 ws.save_state({"builds": {"test.male": {"race": "test", "sex": "male",
                "front": {"approved": "candidates/test/male/front.png"}, "back": {}}}, "parts": {}})
 try:
@@ -30,7 +30,7 @@ except ValueError as e:
     assert "Approve both" in str(e)
 s = ws.load_state(); s["builds"]["test.male"]["back"]["approved"] = "candidates/test/male/back.png"; ws.save_state(s)
 pp.template("test.male", frames=4)
-out = ws.AI_DIR / "puppet" / "test.male"
+out = ws.ai_dir() / "puppet" / "test.male"
 for name in ("template.json", "skeleton_front.png", "pieces_back.png", "walk_front.gif", "walk_4dir_64.gif"):
     assert (out / name).exists(), name
 meta = json.loads((out / "template.json").read_text())

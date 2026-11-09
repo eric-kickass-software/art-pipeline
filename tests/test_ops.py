@@ -3,6 +3,7 @@ and the Item Workshop's surface (hdart/items_api.py): every op documented, every
 calls mapped onto an op, approve/archive through the legacy route, and generation queued as the page queues it.
 Run: uv run python tests/test_ops.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
+import os
 import re, tempfile
 from pathlib import Path
 from hdart import jobs, ops
@@ -84,16 +85,15 @@ assert used and used <= set(items_api.LEGACY), sorted(used - set(items_api.LEGAC
 assert all(e[0] in ops.OPS for e in items_api.LEGACY.values())
 
 # approve / un-approve / archive through the page's route, on a temp data folder
-from hdart import item_workshop as iw, workshop as ws
-tmp = Path(tempfile.mkdtemp()); ws.AI_DIR = tmp / "ai"
-ws.ARCHIVE = tmp / "archive"
+from hdart import config, item_workshop as iw, workshop as ws
+tmp = Path(tempfile.mkdtemp()); os.environ["HD_DATA"] = str(tmp)   # temp data root
 cand = iw.out_dir("human", "item.test_helm") / "s1_100"; cand.mkdir(parents=True)
 (cand / "meta.json").write_text('{"seed": 1}', encoding="utf-8")
 r = items_api.legacy_call("approve", {"race": "human", "item": "item.test_helm", "id": "s1_100", "key": "all", "on": True})
 assert r == {"approved": {"item.test_helm": {"all": "s1_100"}}}, r
 assert ops.call("items.candidates", {"item": "item.test_helm"})["approved"] == {"all": "s1_100"}
 items_api.legacy_call("archive", {"race": "human", "item": "item.test_helm", "id": "s1_100"})
-assert not cand.exists() and (ws.ARCHIVE / "workshop" / "items" / "human" / "item.test_helm" / "s1_100").exists()
+assert not cand.exists() and (config.archive_dir() / "workshop" / "items" / "human" / "item.test_helm" / "s1_100").exists()
 assert ops.call("items.candidates", {"item": "item.test_helm"}) == {"candidates": [], "approved": {}}
 
 # generation is queued as a job of kind "item" with the args the job handler (item_workshop.job) reads

@@ -238,7 +238,7 @@ def room_image(set: str, piece: str | None = None, rel: str | None = None, tile:
 @ops.op("dungeon.captures", read_only=True)
 def captures() -> list:
     """The file names of the last Prototype V capture (dungeon.capture), for dungeon.capture_image."""
-    return sorted(p.name for p in _dg().CAPTURES.glob("v0*.png"))
+    return sorted(p.name for p in _dg().captures_dir().glob("v0*.png"))
 
 
 @ops.op("dungeon.capture_image", read_only=True)
@@ -248,7 +248,7 @@ def capture_image(f: str) -> ops.Blob:
     Args:
         f: its file name (dungeon.captures lists them)
     """
-    root = _dg().CAPTURES.resolve()
+    root = _dg().captures_dir().resolve()
     p = (root / f).resolve()
     if root not in p.parents or p.suffix != ".png":
         raise ops.OpError(f"not a capture: {f!r}")

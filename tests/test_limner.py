@@ -19,10 +19,8 @@ os.environ["HD_PROJECT"], os.environ["HD_DATA"] = str(game), str(data)
     "wanted": {"icons": {"items": [{"id": "item.bandage", "name": "Bandage", "kind": "consumable"}],
                          "classes": [{"id": "class.acolyte", "name": "Acolyte", "role": "healer", "text": "Rituals."}],
                          "statuses": [{"id": "status.burn", "name": "Burning"}]}}}), encoding="utf-8")
-L.SPEC = tmp / "limner.json"
-shutil.copyfile(fixture_specs.FIXTURES / "limner.json", L.SPEC)
-_s = json.loads(L.SPEC.read_text(encoding="utf-8")); _s["added"] = {}   # Eric's own ＋ Add entries would change the lists below
-L.SPEC.write_text(json.dumps(_s), encoding="utf-8")
+_s = json.loads(L.spec_path().read_text(encoding="utf-8")); _s["added"] = {}   # Eric's own ＋ Add entries would change the lists below
+L.spec_path().write_text(json.dumps(_s), encoding="utf-8")
 repo_spec = (config.ROOT / "specs" / "limner.json").read_text(encoding="utf-8")   # the live spec: must stay untouched
 
 # entries: the contract's wanted lists + the spec's gear, skill placeholders per damage type, portraits per look × gender

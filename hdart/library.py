@@ -18,12 +18,19 @@ import numpy as np
 import requests
 from PIL import Image
 
-from . import jobs
+from . import config, jobs
 
-ROOT = Path(__file__).resolve().parent.parent
-LIB = ROOT / "library"
-MATS = LIB / "materials"
-CACHE = LIB / "cache"
+
+
+def materials_dir() -> Path:
+    """library/materials: one JSON per material (in git)."""
+    return config.library_dir() / "materials"
+
+
+def cache_dir() -> Path:
+    """library/cache: downloaded maps (git-ignored)."""
+    return config.library_dir() / "cache"
+
 TILE_METERS = 1.5  # one board tile: a hero is ~1.5 units (~1.8 m), 1 unit = iso.KZ tiles -> 1 tile ~ 1.47 m
 HOSTS = ("ambientcg.com", "acg-media.struffelproductions.com", "api.polyhaven.com", "dl.polyhaven.org", "cdn.polyhaven.com")
 UA = {"User-Agent": "hearthdelve-art-pipeline (local tool)"}
@@ -138,7 +145,7 @@ def import_material(source, asset, meta=None):
         raise ValueError("source: ambientcg or polyhaven")
     hit = meta or next((h for h in search(asset, source, 50) if h["asset"] == asset), None) or {"name": asset, "tags": [], "size_m": None}
     mid = _slug(f"{source}_{asset}")
-    folder = CACHE / mid
+    folder = cache_dir() / mid
     _fetch_maps(source, asset, folder)
     color = Image.open(folder / "color.jpg")
     height = Image.open(folder / "height.jpg") if (folder / "height.jpg").exists() else None
@@ -157,27 +164,27 @@ def import_material(source, asset, meta=None):
 # ----------------------------------------------------------------------------- store
 
 def list_materials():
-    return [json.loads(f.read_text(encoding="utf-8")) for f in sorted(MATS.glob("*.json"))]
+    return [json.loads(f.read_text(encoding="utf-8")) for f in sorted(materials_dir().glob("*.json"))]
 
 
 def load(mid):
-    return json.loads((MATS / f"{_slug(mid)}.json").read_text(encoding="utf-8"))
+    return json.loads((materials_dir() / f"{_slug(mid)}.json").read_text(encoding="utf-8"))
 
 
 def save(mat):
-    MATS.mkdir(parents=True, exist_ok=True)
+    materials_dir().mkdir(parents=True, exist_ok=True)
     keep = {k: v for k, v in mat.items() if k in ("id", "name", "source", "asset", "license", "url", "tags", "descriptors",
                                                    "size_m", "palette", "repeats", "imported", "notes")}
-    (MATS / f"{_slug(mat['id'])}.json").write_text(json.dumps(keep, indent=2) + "\n", encoding="utf-8")
+    (materials_dir() / f"{_slug(mat['id'])}.json").write_text(json.dumps(keep, indent=2) + "\n", encoding="utf-8")
     return keep
 
 
 def image_path(mid, kind="color"):
     """A cached map (downloaded again when the cache was cleared)."""
     mat = load(mid)
-    f = CACHE / mat["id"] / f"{'height' if kind == 'height' else 'color'}.jpg"
+    f = cache_dir() / mat["id"] / f"{'height' if kind == 'height' else 'color'}.jpg"
     if not f.exists():
-        _fetch_maps(mat["source"], mat["asset"], CACHE / mat["id"])
+        _fetch_maps(mat["source"], mat["asset"], cache_dir() / mat["id"])
     return f
 
 

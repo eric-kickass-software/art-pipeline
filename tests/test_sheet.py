@@ -1,14 +1,14 @@
 """Set material sheet in hdart.dungeon (no GPU): linked templates follow the sheet, matching wall families, prompt
 words, colour match to the floor master. Run: uv run python tests/test_sheet.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
-import shutil, tempfile
+import os, shutil, tempfile
 from pathlib import Path
 import numpy as np
 from PIL import Image
 import hdart.dungeon as d
 
 tmp = Path(tempfile.mkdtemp())
-shutil.copytree(d.SETS, tmp / "sets"); d.SETS = tmp / "sets"; d.DUN = tmp / "dun"; d.ARCHIVE = tmp / "archive"
+os.environ["HD_DATA"] = str(tmp)   # sprites/dungeon and archive in a temp folder; the sets are the fixture copy
 d.new_set("zs", biome="crypt")
 fid = "tile.zs_floor_master"
 d.upsert_piece("zs", {"id": fid, "kind": "tile", "shape": "floor", "method": "master", "variants": 1, "prompt": "grey flagstones",
@@ -73,7 +73,7 @@ ps['candidates'].append('candidates/x.png'); ps.setdefault('meta', {})['candidat
 assert len(d.fill_jobs('zs', fid)) == len(jobs) - 1
 assert d.review_list('zs', fid) == [{'pid': j['piece'], 'rel': 'candidates/x.png'}]
 # recipes: save the set's floor + wall as a kit (with its sheet), use it in a fresh set
-d.RECIPES = tmp / 'recipes'
+os.environ["HD_LIBRARY"] = str(tmp / "library")   # recipes saved into a temp library
 rec = d.save_recipe('zs', [fid, wid], 'Basalt Kit', notes='test')
 assert rec['id'] == 'basalt_kit' and [f['kind'] for f in rec['families']] == ['floor', 'wall'] and rec['sheet']['words'] == 'black basalt, green moss'
 assert 'boards' not in rec['families'][1]['family'] and d.list_recipes()[0]['title'] == 'Basalt Kit'

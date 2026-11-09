@@ -19,7 +19,7 @@ try:
 except ValueError:
     pass
 # image templates from any cached material repeat per tile like the procedural ones
-mats = [m for m in L.list_materials() if (L.CACHE / m["id"] / "color.jpg").exists()]
+mats = [m for m in L.list_materials() if (L.cache_dir() / m["id"] / "color.jpg").exists()]
 for m in mats[:2]:
     f = L.image_template({"material": m["id"], "repeats": 2}, "floor", 128, 2.45)
     a = np.asarray(f["rgb"]).astype(int)

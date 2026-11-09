@@ -16,8 +16,7 @@ from hdart import contract
 from hdart.fake_comfy import FakeComfy, info
 
 tmp = Path(tempfile.mkdtemp())
-ws.AI_DIR = tmp / "ai"; ws.CAND = ws.AI_DIR / "candidates"; ws.STATE = ws.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "archive"
-shutil.copy(iw.SPEC, tmp / "items.json"); iw.SPEC = tmp / "items.json"
+os.environ["HD_DATA"] = str(tmp)   # the data root (sprites/ai, archive, ...) is a temp folder
 game = tmp / "game"; os.environ["HD_PROJECT"] = str(game)
 
 # the game: a contract (vocabulary, id rule, revision) and one existing item (the sword); the trousers are new

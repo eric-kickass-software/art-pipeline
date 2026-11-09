@@ -18,13 +18,19 @@ The template is numbers, not pixels (specs/puppet_template.json), per view (fron
     preview(spec)           -> writes sprites/ai/puppet_template/ (parts, guides, sheets, walk previews)
 """
 import json, math, time
+from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from . import config, imageops, jobs, rig, workshop as ws, puppet as pp
 
-SPEC = config.specs_dir() / "puppet_template.json"
+
+def spec_path() -> Path:
+    """specs/puppet_template.json: the rig template."""
+    return config.specs_dir() / "puppet_template.json"
+
+
 PX = rig.PX
 LIMBS = ("armA", "armB", "legA", "legB")
 SEGS = (("upper", "pivot", "mid"), ("lower", "mid", "end"), ("hand", "end", "tip"))
@@ -37,7 +43,7 @@ GUIDE_BONE, GUIDE_SEAM, GUIDE_FACE = (40, 150, 230, 255), (225, 40, 150, 255), (
 
 
 def out_dir():
-    return ws.AI_DIR / "puppet_template"
+    return ws.ai_dir() / "puppet_template"
 
 
 # ----------------------------------------------------------------------------- measuring (from an approved build)
@@ -304,7 +310,7 @@ def _rig(build):
     hip, views = {}, {}
     for v in ("back", "front"):
         ovr = (b.get("puppet") or {}).get("joints", {}).get(v)
-        views[v] = pp.build_view(Image.open(ws.AI_DIR / src[v]), v, hip, ovr); views[v]["view"] = v
+        views[v] = pp.build_view(Image.open(ws.ai_dir() / src[v]), v, hip, ovr); views[v]["view"] = v
     return views, src
 
 
@@ -313,12 +319,12 @@ def measure(build="human.unisex", save=True):
     spec = {"schemaVersion": 2, "_doc": __doc__.split("\n\n")[1], "px": PX, "from": {"build": build, **src},
             "made": int(time.time()), "views": {v: measure_view(views[v]) for v in ("front", "back")}}
     if save:
-        SPEC.write_text(json.dumps(spec, indent=1), encoding="utf-8")
+        spec_path().write_text(json.dumps(spec, indent=1), encoding="utf-8")
     return spec
 
 
 def load():
-    return checked(json.loads(SPEC.read_text(encoding="utf-8")), SPEC)
+    return checked(json.loads(spec_path().read_text(encoding="utf-8")), spec_path())
 
 
 def checked(spec, where):
@@ -336,7 +342,7 @@ def _pt(v, what):
 
 def save(spec):
     """Validate and write an edited spec (from the Workshop template editor). Keeps `from`; stamps `edited`."""
-    old = load() if SPEC.exists() else {}
+    old = load() if spec_path().exists() else {}
     out = {"schemaVersion": 2, "_doc": old.get("_doc", __doc__.split("\n\n")[1]), "px": PX,
            "from": old.get("from", spec.get("from")), "made": old.get("made"), "edited": int(time.time()), "views": {}}
     for v in ("front", "back"):
@@ -381,7 +387,7 @@ def save(spec):
         if sorted(order) != sorted(list(limbs) + ["torso", "head"]):
             raise ValueError(f"{v}: draw order must list every part once")
         out["views"][v] = {"joints": j, "limbs": limbs, "shapes": shapes, "seams": seams, "order": order}
-    SPEC.write_text(json.dumps(out, indent=1), encoding="utf-8")
+    spec_path().write_text(json.dumps(out, indent=1), encoding="utf-8")
     return out
 
 
@@ -389,7 +395,7 @@ def state():
     """What the Workshop template editor needs: the spec, the art it was measured from, the preview files."""
     spec = load(); out = out_dir()
     frm = spec.get("from") or {}
-    art = {v: frm.get(v) for v in ("front", "back") if frm.get(v) and (ws.AI_DIR / frm[v]).exists()}
+    art = {v: frm.get(v) for v in ("front", "back") if frm.get(v) and (ws.ai_dir() / frm[v]).exists()}
     files = sorted(p.name for p in out.glob("*.*")) if out.exists() else []
     made = int(max((p.stat().st_mtime for p in out.glob("*.*")), default=0)) if out.exists() else 0
     return {"spec": spec, "art": art, "dir": ws.rel(out), "files": files, "preview_made": made}
@@ -538,7 +544,7 @@ def preview(spec=None, s=2, frames=8):
         B2["rigid"] = (pieces, order)
         imgs = [pp.on_bg(pp.render(B2, v, i / frames)) for i in range(frames)]
         imageops.save(imgs[0], out / f"walk_{v}.gif", save_all=True, append_images=imgs[1:], duration=120, loop=0)
-        art_p = ws.AI_DIR / frm[v] if frm.get(v) else None
+        art_p = ws.ai_dir() / frm[v] if frm.get(v) else None
         art = pp.framed(Image.open(art_p).convert("RGB")) if art_p and art_p.exists() else Image.new("RGB", (PX, PX), pp.BG)
         res[v] = {"rest": rest, "guides": rest_g, "walk": imgs[2], "art": art}
     T = 400; f = ImageFont.load_default(size=18)

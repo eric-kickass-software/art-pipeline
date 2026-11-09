@@ -15,6 +15,7 @@ Candidates: sprites/ai/face/<race>/<kind>/<id>/ (layer_<view>.png, prev_<sex>_<v
 set and face set (state: builds["<race>.unisex"]["face_sets"]) are the candidates added to them, like skin tone sets.
 """
 import copy, json, shutil
+from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
@@ -23,7 +24,12 @@ from . import config, comfy, imageops, jobs, memo, palette, rig, store, workshop
 from .levels import (blank_face, brightness_centres, colour_levels, head_skin_key, hue_dist, keep_bands, key_hue,
                      nearest_level, skin_dist, write_bands)
 
-SPEC = config.specs_dir() / "face.json"
+
+def spec_path() -> Path:
+    """specs/face.json: the hair and face prompts."""
+    return config.specs_dir() / "face.json"
+
+
 KINDS = ("hair", "face")
 SEXES = ("male", "female")
 S = rig.S
@@ -38,7 +44,7 @@ HAIR_BACK_EDIT = ("Show this exact character from behind: a three-quarter back v
 
 
 def spec():
-    return json.loads(SPEC.read_text(encoding="utf-8"))
+    return json.loads(spec_path().read_text(encoding="utf-8"))
 
 
 def save_spec(doc):
@@ -60,12 +66,12 @@ def save_spec(doc):
     out = {"_doc": old.get("_doc", ""), "hair_key": key("hair_key", "#22c822"), "eye_key": key("eye_key", "#d020d0"),
            "hair": doc["hair"], "hair_back_edit": str(doc.get("hair_back_edit") or old.get("hair_back_edit") or HAIR_BACK_EDIT),
            "face": doc["face"], "races": races}
-    SPEC.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8", newline="\n")
+    spec_path().write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8", newline="\n")
     return out
 
 
 def out_dir(race, kind):
-    return ws.AI_DIR / "face" / race / kind
+    return ws.ai_dir() / "face" / race / kind
 
 
 def composed(race, sex, doc=None):
@@ -99,7 +105,7 @@ def base_key(build, cid=None):
     if not cid:
         return None
     d = ppt.out_dir(build) / cid
-    return (build, cid, memo.stamp(d / "parts" / "front", d / "parts" / "back", d / "template.json", pt.SPEC))
+    return (build, cid, memo.stamp(d / "parts" / "front", d / "parts" / "back", d / "template.json", pt.spec_path()))
 
 
 def base(build, cid=None):
@@ -544,12 +550,12 @@ def set_member(race, kind, fid, on=True):
 
 
 def archive(race, kind, fid):
-    with store.lock(ws.STATE):
+    with store.lock(ws.state_path()):
         if fid in face_sets(ws.load_state(), race)[kind]:
             raise ValueError("It's in the set: take it out first.")
         if not (out_dir(race, kind) / fid).exists():
             raise ValueError(f"No {kind} candidate {fid}.")
-        store.archive(out_dir(race, kind) / fid, ws.ARCHIVE / "workshop" / "face" / race / kind / fid)
+        store.archive(out_dir(race, kind) / fid, config.archive_dir() / "workshop" / "face" / race / kind / fid)
     return state(race)
 
 

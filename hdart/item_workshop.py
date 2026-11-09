@@ -20,6 +20,7 @@ An item is fitted once on a "fitting build" and its per-part layers are reused o
     dressed(build, worn, view)            -> the build's parts with the worn items' layers stacked on, for previews
 """
 import fnmatch, json, re, shutil, time
+from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageFilter
@@ -29,7 +30,12 @@ from . import (config, comfy, contract, imageops, jobs, memo, palette, rig, stor
 from .levels import (ISLAND, blank_face, brightness_centres, colour_levels, hue_dist, keep_bands, key_hue, nearest_level,
                      smooth_levels, smooth_val, spread, write_bands)
 
-SPEC = config.specs_dir() / "items.json"
+
+def spec_path() -> Path:
+    """specs/items.json: the Item Workshop's items, zone rules and prompts."""
+    return config.specs_dir() / "items.json"
+
+
 S, N = rig.S, rig.N
 VIEWS = ("front", "back")
 D_ITEM = 0.85
@@ -44,11 +50,11 @@ D_COMPLETE = 0.55   # the hidden-area pass starts from the smear fill (already i
 def spec() -> dict:
     """The Item Workshop's spec (specs/items.json), read fresh. Code that draws with unsaved settings takes the
     changed doc as a `doc` argument instead."""
-    return json.loads(SPEC.read_text(encoding="utf-8"))
+    return json.loads(spec_path().read_text(encoding="utf-8"))
 
 
 def out_dir(race, item):
-    return ws.AI_DIR / "items" / race / item
+    return ws.ai_dir() / "items" / race / item
 
 
 def _rgb(hexs):
@@ -258,10 +264,10 @@ def limner_intake(dry_run=False):
             continue
         save_item(gid, d)
         if d.get("kind") != "held":
-            for f in ZONES.glob(f"{src}.*.png"):
+            for f in zones_dir().glob(f"{src}.*.png"):
                 rest = f.name[len(src):]
-                if not rest.endswith(".sketch.png") and not (ZONES / (gid + rest)).exists():
-                    shutil.copyfile(f, ZONES / (gid + rest))
+                if not rest.endswith(".sketch.png") and not (zones_dir() / (gid + rest)).exists():
+                    shutil.copyfile(f, zones_dir() / (gid + rest))
     return {"added": added, "skipped": skipped, "defs": defs}
 
 
@@ -346,9 +352,9 @@ def gear_set_intake(dry_run=False):
 def _bake_zones(item_id, src, extra):
     """Painted zones of `src` (each view, each sex variant) plus the rules `extra`, saved as item_id's painted zones."""
     doc = spec(); s = doc["items"][src]
-    for f in sorted(ZONES.glob(f"{src}.*.png")):
+    for f in sorted(zones_dir().glob(f"{src}.*.png")):
         rest = f.name[len(src) + 1:-4].split(".")   # [view] or [sex, view]; skip sketches
-        if rest[-1] == "sketch" or (ZONES / f"{item_id}.{'.'.join(rest)}.png").exists():
+        if rest[-1] == "sketch" or (zones_dir() / f"{item_id}.{'.'.join(rest)}.png").exists():
             continue
         view, sex = rest[-1], (rest[0] if len(rest) == 2 else None)
         _, sp, parts = pf.base(f"human.{sex or 'male'}")
@@ -420,12 +426,16 @@ def zone_masks(sp, view, parts, zones):
     return out
 
 
-ZONES = config.specs_dir() / "item_zones"   # painted zones (Item Workshop zone editor), one rest-pose canvas mask (1152 px) per item and view
+def zones_dir() -> Path:
+    """specs/item_zones: painted zones (Item Workshop zone editor), one rest-pose canvas mask (1152 px) per item and
+    view."""
+    return config.specs_dir() / "item_zones"
+
 
 
 def mask_path(item_id, view, sex=None):
     """The painted zone of an item and view; with `sex`, that sex's own zone (a gender variant), if painted."""
-    return ZONES / (f"{item_id}.{sex}.{view}.png" if sex else f"{item_id}.{view}.png")
+    return zones_dir() / (f"{item_id}.{sex}.{view}.png" if sex else f"{item_id}.{view}.png")
 
 
 def _mask_file(item_id, view, sex=None):
@@ -436,7 +446,7 @@ def _mask_file(item_id, view, sex=None):
 def sketch_path(item_id, view, sex=None):
     """The detail sketch painted over an item's zone (RGBA, rest-pose canvas): material key colours and dark lines that
     are stamped onto the guide FLUX starts from (a belt, a trim, seams, a neckline)."""
-    return ZONES / (f"{item_id}.{sex}.{view}.sketch.png" if sex else f"{item_id}.{view}.sketch.png")
+    return zones_dir() / (f"{item_id}.{sex}.{view}.sketch.png" if sex else f"{item_id}.{view}.sketch.png")
 
 
 def _sketch_file(item_id, view, sex=None):
@@ -1192,7 +1202,7 @@ def builds(race: str) -> list:
 
 
 def _state(race):
-    return store.State(ws.AI_DIR / "items" / race / "state.json", {"approved": {}})
+    return store.State(ws.ai_dir() / "items" / race / "state.json", {"approved": {}})
 
 
 def load_state(race):
@@ -1230,7 +1240,7 @@ def candidates(race, item_id):
     out = []
     for d in store.folders(out_dir(race, item_id), finished=True):
         m = store.read_meta(d)
-        rel = lambda f: str((d / f).relative_to(ws.AI_DIR)).replace("\\", "/") if (d / f).exists() else None
+        rel = lambda f: str((d / f).relative_to(ws.ai_dir())).replace("\\", "/") if (d / f).exists() else None
         out.append({"id": d.name, "on": m.get("on"), "seed": m.get("seed"), "made": m.get("made"), "completed": m.get("completed"),
                     "edited": bool(m.get("edited")),
                     "paint": rel("paint_front.png") or rel("paint_held.png"), "paint_back": rel("paint_back.png"),
@@ -1250,7 +1260,7 @@ def state(race):
               for i, it in doc["items"].items()}
     return {"spec": doc, "approved": st["approved"], "builds": builds(race),
             "candidates": {i: candidates(race, i) for i in doc["items"]},
-            "masks": {i: sorted(f.name[len(i) + 1:-4] for f in ZONES.glob(f"{i}.*.png")) for i in doc["items"]} if ZONES.exists() else {},
+            "masks": {i: sorted(f.name[len(i) + 1:-4] for f in zones_dir().glob(f"{i}.*.png")) for i in doc["items"]} if zones_dir().exists() else {},
             "ramps": {m: list(pal.get(e["group"], {})) for m, e in doc["materials"].items()},
             "hair": ws.load_state()["builds"].get(f"{race}.unisex", {}).get("face_sets", {}).get("hair", []),
             "hair_ramps": list(pal.get("hair", {})), "grips": grip_state(race), "grip_spec": grip_spec(),
@@ -1263,7 +1273,6 @@ def state(race):
             "noart": {g: {"slot": r.get("slot"), "name": r.get("name") or g, "wanted": g in v["wanted"]}
                       for g, r in game.items() if g not in gi and r.get("slot")},
             "swatches": {grp: {n: _swatch(grp, n) for n in ramps} for grp, ramps in pal.items()}}
-
 
 
 def _swatch(group, name):
@@ -1343,7 +1352,7 @@ def save_prompts(d):
 
 
 def _write_spec(doc):
-    SPEC.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
+    spec_path().write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 
 def zone_doc(race, item_id, build, view):
@@ -1361,7 +1370,7 @@ def zone_doc(race, item_id, build, view):
 def save_zone(item_id, view, png, sex=None, sketch=None):
     """The painted zone and (when given) the detail sketch; an empty sketch removes its file."""
     import base64, io
-    ZONES.mkdir(parents=True, exist_ok=True)
+    zones_dir().mkdir(parents=True, exist_ok=True)
     dec = lambda u: Image.open(io.BytesIO(base64.b64decode(u.split(",", 1)[1])))
     m = np.asarray(dec(png).convert("L").resize((N, N), Image.NEAREST)) > 127
     Image.fromarray(np.where(m, 255, 0).astype(np.uint8)).convert("1").save(mask_path(item_id, view, sex))
@@ -1394,7 +1403,7 @@ def approve(race, item_id, cid, key="all", on=True):
 def archive(race, item_id, cid):
     """Move a candidate to archive/workshop/items/<race>/<item>/<id> (nothing is deleted); it stops being approved."""
     with _state(race).edit() as st:
-        store.archive(out_dir(race, item_id) / cid, ws.ARCHIVE / "workshop" / "items" / race / item_id / cid)
+        store.archive(out_dir(race, item_id) / cid, config.archive_dir() / "workshop" / "items" / race / item_id / cid)
         for k, v in list(st["approved"].get(item_id, {}).items()):
             if v == cid:
                 st["approved"][item_id].pop(k)
@@ -1469,7 +1478,7 @@ GRIP_ZOOM = 4.2     # the close-up box around a hand, in hand sizes (a hand is ~
 
 
 def grip_dir(race, build):
-    return ws.AI_DIR / "items" / race / "_grip" / build
+    return ws.ai_dir() / "items" / race / "_grip" / build
 
 
 def grip_spec():
@@ -1642,7 +1651,7 @@ def grip_state(race):
     for b in builds(race):
         cands = []
         for d in reversed(store.folders(grip_dir(race, b), finished=True)):
-            rel = lambda f: str((d / f).relative_to(ws.AI_DIR)).replace("\\", "/") if (d / f).exists() else None
+            rel = lambda f: str((d / f).relative_to(ws.ai_dir())).replace("\\", "/") if (d / f).exists() else None
             cands.append({"id": d.name, "sep": {v: rel(f"sep_{v}.png") for v in VIEWS},
                           "paint": {v: rel(f"paint_{v}.png") for v in VIEWS}, "stamp": int((d / "meta.json").stat().st_mtime)})
         out[b] = {"candidates": cands, "approved": st.get("grip", {}).get(b)}
@@ -1667,7 +1676,7 @@ def _meta(d):
 
 
 def _blank():
-    f = ws.AI_DIR / "items" / "_blank.png"
+    f = ws.ai_dir() / "items" / "_blank.png"
     if not f.exists():
         f.parent.mkdir(parents=True, exist_ok=True); Image.new("RGBA", (N, N)).save(f)
     return f

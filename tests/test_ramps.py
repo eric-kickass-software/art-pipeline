@@ -10,7 +10,6 @@ from hdart.palette import Palettes, ramp_from_base, rgb_hex
 
 ROOT = Path(__file__).resolve().parent.parent
 tmp = Path(tempfile.mkdtemp())
-shutil.copy(palette.PALETTES, tmp / "palettes.json"); palette.PALETTES = tmp / "palettes.json"
 
 # skin levels: a figure with 3 skin shades + grey cloth + dark outline on white
 a = np.full((64, 64, 3), 255, np.uint8)
@@ -34,7 +33,7 @@ doc = palette.save_ramp("skin", "test_tone", base="#825c43", tune={"saturation":
 e = doc["groups"]["skin"]["test_tone"]
 assert e["colors"][2] == "#333333" and e["tune"]["saturation"] == 1.4 and e["races"] == ["human"]
 assert "fair" in doc["groups"]["skin"] and "hair" in doc["groups"]
-assert Palettes(palette.PALETTES).ramps["skin.test_tone"].tolist()[0] == [17, 17, 17]   # the game export uses `colors`
+assert Palettes(palette.palettes_path()).ramps["skin.test_tone"].tolist()[0] == [17, 17, 17]   # the game export uses `colors`
 doc = palette.save_ramp("skin", "test_tone2", old_name="test_tone")
 assert "test_tone" not in doc["groups"]["skin"] and doc["groups"]["skin"]["test_tone2"]["colors"][0] == "#111111"
 try: palette.save_ramp("skin", "bad name"); raise SystemExit("no error")

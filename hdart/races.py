@@ -12,6 +12,7 @@ import base64
 import io
 import json
 import time
+from pathlib import Path
 
 import numpy as np
 from PIL import Image
@@ -25,7 +26,12 @@ BIG = 512   # the size (px) FLUX paints a mannequin at
 # A race = three A-pose mannequins: <race>.unisex (generated), <race>.male / <race>.female (edits of the unisex front that
 # keep head, face, pose, scale and feet), each with a back made as an edit of its front (perspective-correct 3/4 back).
 
-RACES = config.specs_dir() / "races.json"
+
+def races_path() -> Path:
+    """specs/races.json: the races and their mannequin prompts."""
+    return config.specs_dir() / "races.json"
+
+
 SEXES = ("unisex", "male", "female")
 # only the unisex has an A-pose mannequin (the Template's reference art); male and female are painted from the Template
 # (Paint step, hdart/puppet_paint.py). Their old mannequins were archived on 2026-10-24.
@@ -36,7 +42,7 @@ RACE_TAIL = ("Same pixel art style, same colours, same size and position in the 
 
 def races_doc() -> dict:
     """specs/races.json: races (traits, prompts, `from`, flags), sexes, pose, base body."""
-    return json.loads(RACES.read_text(encoding="utf-8"))
+    return json.loads(races_path().read_text(encoding="utf-8"))
 
 
 def save_races(doc: dict) -> dict:
@@ -46,7 +52,7 @@ def save_races(doc: dict) -> dict:
             raise ValueError(f"Race ids are lowercase letters, digits and _: {rid!r}")
         if r.get("from") and r["from"] not in doc["races"]:
             raise ValueError(f"{rid}: `from` race {r['from']!r} doesn't exist")
-    RACES.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
+    races_path().write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
     return doc
 
 
@@ -111,10 +117,10 @@ def gen_race(race, sex, facing, n=4, seed=1):
     prompt = race_prompt(race, sex, facing, doc)
     build = race_build(race, sex)
     b = s["builds"].setdefault(build, {"race": race, "sex": sex, "front": {}, "back": {}})
-    out = ws.CAND / race / sex
+    out = ws.candidates_dir() / race / sex
     out.mkdir(parents=True, exist_ok=True)
     cands = []
-    name = comfy.upload(ws.AI_DIR / src) if mode == "edit" else None
+    name = comfy.upload(ws.ai_dir() / src) if mode == "edit" else None
     for k in range(n):
         sd = seed + k
         if mode == "edit":
@@ -180,7 +186,7 @@ def ramp_preview(build):
         rel_ = b.get(f, {}).get("approved")
         if not rel_:
             continue
-        img = Image.open(ws.AI_DIR / rel_).convert("RGB")
+        img = Image.open(ws.ai_dir() / rel_).convert("RGB")
         lev, cent = levels.skin_levels(img, palette.palettes_doc().get("rampSize", 5))
         enc = np.zeros(lev.shape + (4,), np.uint8)
         enc[..., 0] = np.clip(lev, 0, 255)
@@ -207,10 +213,10 @@ def archive_base(build, facing, file=None):
             rels = {file}
         else:
             rels = {c for c in b.get("candidates", []) if c != approved}
-            rels |= {ws.rel(p) for p in (ws.CAND / build / "_base").glob(f"{facing}_*.png")} - {approved}
+            rels |= {ws.rel(p) for p in (ws.candidates_dir() / build / "_base").glob(f"{facing}_*.png")} - {approved}
         for r in rels:
-            if (ws.AI_DIR / r).exists():
-                store.archive(ws.AI_DIR / r, ws.ARCHIVE / "workshop" / r)
+            if (ws.ai_dir() / r).exists():
+                store.archive(ws.ai_dir() / r, config.archive_dir() / "workshop" / r)
         if b:
             b["candidates"] = [c for c in b.get("candidates", []) if c not in rels]
     return len(rels)

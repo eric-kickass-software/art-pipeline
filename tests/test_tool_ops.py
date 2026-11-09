@@ -85,8 +85,8 @@ refused(lambda: ops.call("studio.restart", {}), 409)
 
 # Data and specs are temp folders through HD_DATA / HD_SPECS
 from hdart import dungeon as d, limner as L
-assert str(d.SETS).startswith(str(fixture_specs.SPECS)) and str(d.DUN).startswith(str(data))
-assert str(L.SPEC).startswith(str(fixture_specs.SPECS))
+assert str(d.sets_dir()).startswith(str(fixture_specs.SPECS)) and str(d.dun_dir()).startswith(str(data))
+assert str(L.spec_path()).startswith(str(fixture_specs.SPECS))
 
 assert "crypt" in ops.call("dungeon.sets")
 spec = ops.call_alias(dungeon_api.LEGACY, "set/new", {"set": "crypt", "id": "zz", "biome": "test", "from": "crypt"})["spec"]

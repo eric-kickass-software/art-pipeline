@@ -878,7 +878,7 @@ def render(B, view, phase, clip="walk"):
 
 
 def out_dir(build):
-    return ws.AI_DIR / "puppet" / build
+    return ws.ai_dir() / "puppet" / build
 
 
 def template(build, frames=8):
@@ -892,7 +892,7 @@ def template(build, frames=8):
     hip_frac, views = {}, {}
     for v in ("back", "front"):  # the back first: the front takes its hip height from the back view's buttocks
         ovr = (b.get("puppet") or {}).get("joints", {}).get(v)
-        views[v] = build_view(Image.open(ws.AI_DIR / src[v]), v, hip_frac, ovr)
+        views[v] = build_view(Image.open(ws.ai_dir() / src[v]), v, hip_frac, ovr)
     meta = {"build": build, "from": src, "made": int(time.time()), "views": {}}
     for v in ("front", "back"):
         B = views[v]

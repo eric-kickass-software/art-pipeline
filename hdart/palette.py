@@ -8,7 +8,10 @@ import numpy as np
 
 from . import config
 
-PALETTES = config.specs_dir() / "palettes.json"
+
+def palettes_path() -> Path:
+    """specs/palettes.json: the colour ramps."""
+    return config.specs_dir() / "palettes.json"
 
 
 def hex_rgb(h):
@@ -88,7 +91,7 @@ class Palettes:
 
 def palettes_doc() -> dict:
     """specs/palettes.json: {"rampSize", "outline", "groups": {group: {name: ramp}}}."""
-    return json.loads(PALETTES.read_text(encoding="utf-8"))
+    return json.loads(palettes_path().read_text(encoding="utf-8"))
 
 
 def save_ramp(group: str, name: str, base: str | None = None, tune: dict | None = None, colors: list | None = None,
@@ -118,7 +121,7 @@ def save_ramp(group: str, name: str, base: str | None = None, tune: dict | None 
             e["races"] = races
         else:
             e.pop("races", None)
-    PALETTES.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
+    palettes_path().write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
     return doc
 
 
@@ -126,5 +129,5 @@ def delete_ramp(group: str, name: str) -> dict:
     """Remove one ramp from specs/palettes.json; returns the new document."""
     doc = palettes_doc()
     doc["groups"].get(group, {}).pop(name, None)
-    PALETTES.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
+    palettes_path().write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
     return doc

@@ -1,14 +1,13 @@
 """Race mannequin chain in hdart.workshop (ComfyUI stubbed). Run: uv run python tests/test_races.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
-import shutil, tempfile
+import os, shutil, tempfile
 from pathlib import Path
 from PIL import Image
 import hdart.workshop as ws
 import hdart.races as races
 
 tmp = Path(tempfile.mkdtemp())
-ws.AI_DIR = tmp / "ai"; ws.CAND = ws.AI_DIR / "candidates"; ws.STATE = ws.AI_DIR / "workshop.json"
-shutil.copy(races.RACES, tmp / "races.json"); races.RACES = tmp / "races.json"
+os.environ["HD_DATA"] = str(tmp)   # the data root (sprites/ai, archive, ...) is a temp folder
 calls = []
 class FakeComfy:
     @staticmethod
@@ -39,7 +38,7 @@ assert "front first" in err(races.gen_race, "human", "unisex", "back", 1)
 c = races.gen_race("human", "unisex", "front", 2, seed=1)
 assert len(c) == 2 and calls[-1][0] == "txt2img" and "A-pose" in calls[-1][1] and "rounded human ears" in calls[-1][1]
 assert "unclothed" in calls[-1][1] and "Adventurer" not in calls[-1][1] and "shorts" not in calls[-1][1]   # smooth base, no gear
-assert Image.open(ws.AI_DIR / c[0]).size == (races.BIG, races.BIG)
+assert Image.open(ws.ai_dir() / c[0]).size == (races.BIG, races.BIG)
 races.approve_race("human.unisex", "front", c[0])
 
 # back = edit of the approved front; male and female have no mannequin any more (painted from the Template)

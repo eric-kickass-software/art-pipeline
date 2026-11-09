@@ -1,11 +1,12 @@
 """Puppet Paint step + Parts editor backend (hdart.puppet_paint), on the fake ComfyUI: every pass returns its init
 image, so the flow runs without a GPU. Run: uv run python tests/test_puppet_paint.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
-import base64, io, json, shutil, tempfile
+import base64, io, json, os, shutil, tempfile
 from pathlib import Path
 import numpy as np
 from PIL import Image
 import hdart.workshop as ws
+from hdart import config
 import hdart.puppet_paint as ppt
 import hdart.puppet as pp
 import hdart.puppet_face as pf
@@ -13,7 +14,7 @@ import hdart.races as races
 N = pp.PX * ppt.S   # the rest-pose canvas
 
 tmp =Path(tempfile.mkdtemp())
-ws.AI_DIR = tmp / "ai"; ws.CAND = ws.AI_DIR / "candidates"; ws.STATE = ws.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "archive"
+os.environ["HD_DATA"] = str(tmp)   # the data root (sprites/ai, archive, ...) is a temp folder
 from hdart.fake_comfy import FakeComfy, default_respond, info
 calls = []
 
@@ -23,7 +24,6 @@ def respond(nodes, uploads):
 
 
 fake = FakeComfy(respond).start()
-shutil.copy(ppt.SPEC, tmp / "paint.json"); ppt.SPEC = tmp / "paint.json"
 body, clothes = ppt.prompts("human.female")
 assert "female" in body and ppt.spec()["sexes"]["female"]["extra"] in body and ppt.spec()["sexes"]["female"]["clothes"] in clothes
 
@@ -61,16 +61,15 @@ assert not (d / "progress.json").exists()   # progress is only there while it's 
 
 # a race with paint_from_mannequin: the approved unisex front sets the tint and is the front figure's reference
 assert ppt.mannequin("human") is None and ppt.skin_ramp("human") != ((40, 100, 40), (90, 200, 90))   # others untouched
-shutil.copy(races.RACES, tmp / "races.json"); races.RACES = tmp / "races.json"
 rd = races.races_doc(); rd["races"]["human"]["paint_from_mannequin"] = True; races.save_races(rd)
 assert ppt.mannequin("human") is None                          # nothing approved yet
-mf = ws.CAND / "human" / "unisex" / "front_m.png"; mf.parent.mkdir(parents=True, exist_ok=True)
+mf = ws.candidates_dir() / "human" / "unisex" / "front_m.png"; mf.parent.mkdir(parents=True, exist_ok=True)
 mi = np.full((64, 64, 3), 255, np.uint8); mi[8:32, 8:56] = (40, 100, 40); mi[32:56, 8:56] = (90, 200, 90); mi[30:34] = (10, 10, 10)
 Image.fromarray(mi).save(mf)
 with ws.edit_state() as s_:
     s_["builds"].setdefault("human.unisex", {"race": "human", "sex": "unisex", "front": {}, "back": {}})["front"]["approved"] = ws.rel(mf)
     s_["builds"]["human.unisex"]["back"]["approved"] = ws.rel(mf)
-assert ppt.mannequin("human") == ws.AI_DIR / ws.rel(mf) and ppt.skin_ramp("human") == ((40, 100, 40), (90, 200, 90))
+assert ppt.mannequin("human") == ws.ai_dir() / ws.rel(mf) and ppt.skin_ramp("human") == ((40, 100, 40), (90, 200, 90))
 assert ppt.composed("human.female")["front"]["figure"].endswith(ppt.spec()["mannequin_reference"])
 n0 = len(calls); pf.paint("human.female", n=1, seed=5)
 assert calls[n0][1], "front figure pass has the mannequin as reference"
@@ -158,6 +157,6 @@ except ValueError:
     pass
 c2 = pf.paint("human.female", n=1, seed=9)[0]
 ppt.archive("human.female", c2)
-assert not (ppt.out_dir("human.female") / c2).exists() and (ws.ARCHIVE / "workshop" / "paint" / "human.female" / c2).exists()
+assert not (ppt.out_dir("human.female") / c2).exists() and (config.archive_dir() / "workshop" / "paint" / "human.female" / c2).exists()
 fake.stop(); shutil.rmtree(tmp)
 print("ok")

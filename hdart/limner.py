@@ -22,7 +22,12 @@ from PIL import Image
 
 from . import config, contract, jobs, store
 
-SPEC = config.specs_dir() / "limner.json"
+
+def spec_path() -> Path:
+    """specs/limner.json: Limner styles, categories and entries."""
+    return config.specs_dir() / "limner.json"
+
+
 ICON_CATS = ("items", "gear", "classes", "statuses", "damageTypes", "skills", "ui")
 PORTRAIT_CATS = ("portraits", "monsters", "npcs")   # all export into Art/Portraits with one index.json
 CATS = ICON_CATS + PORTRAIT_CATS + ("tokens",)
@@ -32,7 +37,7 @@ ADD_PREFIX = {"items": "item.", "gear": "item.", "ui": "ui."}   # categories you
 
 
 def spec():
-    return store.read_json(SPEC)
+    return store.read_json(spec_path())
 
 
 def root():
@@ -464,10 +469,10 @@ def archive(cat, eid, cid):
 
 
 def _edit_spec(fn):
-    with store.lock(SPEC):
+    with store.lock(spec_path()):
         sp = spec()
         fn(sp)
-        store.write_json(SPEC, sp)
+        store.write_json(spec_path(), sp)
     return sp
 
 

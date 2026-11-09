@@ -63,6 +63,18 @@ def specs_dir():
     return Path(d) if d else ROOT / "specs"
 
 
+def archive_dir() -> Path:
+    """<data>/archive: where every tool's archive (the "removed" candidates, sets, spec history) goes."""
+    return data_dir() / "archive"
+
+
+def library_dir() -> Path:
+    """The Dungeon Forge's materials library (recipes/ and materials/ in git, cache/ downloads): HD_LIBRARY, else
+    <tool>/library."""
+    d = os.environ.get("HD_LIBRARY")
+    return Path(d) if d else ROOT / "library"
+
+
 def backups_dir():
     return Path(get()["paths"]["backups"])
 
