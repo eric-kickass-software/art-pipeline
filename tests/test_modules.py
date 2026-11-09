@@ -2,7 +2,6 @@
   - no private cross-module access: `other_module._name` or `from .other_module import _name` (a helper two modules
     need is public, typed and documented in a shared module: imageops, rig, levels, store, art_pack, ...)
   - no import cycles in the module import graph (function-local imports count too)
-  - the transition shims are imported by nothing (they only keep a Studio started before the rename working)
 Run: uv run python tests/test_modules.py"""
 import ast
 from pathlib import Path
@@ -10,7 +9,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "hdart"
 MODS = {p.stem: p for p in PKG.glob("*.py") if p.stem != "__init__"}
-SHIMS = {"ai_kit", "puppet_items"}   # delete with their files once the live Studio has restarted
 
 
 def imports_of(name, tree):
@@ -81,13 +79,6 @@ for v in sorted(graph):
     if v not in index:
         visit(v)
 assert not cycles, f"import cycles: {cycles}"
-
-# the shims are dead ends: nothing in hdart/ or tests/ imports them
-users = [n for n, e in graph.items() if e & SHIMS and n not in SHIMS]
-for t in sorted((ROOT / "tests").glob("*.py")):
-    if t.name != Path(__file__).name and any(f"hdart.{s}" in (src := t.read_text(encoding="utf-8")) or f"import {s}" in src for s in SHIMS):
-        users.append(t.name)
-assert not users, f"modules import a transition shim: {users}"
 
 # the scan sees the shared modules (a guard against a scan that silently finds nothing)
 assert {"imageops", "rig", "levels"} <= graph["puppet_face"] | graph["item_workshop"], graph["puppet_face"]

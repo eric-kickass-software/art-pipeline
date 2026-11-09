@@ -26,5 +26,4 @@ Script-style tests: each `test_*.py` is a plain script that asserts and prints `
   pages call mapped to an op, direct calls on temp data, and a throwaway Studio over HTTP (on a free port, temp
   `HD_DATA` / `HD_SPECS`, no GPU). `test_mcp.py` runs `hdart op` and the MCP server (`hdart mcp` over stdio, as
   Claude Code starts it) against a throwaway Studio with hand-made candidates; a failed generate stands in for jobs.
-- `test_modules.py` reads `hdart/` (AST): no private cross-module access, no import cycles, nothing imports the
-  transition shims.
+- `test_modules.py` reads `hdart/` (AST): no private cross-module access, no import cycles.

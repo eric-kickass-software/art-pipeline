@@ -80,8 +80,6 @@ Flat modules, each with a module docstring that says what it does. Read that fir
   takes a callback (`puppet_paint.paint(face_harvest=)`; the `paint` job is `puppet_face.paint`).
 - Some module docstrings are written into exported files (`item_export`, `unity_export`, `puppet_template` take a
   paragraph as `_doc`): change those paragraphs only on purpose.
-- `ai_kit.py` and `puppet_items.py` are transition shims for a Studio started before the rename (its reload lists name
-  them). Nothing may import them; delete both once the live Studio has restarted.
 
 ## Don't touch without a reason
 - `puppet.py`'s detection puppet is kept for reference (`tests/test_puppet.py`); the template is the rig.
