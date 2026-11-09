@@ -25,6 +25,10 @@ ops.param_docs("items.", {
     "n": "how many candidates",
     "seed": "the first seed (each further candidate adds 1)",
     "dry_run": "only report what would happen",
+    "on": "true to set, false to clear",
+    "part": "a template part name; omit for every part",
+    "unsaved": "piece settings not saved yet (hand, held_as, grip...), applied for this view only",
+    "ramps": "{material: ramp name} to colour the item with",
 })
 
 
@@ -100,7 +104,8 @@ def editor_walk(build: str, paint: str, view: str = "front", items: list | None 
     Args:
         paint: the Paint candidate id of the puppet
         items: [[item, candidate, {material: ramp}], ...] to wear
-        hair: {"id", "ramp"} of a hair layer; face: the same for a face
+        hair: {"id", "ramp"} of a hair layer
+        face: {"id", "ramp"} of a face layer
         skin: the skin ramp (default: as painted)
     """
     return _pi().editor_walk(race, build, paint, view, items or [], hair, face, skin)
@@ -121,6 +126,9 @@ def outfit(build: str, items: list | None = None, ramps: dict | None = None, hai
         items: the piece ids to wear
         ramps: {item: {material: ramp}}
         candidates: {item: candidate} to wear instead of the approved ones
+        hair: a hair id to wear
+        hair_ramp: its ramp
+        walk: also render the walk
         part: "rest" or "walk" for only that half
     """
     return _pi().outfit(race, build, items or [], ramps, hair, hair_ramp, walk, candidates, part)
@@ -142,7 +150,11 @@ def save_item(item: str, definition: dict, old_id: str | None = None, race: str 
 
 @ops.op("items.save_prompts")
 def save_prompts(prompts: dict, race: str = RACE) -> dict:
-    """Save the shared prompt wording of the Item Workshop (specs/items.json "prompts"). Returns the state."""
+    """Save the shared prompt wording of the Item Workshop (specs/items.json "prompts"). Returns the state.
+
+    Args:
+        prompts: {name: text}, the whole "prompts" block
+    """
     _pi().save_prompts(prompts)
     return state(race)
 
@@ -168,7 +180,13 @@ def reset_zone(item: str, view: str, sex: str | None = None) -> dict:
 @ops.op("items.save_grip_spec")
 def save_grip_spec(prompt: str | None = None, prompt_back: str | None = None, wrist: float | None = None,
                    race: str = RACE) -> dict:
-    """Save the grip hands' prompts and wrist angle (shared by every build). Returns the state."""
+    """Save the grip hands' prompts and wrist angle (shared by every build). Returns the state.
+
+    Args:
+        prompt: the front grip prompt
+        prompt_back: the back grip prompt
+        wrist: the wrist angle in degrees
+    """
     _pi().save_grip_spec(prompt, prompt_back, wrist)
     return state(race)
 
@@ -364,11 +382,6 @@ LEGACY = {
 }
 
 
-def legacy_call(action, body):
+def legacy_call(action: str, body: dict):
     """Run an old /api/ws/items/<action> request through its op (renamed arguments, extra keys ignored)."""
-    if action not in LEGACY:
-        raise ops.OpError(f"unknown items action {action!r}", 404)
-    name, renames, *fixed = LEGACY[action]
-    args = {renames.get(k, k): v for k, v in body.items()}
-    args.update(*fixed)
-    return ops.call(name, args, lenient=True)
+    return ops.call_alias(LEGACY, action, body, "items action")

@@ -102,10 +102,11 @@ Every export rewrites `Art/index.json` (all packs on disk); item and puppet expo
 `Art/channels.json`. Each pack folder is rebuilt whole. Formats: vault `Art - Unity Handoff.md`.
 
 **Scripted use (HTTP).** Ops (`hdart/ops.py`) are the typed, documented API: `GET /api/ops[?prefix=items.]` lists them
-with parameters, `POST /api/op/<name>` with a JSON object runs one (bad arguments → 400). The Item Workshop is on ops
-(`items.state`, `items.generate` → `{"job": id}`, `items.candidates`, `items.approve`, `items.export`, ...). The other
-tools still use the routes their pages call (`/api/ws/<action>`, `/api/dun/<action>`, `/api/lib/<action>`,
-`/api/limner/<action>`; see `hdart/studio.py`). Jobs: `GET /api/ws/jobs`.
+with parameters, `POST /api/op/<name>` with a JSON object runs one (bad arguments → 400), and read-only ones also run
+over `GET /api/op/<name>?arg=value`. Every tool is on ops: `items.*`, `character.*`, `dungeon.*`, `limner.*` (e.g.
+`dungeon.generate` → `{"job": id}`, `dungeon.review`, `dungeon.approve`, `dungeon.export`), and `jobs.*` (`jobs.list`,
+`jobs.wait`, `jobs.cancel`). Image ops return the PNG itself. The pages' own routes (`/api/ws/<action>`,
+`/api/dun/<action>`, `/api/lib/<action>`, `/api/limner/<action>`) are aliases of ops.
 
 ## Config, tests, backups
 - **`config.toml`** (git): ComfyUI URL and timeout, model names, the Blender exe, the **data root** (`paths.data`,

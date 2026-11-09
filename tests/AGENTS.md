@@ -21,5 +21,7 @@ Script-style tests: each `test_*.py` is a plain script that asserts and prints `
   attributes bound at import (`ak.AI_DIR`, `ws.STATE`, `ws.CAND`, `ws.ARCHIVE`, `pi.SPEC`, `d.SETS`, `d.DUN`,
   `L.SPEC`, ...). Never junction or copy Eric's data into the repo.
 - Exports go into a temp game project (`HD_PROJECT`), never the real Hearthdelve checkout.
-- New ops and new rules get a test here; `test_ops.py` checks every op is documented and every legacy route maps to
-  an op.
+- New ops and new rules get a test here. `test_ops.py` covers the registry and the Item Workshop's ops;
+  `test_tool_ops.py` the Dungeon, Limner, Character and jobs ops: every op and parameter documented, every route the
+  pages call mapped to an op, direct calls on temp data, and a throwaway Studio over HTTP (on a free port, temp
+  `HD_DATA` / `HD_SPECS`, no GPU).

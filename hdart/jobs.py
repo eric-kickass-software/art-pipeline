@@ -30,11 +30,16 @@ KEEP = 60   # finished jobs kept in the list (and the file)
 QUEUE = None   # the running Studio's queue (set by hdart.studio); ops add jobs to it through enqueue()
 
 
-def enqueue(kind, args, label):
-    """Add a job to the Studio's queue. Returns the job dict (its "id" is what ops hand back)."""
+def current() -> "Jobs":
+    """The running Studio's queue (RuntimeError when there is none: long work runs in the Studio)."""
     if QUEUE is None:
         raise RuntimeError("no job queue: long work runs in the Studio (uv run hdart studio)")
-    return QUEUE.add(kind, args, label)
+    return QUEUE
+
+
+def enqueue(kind: str, args: dict, label: str) -> dict:
+    """Add a job to the Studio's queue. Returns the job dict (its "id" is what ops hand back)."""
+    return current().add(kind, args, label)
 
 
 @dataclass

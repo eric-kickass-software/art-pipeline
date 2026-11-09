@@ -5,14 +5,18 @@ Flat modules, each with a module docstring that says what it does. Read that fir
 ## Entry points
 - `cli.py`: `hdart` commands (`studio`, `puppet-export`, `item-export`, `export [--check]`, `dungeon-export`,
   `dungeon-capture`, `backup`). Thin wrappers over the export and tool modules.
-- `studio.py`: the web server (`serve()`). Static pages from `studio/`; routes `/api/op/<name>` + `GET /api/ops` (ops),
-  `/api/ws/<action>` (`workshop_post`: Workshop, Paint, Face, Ramps, Template, and the Item Workshop's older routes
-  mapped onto ops), `/api/dun/*` (`dungeon_post` / `dungeon_get`), `/api/lib/*` (materials library), `/api/limner/*`
-  (`limner_post`), `GET /api/ws/jobs`. `JOB_MODULES` and `OP_MODULE_NAMES` are imported at start so the registries
-  are complete; `OP_MODULES` names each op prefix's reload group.
+- `studio.py`: the web server (`serve()`), routing only. Static pages from `studio/`; `GET /api/ops[?prefix=]`,
+  `POST /api/op/<name>` (JSON arguments), `GET /api/op/<name>?arg=` (read-only ops). The pages' older routes
+  (`/api/ws/*`, `/api/dun/*`, `/api/lib/*`, `/api/limner/*`) go through `ALIASES` to each api module's alias tables.
+  `JOB_MODULES` and `OP_MODULE_NAMES` are imported at start so the registries are complete; `OP_MODULES` names each
+  op prefix's reload group.
 - `ops.py`: the op registry (`@ops.op("items.approve")` on a typed, documented function; `ops.call()`,
-  `ops.describe()`). Only the Item Workshop is on ops so far (`items_api.py`; `items_api.LEGACY` maps old routes).
-  New tool actions should be ops.
+  `ops.call_query()` (GET), `ops.call_alias()` (old routes), `ops.describe()`, `ops.Blob` for image results,
+  `ops.http_error()` for the JSON error body). Every tool action is an op, in the tool's api module:
+  `items_api` (`items.*`), `character_api` (`character.*`: Template, Races, Paint, Face, Ramps, images),
+  `dungeon_api` (`dungeon.*`, incl. the materials library), `limner_api` (`limner.*`), `jobs_api` (`jobs.*`: list,
+  get, wait, cancel, cancel_label, clear, queue). Each has `LEGACY` (POST) / `GET_LEGACY` alias tables. New actions are
+  ops there; workflow (auto-queued backs, batch planning, job labels) lives in the api module, not the server.
 - `jobs.py`: the queue and `@jobs.kind(name, gpu=, reload=)`. Long work goes through `jobs.enqueue()`.
 - `watchdog.py`: `python -m hdart.watchdog` (started by overnight batches).
 
@@ -20,10 +24,10 @@ Flat modules, each with a module docstring that says what it does. Read that fir
 | Tool | Modules |
 |---|---|
 | shared core | `config` (settings, data root, specs dir, project profiles), `store` (state files, candidates, archive), `jobs`, `ops`, `locks`, `comfy` (ComfyUI client + workflow builders), `fake_comfy` (tests), `memo` (preview caches), `backup` |
-| Character Workshop | `workshop` (races, ramps, skin key, `workshop.json`), `puppet_template` (the rig), `puppet_paint` (Paint, Parts, AI fix), `puppet_face` (hair, faces), `mannequin_fit`, `puppet` (rig helpers + the old detection puppet), `levels`, `palette`, `ai_kit` (`ROOT`, `AI_DIR`, mask helpers) |
+| Character Workshop | `character_api` (the ops), `workshop` (races, ramps, skin key, `workshop.json`), `puppet_template` (the rig), `puppet_paint` (Paint, Parts, AI fix), `puppet_face` (hair, faces), `mannequin_fit`, `puppet` (rig helpers + the old detection puppet), `levels`, `palette`, `ai_kit` (`ROOT`, `AI_DIR`, mask helpers) |
 | Item Workshop | `items_api` (the ops), `puppet_items` (how: zones, keying, levels, split, hidden pass, grips), `item_export` |
-| Dungeon Forge | `dungeon` (3.3k lines: generation, geometry, preview, CRUD, export, capture), `iso`, `patterns`, `library`, `pixel` |
-| Limner | `limner` |
+| Dungeon Forge | `dungeon_api` (the ops), `dungeon` (3.3k lines: generation, geometry, preview, CRUD, export, capture), `iso`, `patterns`, `library`, `pixel` |
+| Limner | `limner_api` (the ops), `limner` |
 | Game side | `contract` (reads the project's `ArtContract/requirements.json` and content), `unity_export` (puppets), `item_export` |
 
 ## State files (under `config.data_dir()`)
@@ -41,6 +45,8 @@ Flat modules, each with a module docstring that says what it does. Read that fir
 - **State changes only inside the lock:** `with store.State(path).edit() as s:` (or `workshop.edit_state()`) from the
   read to the write; writes are atomic (temp + `os.replace`). A GPU job generates first and edits state after; never
   hold a lock while ComfyUI runs.
+- **Api modules import their tool per call** (`_dg()`, `_pi()`...), so a reloaded tool module is picked up. Data and
+  spec paths come from env (`HD_DATA`, `HD_SPECS`) in tests that start a Studio: a reload resets module attributes.
 - **Never reloaded:** `jobs`, `ops`, `locks` hold registries, the queue, locks and caches. The Studio reloads tool
   modules when their files change (`studio.fresh()`, each kind's `reload=`), so don't keep live state in a tool
   module's globals unless losing it on reload is fine. Known wart: `puppet_items.spec_override` is a module global

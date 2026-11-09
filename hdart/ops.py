@@ -10,19 +10,26 @@
         \"\"\"
 
 One declaration serves every surface:
-  - the Studio's HTTP API: `GET /api/ops` lists every op, `POST /api/op/<name>` with a JSON object of arguments calls one
+  - the Studio's HTTP API: `GET /api/ops` lists every op, `POST /api/op/<name>` with a JSON object of arguments calls
+    one, and `GET /api/op/<name>?arg=value` calls a read-only one (list/dict arguments as JSON text)
   - an MCP server and the CLI can be generated from the same list (describe())
+  - the pages' older routes, through alias tables (`call_alias()`), so the pages work unchanged
 
 Parameters come from the signature: the annotation gives the type (str, int, float, bool, list, dict, or `X | None`),
 a default makes the parameter optional, and the docstring's `Args:` block describes them (param_docs() describes the
-ones a tool's ops share). The first docstring line is
-the summary. `read_only=True` marks ops that change nothing (safe to call any time). An op that starts long work
+ones a tool's ops share). The docstring's first paragraph
+is the summary. `read_only=True` marks ops that change nothing (safe to call any time). An op that starts long work
 (generation) queues a job through `hdart.jobs.enqueue()` and returns `{"job": id}`; declare its kind with `queues=`.
+An op returns something JSON can hold, or a `Blob` (an image or other bytes, sent raw over HTTP).
+
+Errors: `OpError` (bad call: 400, unknown op or thing: 404, wrong method: 405). `http_error()` turns any exception
+into the JSON error body and status the Studio sends.
 
 Like hdart.jobs, this module is never reloaded (it holds the registry); reloading a tool module re-runs its decorators,
 so the registry always holds the fresh functions.
 """
 import inspect
+import json
 import re
 import types
 import typing
@@ -39,6 +46,14 @@ class OpError(ValueError):
     def __init__(self, message, status=400):
         super().__init__(message)
         self.status = status
+
+
+@dataclass(frozen=True)
+class Blob:
+    """Bytes an op returns instead of JSON (an image). `cache` is the HTTP Cache-Control value the Studio sends."""
+    data: bytes
+    content_type: str = "image/png"
+    cache: str = "no-store"
 
 
 @dataclass(frozen=True)
@@ -60,11 +75,13 @@ class Op:
     params: tuple
     read_only: bool
     queues: str | None  # the job kind it queues, if it starts long work
+    blob: bool          # returns a Blob (image bytes), not JSON
 
     def describe(self):
-        """A JSON-ready description: name, summary, doc, params (with a JSON schema type), read_only, queues."""
+        """A JSON-ready description: name, summary, doc, params (with a JSON schema type), read_only, queues, returns
+        ("json", or "blob" for image bytes)."""
         return {"name": self.name, "summary": self.summary, "doc": self.doc, "read_only": self.read_only,
-                "queues": self.queues,
+                "queues": self.queues, "returns": "blob" if self.blob else "json",
                 "params": [{"name": p.name, "type": TYPES.get(p.type, "any"), "required": p.required,
                             **({} if p.required else {"default": p.default}), "nullable": p.optional,
                             "doc": p.doc or _shared_doc(self.name, p.name)}
@@ -96,7 +113,7 @@ def describe(prefix=""):
     return [o.describe() for n, o in sorted(OPS.items()) if n.startswith(prefix)]
 
 
-def call(name, args=None, *, lenient=False):
+def call(name: str, args: dict | None = None, *, lenient: bool = False):
     """Validate and coerce `args` (a dict) against op `name`'s parameters, then run it. `lenient`: ignore arguments the
     op doesn't take (the old HTTP routes send extra keys) instead of refusing them."""
     o = get(name)
@@ -114,6 +131,57 @@ def call(name, args=None, *, lenient=False):
     return o.fn(**kwargs)
 
 
+def call_query(name: str, query: dict):
+    """Run a read-only op from URL query arguments ({name: text} or parse_qs lists): text is coerced to each
+    parameter's type, list/dict arguments are JSON. Ops that change things refuse GET (405)."""
+    o = get(name)
+    if not o.read_only:
+        raise OpError(f"{name} changes things: POST it (GET is for read-only ops)", 405)
+    types_ = {p.name: p.type for p in o.params}
+    args = {}
+    for k, v in query.items():
+        v = v[0] if isinstance(v, list) else v
+        if types_.get(k) in (list, dict):
+            try:
+                v = json.loads(v)
+            except ValueError:
+                raise OpError(f"{name}: {k} must be JSON ({TYPES[types_[k]]})") from None
+        args[k] = v
+    return call(name, args)
+
+
+def call_alias(table: dict, action: str, args: dict, what: str = "action", *, query: bool = False):
+    """Run an older page route through its op. `table`: {action: (op, {old name: op name}[, fixed args])} or
+    {action: function(args) -> result} for routes that don't map one to one. Extra keys are ignored (the pages send
+    more than an op takes). `query`: the args are URL query arguments (parse_qs lists allowed)."""
+    if action not in table:
+        raise OpError(f"unknown {what} {action!r}", 404)
+    entry = table[action]
+    if query:
+        args = {k: (v[0] if isinstance(v, list) else v) for k, v in args.items()}
+    if callable(entry):
+        return entry(args)
+    name, renames, *fixed = entry
+    args = {renames.get(k, k): v for k, v in args.items()}
+    for f in fixed:
+        args.update(f)
+    if query:   # list/dict arguments arrive as JSON text
+        for p in get(name).params:
+            if p.type in (list, dict) and isinstance(args.get(p.name), str):
+                args[p.name] = json.loads(args[p.name])
+    return call(name, args, lenient=True)
+
+
+def http_error(e: BaseException) -> tuple[int, dict]:
+    """(status, JSON body) for an exception raised by an op or route. The body is {"error": text, "type": name}:
+    OpError keeps its status and message; a missing thing (KeyError, FileNotFoundError) is 404, a bad value
+    (ValueError) 400, anything else 500. The text of a non-OpError is its repr, as the pages always showed it."""
+    if isinstance(e, OpError):
+        return e.status, {"error": str(e), "type": "OpError"}
+    status = 404 if isinstance(e, (KeyError, FileNotFoundError)) else 400 if isinstance(e, ValueError) else 500
+    return status, {"error": repr(e), "type": type(e).__name__}
+
+
 # ----------------------------------------------------------------------------- internals
 
 def _shared_doc(op_name, param):
@@ -123,7 +191,7 @@ def _shared_doc(op_name, param):
 def _build(name, fn, read_only, queues):
     doc = inspect.getdoc(fn) or ""
     if not doc:
-        raise TypeError(f"op {name}: {fn.__qualname__} needs a docstring (its first line is the op's summary)")
+        raise TypeError(f"op {name}: {fn.__qualname__} needs a docstring (its first paragraph is the op's summary)")
     arg_docs = _arg_docs(doc)
     hints = typing.get_type_hints(fn)
     params = []
@@ -133,9 +201,9 @@ def _build(name, fn, read_only, queues):
         base, optional = _unwrap(hints.get(p.name, object))
         params.append(Param(p.name, base, optional, p.default is p.empty, None if p.default is p.empty else p.default,
                             arg_docs.get(p.name, "")))
-    summary = doc.split("\n", 1)[0].strip()
+    summary = " ".join(re.split(r"\n\s*\n", doc, maxsplit=1)[0].split())
     body = re.split(r"\n\s*Args:\s*\n", doc, maxsplit=1)[0]
-    return Op(name, fn, summary, body.strip(), tuple(params), read_only, queues)
+    return Op(name, fn, summary, body.strip(), tuple(params), read_only, queues, hints.get("return") is Blob)
 
 
 def _arg_docs(doc):
@@ -167,6 +235,8 @@ def _coerce(name, p, v):
             return None
         raise OpError(f"{name}: {p.name} can't be null")
     t = p.type
+    if v == "" and t in (int, float) and (p.optional or (not p.required and p.default is None)):
+        return None   # an empty number field in a page form means "not set"
     try:
         if t is bool:
             if isinstance(v, str):

@@ -3,31 +3,61 @@
     uv run hdart studio            -> http://127.0.0.1:4321 (opens the Character Workshop)
 
 Pages (studio/*.html): /workshop (Character Workshop), /items (Item Workshop), /editor (Workshop Editor; all three are
-workshop.html), /dungeon (Dungeon Forge), /limner (Limner). Each tool's HTTP actions are routed below to its module;
-long work (generation, renders, Unity captures) goes through the job queue (hdart/jobs.py).
+workshop.html), /dungeon (Dungeon Forge), /limner (Limner).
+
+Every action is an op (hdart/ops.py), declared in the tool's api module (`<tool>_api.py`):
+  GET  /api/ops[?prefix=dungeon.]     every op: name, summary, doc, typed params
+  POST /api/op/<name>                 call one with a JSON object of arguments
+  GET  /api/op/<name>?arg=value       call a read-only one
+The pages' older routes (/api/ws/*, /api/dun/*, /api/lib/*, /api/limner/*) are aliases of ops, through each api
+module's alias tables (ALIASES below). Long work (generation, renders, Unity captures) goes through the job queue
+(hdart/jobs.py, ops jobs.*). This module only routes and serves; tool logic lives in the tools.
 """
-import io
+import importlib
 import json
+import os
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from PIL import Image
-
 PAGES = Path(__file__).resolve().parent.parent / "studio"
 PAGE_FILES = {"/workshop": "workshop.html", "/items": "workshop.html", "/editor": "workshop.html",
               "/dungeon": "dungeon.html", "/limner": "limner.html"}
 
-
 # Every module that registers Studio job kinds (hdart.jobs.kind); imported at start so the registry is complete.
 JOB_MODULES = ("dungeon", "library", "workshop", "puppet", "puppet_template", "puppet_paint", "puppet_face", "puppet_items", "limner")
-OP_MODULE_NAMES = ("items_api",)   # modules that declare ops (hdart.ops.op); imported at start too
+# Every module that declares ops (hdart.ops.op); imported at start too.
+OP_MODULE_NAMES = ("items_api", "character_api", "dungeon_api", "limner_api", "jobs_api")
 BASE_RELOAD = ("comfy", "ai_kit", "workshop", "dungeon")   # reloaded before every job (plus each kind's own list)
+
+# Ops per tool: the modules to reload (in order) before a call when their files changed, so code edits apply without
+# a restart. "config" is reloaded on every call of that tool (cheap; picks up config.toml edits).
+OP_MODULES = {
+    "items.": ("config", "puppet", "puppet_template", "puppet_paint", "puppet_face", "puppet_items", "contract",
+               "unity_export", "item_export", "items_api"),
+    "character.": ("comfy", "ai_kit", "workshop", "puppet", "puppet_template", "puppet_paint", "puppet_face",
+                   "character_api"),
+    "dungeon.": ("patterns", "library", "dungeon", "dungeon_api"),
+    "limner.": ("limner", "limner_api"),
+    "jobs.": ("jobs_api",),
+}
+
+# The pages' older routes: URL prefix -> [(op prefix, api module, POST table, GET table)]. The rest of the path is
+# the alias; the first module whose table has it serves the request (ops.call_alias).
+ALIASES = {
+    "/api/ws/items/": [("items.", "items_api", "LEGACY", None)],
+    "/api/ws/": [("jobs.", "jobs_api", "LEGACY", "GET_LEGACY"), ("character.", "character_api", "LEGACY", "GET_LEGACY")],
+    "/api/dun/": [("dungeon.", "dungeon_api", "LEGACY", "GET_LEGACY")],
+    "/api/lib/": [("dungeon.", "dungeon_api", "LIB_LEGACY", "LIB_GET_LEGACY")],
+    "/api/limner/": [("limner.", "limner_api", "LEGACY", "GET_LEGACY")],
+}
+
+JOBS = None
 
 
 def make_jobs():
-    import importlib
+    """Import every job and op module (complete registries) and start the job queue."""
     from . import config, jobs
     for name in JOB_MODULES + OP_MODULE_NAMES:
         importlib.import_module(f"hdart.{name}")
@@ -35,8 +65,7 @@ def make_jobs():
     return jobs.QUEUE
 
 
-JOBS = None
-
+# ----------------------------------------------------------------------------- reloads
 
 _SRC = {}   # module name -> source mtime when fresh() last saw it
 
@@ -44,7 +73,6 @@ _SRC = {}   # module name -> source mtime when fresh() last saw it
 def fresh(*mods):
     """Reload `mods` (in order) when any of their source files changed since the last check, so code edits apply without
     a Studio restart while the modules' in-memory caches (painted puppet, item layers) survive the requests in between."""
-    import importlib, os
     changed = False
     for m in mods:
         t = os.stat(m.__file__).st_mtime_ns
@@ -55,437 +83,79 @@ def fresh(*mods):
             importlib.reload(m)
 
 
-# Ops (hdart/ops.py) per tool: the modules to reload (in order) before a call, so code edits apply without a restart.
-OP_MODULES = {
-    "items.": ("config", "puppet", "puppet_template", "puppet_paint", "puppet_face", "puppet_items", "contract",
-               "unity_export", "item_export", "items_api"),
-}
-
-
-def fresh_ops(name):
+def fresh_ops(name: str):
     """Reload the modules behind op `name` (or a "<tool>." prefix) when their files changed."""
-    import importlib
     mods = next((m for prefix, m in OP_MODULES.items() if name.startswith(prefix)), ())
     if "config" in mods:
-        importlib.reload(importlib.import_module("hdart.config"))   # cheap; picks up config.toml edits
+        importlib.reload(importlib.import_module("hdart.config"))
     fresh(*(importlib.import_module(f"hdart.{m}") for m in mods if m != "config"))
 
 
-def ops_error(message):
-    from . import ops
-    return ops.OpError(message)
+# ----------------------------------------------------------------------------- dispatch
 
-
-def op_call(name, args):
+def op_call(name: str, args: dict):
     """POST /api/op/<name>: run one op with a JSON object of arguments (strict: unknown arguments are refused)."""
     from . import ops
+    if not isinstance(args, dict):
+        raise ops.OpError("the body must be a JSON object of arguments")
     fresh_ops(name)
     return ops.call(name, args)
 
 
-def workshop_post(action, b):
-    """Workshop actions (see hdart/workshop.py). Long ones (generation) block until ComfyUI is done."""
-    from . import ai_kit, comfy, workshop as ws
-    fresh(comfy, ai_kit, ws)
-    if action == "puppet/joints":
-        from . import puppet
-        fresh(puppet)
-        return puppet.set_joints(b["build"], b["view"], b.get("joints"))
-    if action == "puppet/template":
-        from . import puppet
-        return json.loads((puppet.out_dir(b["build"]) / "template.json").read_text(encoding="utf-8"))
-    if action == "puppet/approve":
-        from . import puppet
-        fresh(puppet)
-        return puppet.approve(b["build"], b.get("on", True))
-    if action.startswith("face/"):   # Face tab: racial hair and faces
-        from . import puppet, puppet_template, puppet_paint, puppet_face as pf
-        fresh(puppet, puppet_template, puppet_paint, pf)
-        if action == "face/state":
-            return pf.state(b["race"])
-        if action == "face/spec":
-            pf.save_spec(b["spec"])
-            return pf.state(b["race"])
-        if action == "face/set":
-            return pf.set_member(b["race"], b["kind"], b["id"], b.get("on", True))
-        if action == "face/archive":
-            return pf.archive(b["race"], b["kind"], b["id"])
-        if action == "face/layer_doc":   # Parts editor: edit a hair / face layer
-            return pf.layer_doc(b["race"], b["kind"], b["id"])
-        if action == "face/layer_save":
-            return pf.save_layer(b["race"], b["kind"], b["id"], b["view"], b["png"])
-        if action == "face/layer_revert":
-            return pf.revert_layer(b["race"], b["kind"], b["id"])
-        if action == "face/bands_save":   # Workshop Editor: hand-edited hair bands
-            return pf.save_bands(b["race"], b["kind"], b["id"], b["view"], b["png"])
-        if action == "face/bands_reset":
-            return pf.reset_bands(b["race"], b["kind"], b["id"], b.get("view"))
-        if action == "face/ramp_preview":   # Ramps tab: the painted puppet wearing the race's hair + face, three level maps
-            return pf.ramp_preview(b["build"])
-        if action == "face/preview":   # previews with another hair / eye ramp (data URLs)
-            return pf.previews(b["race"], b["kind"], b["id"], b.get("ramp"), save=False)
-        raise ValueError(f"unknown action {action}")
-    if action.startswith("items/"):   # Item Workshop: the page's older routes, mapped onto its ops (hdart/items_api.py)
-        from . import items_api
-        fresh_ops("items.")
-        return items_api.legacy_call(action[6:], b)
-    if action.startswith("paint/"):   # puppet Paint step (Races) and Parts editor
-        from . import puppet, puppet_template, puppet_paint as ppt
-        fresh(puppet, puppet_template, ppt)
-        if action == "paint/state":
-            return ppt.state(b["build"])
-        if action == "paint/spec":   # the paint prompts (+ the composed ones of a build)
-            if b.get("spec"):
-                ppt.save_spec(b["spec"])
-            out = {"spec": ppt.spec()}
-            if b.get("build"):
-                out["composed"] = ppt.composed(b["build"])
-            return out
-        if action == "paint/ramp_preview":
-            return ppt.ramp_preview(b["build"])
-        if action == "paint/approve":
-            return ppt.approve(b["build"], b["id"], b.get("on", True))
-        if action == "paint/archive":
-            return ppt.archive(b["build"], b["id"])
-        if action == "paint/parts":
-            return ppt.parts_doc(b["build"], b["id"])
-        if action == "paint/save":
-            out = ppt.save_parts(b["build"], b["id"], b["view"], b["parts"])
-            JOBS.add("paint_preview", {"build": b["build"], "id": b["id"]}, f"{b['build']} · paint {b['id']} · preview")
-            return out
-        if action == "paint/revert":
-            return ppt.revert_parts(b["build"], b["id"])
-        if action == "paint/bands_save":   # Parts editor, Bands: hand-edited skin levels
-            return ppt.save_bands(b["build"], b["id"], b["view"], b["bands"])
-        if action == "paint/bands_reset":   # redo bands from the paint: one part, or all (new skin key)
-            return ppt.reset_bands(b["build"], b["id"], b.get("view"), b.get("part"))
-        raise ValueError(f"unknown action {action}")
-    if action in ("tpl/state", "tpl/save"):   # clean puppet template editor
-        from . import puppet, puppet_template
-        fresh(puppet, puppet_template)
-        if action == "tpl/save":
-            puppet_template.save(b["spec"])
-            if b.get("render"):
-                JOBS.add("tpl", {}, "template · render preview")
-        return puppet_template.state()
-    if action == "race/state":
-        return ws.race_state(b["race"])
-    if action == "race/spec":
-        return ws.save_races(b["spec"])
-    if action == "race/approve":
-        out = ws.approve_race(b["build"], b["facing"], b["file"])
-        if b["facing"] == "front" and b.get("auto_back", True):  # queue the matching back view right away
-            race, sex = b["build"].split(".", 1)
-            JOBS.add("race", {"race": race, "sex": sex, "facing": "back", "n": b.get("n", 3), "seed": 11},
-                     f"{race} · {sex} · back")
-        return out
-    if action == "ramp/preview":
-        return ws.ramp_preview(b["build"])
-    if action == "ramp/palettes":
-        return ws.palettes_doc()
-    if action == "ramp/save":
-        return ws.save_ramp(b["group"], b["name"], b.get("base"), b.get("tune"), b.get("colors"), b.get("races"),
-                            b.get("old_name"))
-    if action == "ramp/delete":
-        return ws.delete_ramp(b["group"], b["name"])
-    if action == "base/archive":   # Race tab: archive a race mannequin candidate
-        return {"archived": ws.archive_base(b["build"], b["facing"], b.get("file"))}
-    if action == "jobs":
-        added = [JOBS.add(j["kind"], j, j.get("label", j["kind"]))["id"] for j in b["jobs"]]
-        return {"added": added}
-    if action == "jobs/clear":
-        JOBS.clear_done()
-        return {"ok": True}
-    if action == "jobs/cancel":
-        return {"status": JOBS.cancel(int(b["id"]))}
-    raise ValueError(f"unknown action {action}")
+def op_query(name: str, query: dict):
+    """GET /api/op/<name>?...: run a read-only op from URL query arguments."""
+    from . import ops
+    fresh_ops(name)
+    return ops.call_query(name, query)
 
 
-def dungeon_post(action, b):
-    """Studio > Dungeon actions (hdart/dungeon.py). Generation and Unity capture go through the job queue."""
-    from . import dungeon as dg
-    import importlib
-    importlib.reload(dg)
-    name = b.get("set")
-    if action == "style":
-        return {"style": dg.save_style(b.get("groups"), b.get("prop_view"), b.get("prop_framing"), b.get("prop_medium"))}
-    if action == "set/new":
-        return {"spec": dg.new_set(b["id"], b.get("name"), b.get("biome", ""), b.get("from", "crypt"))}
-    if action == "set/update":
-        return {"spec": dg.update_set(name, b["fields"])}
-    if action == "piece/save":
-        return {"spec": dg.upsert_piece(name, b["piece"], b.get("old_id"))}
-    if action == "piece/delete":
-        return {"spec": dg.delete_piece(name, b["piece"])}
-    if action == "generate":
-        job = JOBS.add("dun", b, f"{name} · {b['piece']} ×{b.get('n', 3)}{' draft' if b.get('draft') else ''}")
-        return {"job": job["id"]}
-    if action == "finalize":  # a full master from a draft (same composition)
-        job = JOBS.add("dun_finalize", b, f"{name} · {b['piece']} finalize draft")
-        return {"job": job["id"]}
-    if action == "approve":
-        return {"piece": dg.approve(name, b["piece"], b["rel"], bool(b.get("on", True)))}
-    if action == "discard":
-        return {"piece": dg.discard(name, b["piece"], b["rel"])}
-    if action == "star":
-        return {"piece": dg.star(name, b["piece"], b["rel"], bool(b.get("on", True)))}
-    if action == "promote":
-        return {"piece": dg.promote(name, b["piece"], b["rel"])}
-    if action == "edit":
-        job = JOBS.add("dun_edit", b, f"{name} · {b['piece']} edit: {b.get('prompt', '')[:30]}")
-        return {"job": job["id"]}
-    if action == "even":  # a master with stone-sized tone differences evened out (instant, no FLUX)
-        rel = dg.even_master(name, b["piece"], b["rel"], float(b.get("strength", dg.EVEN_TONE)))
-        return {"rel": rel, "piece": dg.state(name)["pieces"].get(b["piece"])}
-    if action == "preview/refresh":  # force: forget cached sprites and colour references
-        dg.clear_preview_caches()
-        return {"ok": True}
-    if action == "rescale":
-        label = f"fit courses ({b.get('mode', 'keep')})" if b.get("fit") else f"×{b['fx']} wide ×{b['fy']} tall" if "fx" in b else f"×{b['factor']}"
-        job = JOBS.add("dun_rescale", b, f"{name} · {b['piece']} {label}")
-        return {"job": job["id"]}
-    if action == "trial":
-        job = JOBS.add("dun_trial", b, f"{name} · {b['piece']} trial: {b.get('variation', '')[:30]}")
-        return {"job": job["id"]}
-    if action == "family/material":  # use a library material on a family (template / palette / words)
-        return {"spec": dg.apply_material(name, b["piece"], b["material"], b.get("use", ["template", "words"]),
-                                          float(b.get("strength", 0.65)))}
-    if action == "recipe/save":  # families (and the sheet) as a reusable recipe
-        return {"recipe": dg.save_recipe(name, b["pieces"], b["title"], bool(b.get("with_sheet", True)), b.get("notes", ""))}
-    if action == "recipe/apply":  # new families from a recipe
-        return {"pieces": dg.apply_recipe(name, b["recipe"], b.get("use_sheet", True))}
-    if action == "family/fill":  # queue the family's gaps only (variation x size cells, doors) from the active master
-        jobs = dg.fill_jobs(name, b["piece"], int(b.get("n", 1)))
-        ids = [JOBS.add("dun", j, f"{name} · {j['piece']} · {j['variation']} (fill)")["id"] for j in jobs]
-        return {"jobs": ids}
-    if action == "family/build":  # wall families: project the elevations onto the wall pieces
-        job = JOBS.add("dun_build", b, f"{name} · {b['piece']} build walls")
-        return {"job": job["id"]}
-    if action == "family/generate":  # variations x sizes x n (doors: the door rows)
-        jobs = dg.variant_jobs(name, b["piece"], b.get("variations"), b.get("sizes"), int(b.get("n", 1)), bool(b.get("doors")))
-        ids = [JOBS.add("dun", j, f"{name} · {j['piece']} · {j['variation']}")["id"] for j in jobs]
-        return {"jobs": ids, "spec": dg.load_set(name)}
-    if action == "archive_unapproved":
-        ps, n = dg.archive_unapproved(name, b["piece"])
-        return {"piece": ps, "count": n}
-    if action == "piece/restore":
-        return {"spec": dg.restore_piece(name, b["piece"])}
-    if action == "orphan/archive":
-        dg.archive_orphan(name, b["piece"])
-        return {"ok": True}
-    if action == "sheet/update":  # set material sheet fields; linked family templates follow
-        return {"spec": dg.update_sheet(name, b["fields"])}
-    if action == "sheet/from_floor":  # fill the sheet from a floor family's master and template, link it
-        return {"spec": dg.sheet_from_floor(name, b["piece"])}
-    if action == "family/link":  # link / unlink a family's template to the sheet
-        with dg.LOCK:
-            spec = dg.load_set(name)
-            return {"spec": dg.upsert_piece(name, dg.link_family(spec, dg.piece_of(spec, b["piece"]), bool(b.get("on", True))))}
-    if action == "family/matching_wall":  # a wall family that goes with this floor family
-        return {"piece": dg.matching_wall_family(name, b["piece"], b.get("slug"))}
-    if action == "family/archive":  # delete a family: pieces out of the spec, images to archive/families/
-        return {"path": str(dg.archive_family(name, b["piece"]))}
-    if action == "set/archive":
-        return {"path": str(dg.archive_set(name)), "sets": dg.list_sets()}
-    if action == "export":
-        return {"path": str(dg.export(name))}
-    if action == "capture":
-        job = JOBS.add("dun_capture", b, f"{name} · Prototype V capture")
-        return {"job": job["id"]}
-    raise ValueError(f"unknown action {action}")
+def alias_call(path: str, args: dict, get: bool = False):
+    """An older page route (POST with a JSON body, or GET with a query) -> its op. None if no route prefix matches."""
+    from . import ops
+    prefix = max((p for p in ALIASES if path.startswith(p)), key=len, default=None)
+    if prefix is None:
+        return None
+    action = path[len(prefix):]
+    for op_prefix, module, post_table, get_table in ALIASES[prefix]:
+        table_name = get_table if get else post_table
+        if not table_name:
+            continue
+        fresh_ops(op_prefix)
+        table = getattr(importlib.import_module(f"hdart.{module}"), table_name)
+        if action in table:
+            return ops.call_alias(table, action, args, query=get)
+    raise ops.OpError(f"unknown route {'GET' if get else 'POST'} {path}", 404)
 
 
-def library_get(path, q):
-    """Materials library (hdart/library.py): list, search the CC0 libraries, cached maps."""
-    from . import library
-    g = lambda k, d=None: q.get(k, [d])[0]
-    if path == "list":
-        return "application/json", json.dumps(library.list_materials()).encode()
-    if path == "search":
-        return "application/json", json.dumps(library.search(g("q", ""), g("src", "all"))).encode()
-    if path == "img":  # a material's colour map (thumb = 256 px)
-        im = Image.open(library.image_path(g("id"), g("kind", "color"))).convert("RGB")
-        if g("size"):
-            im = im.resize((int(g("size")), int(g("size"))))
-        buf = io.BytesIO()
-        im.save(buf, "PNG")
-        return "image/png", buf.getvalue()
-    raise ValueError(f"unknown library path {path}")
-
-
-def library_post(action, b):
-    from . import library
-    if action == "import":  # downloads: through the job queue
-        job = JOBS.add("lib_import", b, f"library · import {b['source']} {b['asset']}")
-        return {"job": job["id"]}
-    if action == "save":
-        return {"material": library.save(b["material"])}
-    raise ValueError(f"unknown library action {action}")
-
-
-def dungeon_get(path, q):
-    """-> (content type, bytes) for the Dungeon page's images and state."""
-    from . import dungeon as dg
-    g = lambda k, d=None: q.get(k, [d])[0]
-    if path in ("state", "room"):  # pick up dungeon.py edits without restarting
-        import importlib
-        importlib.reload(dg)
-    name = g("set", "crypt")
-    if path == "state":
-        spec = dg.load_set(name)
-        return "application/json", json.dumps({"sets": dg.list_sets(), "spec": spec, "state": dg.state(name),
-                                               "orphans": dg.orphans(name),
-                                               "sheet": dg.sheet(spec),
-                                               "output_tile": dg.output_tile(spec), "pixel_steps": dg.pixel_steps(spec),
-                                               "families": {p["id"]: dg.family_info(name, spec, p)
-                                                            for p in spec["pieces"] if p.get("method") in ("master", "wall_master")},
-                                               "style": dg.style(), "set_style": dg.set_style(spec)["groups"]}).encode()
-    if path == "sets":
-        return "application/json", json.dumps(dg.list_sets()).encode()
-    if path == "room_layout":  # live preview of a room: floor (a family's board) + joined walls and doors
-        spec = dg.load_set(name)
-        fb = None
-        if g("floor"):
-            fp = next((p for p in spec["pieces"] if p["id"] == g("floor")), None)
-            fb = fp.get("board", fp["id"]) if fp else None
-        inc = dg.blockout_include(name, g("floor") or None, g("wall") or None) if g("blockout") == "1" else None
-        lay = dg.room_preview(name, dg.output_tile(spec), 1, inc, dg.room_grid(int(g("w", 14)), int(g("h", 10))), fb, True)
-        return "application/json", json.dumps({**lay, "rev": dg.preview_rev(name, spec)}).encode()
-    if path == "template":  # a family's layout template on its own
-        return "image/png", dg.png_bytes(dg.template_preview(name, g("piece")))
-    if path == "patterns":  # the pattern list with default params, for the template editor
-        from . import patterns
-        return "application/json", json.dumps(patterns.PATTERNS).encode()
-    if path == "family_palette":  # family board: colour drift per image
-        return "application/json", json.dumps(dg.family_palette(name, g("piece"))).encode()
-    if path == "recipes":
-        return "application/json", json.dumps(dg.list_recipes()).encode()
-    if path == "review":  # family candidates waiting for a decision
-        return "application/json", json.dumps(dg.review_list(name, g("piece"))).encode()
-    if path == "family_layout":  # live preview: which sprite goes where
-        lay = dg.family_layout(name, g("piece"), int(g("seed", 0)), int(g("w", 16)), int(g("h", 12)))
-        return "application/json", json.dumps({**lay, "rev": dg.preview_rev(name, dg.load_set(name))}).encode()
-    if path == "elev_measure":  # wall master: courses in the field between the kept cap and base
-        spec = dg.load_set(name)
-        fam = dg.wall_family_settings(dg.piece_of(spec, g("piece")), spec)
-        from PIL import Image
-        return "application/json", json.dumps(dg.measure_elevation(Image.open(dg.candidate_path(name, g("rel"))), fam["height"],
-                                                                   float(g("top", dg.KEEP_TOP)), float(g("bottom", dg.KEEP_BOTTOM)))).encode()
-    if path == "elev_joints":  # wall master: horizontal joints (units from the top) + suggested keep bands
-        spec = dg.load_set(name)
-        fam = dg.wall_family_settings(dg.piece_of(spec, g("piece")), spec)
-        from PIL import Image
-        return "application/json", json.dumps(dg.elevation_joints(Image.open(dg.candidate_path(name, g("rel"))), fam["height"])).encode()
-    if path in ("elev_fit", "elev_fit_info"):  # fit courses preview (image repeated sideways) / its stretch numbers
-        spec = dg.load_set(name)
-        fam = dg.wall_family_settings(dg.piece_of(spec, g("piece")), spec)
-        from PIL import Image
-        img, info = dg.fit_courses(Image.open(dg.candidate_path(name, g("rel"))), fam["height"], float(g("top", 0)),
-                                   float(g("bottom", 0)), g("mode", "keep"))
-        if path == "elev_fit_info":
-            return "application/json", json.dumps(info).encode()
-        import numpy as np
-        return "image/png", dg.png_bytes(Image.fromarray(np.tile(np.asarray(img), (1, 2, 1))))
-    if path == "elev_bands":  # wall master repeated sideways with the kept cap and base tinted
-        spec = dg.load_set(name)
-        fam = dg.wall_family_settings(dg.piece_of(spec, g("piece")), spec)
-        return "image/png", dg.png_bytes(dg.elevation_bands(name, g("rel"), fam["height"], float(g("top", dg.KEEP_TOP)),
-                                                            float(g("bottom", dg.KEEP_BOTTOM))))
-    if path == "cell":  # one cut sprite (cached)
-        return "image/png", dg.cell_png(name, g("piece"), g("rel"), g("suf", ""))
-    if path == "family":  # planner-laid floor from a family (iso or top-down, optional block outlines)
-        return "image/png", dg.png_bytes(dg.family_preview(name, g("piece"), int(g("seed", 0)), g("outline") == "1",
-                                                           g("view", "iso")))
-    if path == "seam":  # master / repaint candidate among master tiles
-        return "image/png", dg.png_bytes(dg.seam_preview(name, g("piece"), g("rel")))
-    if path == "img":  # raw 8x candidate
-        return "image/png", dg.candidate_path(name, g("rel")).read_bytes()
-    if path == "native":
-        im = dg.native(name, g("piece"), g("rel"), int(g("tile", 0)) or None)
-        return "image/png", dg.png_bytes(im, int(g("scale", 1)))
-    if path == "room":
-        inc = {g("piece"): g("rel")} if g("piece") and g("rel") else None
-        im = dg.room_preview(name, int(g("tile", 0)) or None, int(g("scale", 2)), inc)
-        return "image/png", dg.png_bytes(im)
-    if path == "capture":
-        f = (dg.CAPTURES / g("f")).resolve()
-        if dg.CAPTURES.resolve() not in f.parents or f.suffix != ".png":
-            raise ValueError("not a capture")
-        return "image/png", f.read_bytes()
-    if path == "captures":
-        return "application/json", json.dumps(sorted(p.name for p in dg.CAPTURES.glob("v0*.png"))).encode()
-    raise ValueError(f"unknown {path}")
-
-
-def limner_post(action, b):
-    """Studio > Limner actions (hdart/limner.py). Generation goes through the job queue, one job per entry."""
-    from . import limner as lm
-    fresh(lm)
-    cat = b.get("cat")
-    if action == "generate":   # {cat, ids: [...], n, seed?, style?}
-        ids = []
-        for eid in b["ids"]:
-            a = {"cat": cat, "id": eid, "n": int(b.get("n", 3)), "seed": b.get("seed"), "style": b.get("style")}
-            ids.append(JOBS.add("limner_gen", a, f"Limner · {cat} · {eid} ×{a['n']}")["id"])
-        return {"jobs": ids}
-    if action == "vary":
-        a = {"cat": cat, "id": b["id"], "cid": b["cid"], "n": int(b.get("n", 3)), "denoise": float(b.get("denoise", 0.45))}
-        return {"jobs": [JOBS.add("limner_vary", a, f"Limner · {cat} · {b['id']} vary ×{a['n']}")["id"]]}
-    if action in ("batch", "batch/plan"):   # {cat, ids, styles, variants, n, seeds: random|sweep, seed}
-        bid, plan, est = lm.plan_batch(cat, b["ids"], b.get("styles"), b.get("variants"), int(b.get("n", 2)),
-                                       b.get("seeds", "random"), b.get("seed"))
-        if action == "batch/plan":
-            return {"estimate": est}
-        for a in plan:
-            JOBS.add("limner_gen", a, f"Limner batch {bid} · {cat} · {a['id']} · {a['style'] or 'default'}"
-                                      f"{' · ' + a['extra'] if a.get('extra') else ''} ×{a['n']}")
-        return {"batch": bid, "estimate": est, "watchdog": lm.ensure_watchdog() or "already running"}
-    if action == "batch/cancel":
-        return {"cancelled": JOBS.cancel_where(f"Limner batch {b['batch']}" if b.get("batch") else "Limner batch")}
-    if action == "watchdog":
-        return {"started": lm.ensure_watchdog()}
-    if action == "reviewed":
-        return lm.mark_reviewed(cat)
-    if action == "approve":
-        return lm.approve(cat, b["id"], b["cid"], bool(b.get("on", True)))
-    if action == "archive":
-        return lm.archive(cat, b["id"], b["cid"])
-    if action == "entry":
-        return lm.save_entry(cat, b["id"], b["fields"])
-    if action == "category":
-        return lm.save_category(cat, b["fields"])
-    if action == "style":
-        return lm.save_style(b["key"], b["fields"])
-    if action == "add":   # {cat, id?, name, subject?, sub?}
-        return lm.add_entry(cat, b.get("id"), b.get("name"), b.get("subject", ""), b.get("sub", ""))
-    if action == "remove":
-        return lm.remove_entry(cat, b["id"])
-    if action == "look":
-        return lm.save_look(b["archetype"], b["look"], b.get("text", ""))
-    if action == "race":   # {key, fields: {name?, noun?, traits?}}
-        return lm.save_race(b["key"], b["fields"])
-    if action == "refinish":
-        return lm.refinish(cat, b.get("ids"))
-    if action == "export":
-        return lm.export(b.get("cats"))
-    raise ValueError(f"unknown action {action}")
-
+# ----------------------------------------------------------------------------- server
 
 def serve(port=4321, open_browser=True):
     global JOBS
     JOBS = make_jobs()
+    from . import ops
 
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):
             pass
 
-        def _json(self, obj, code=200):
-            body = json.dumps(obj).encode()
+        def _send(self, code, ctype, body, cache="no-store"):
             self.send_response(code)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", cache)
             self.end_headers()
             self.wfile.write(body)
+
+        def _result(self, out):
+            """An op's result: a Blob as its bytes, anything else as JSON."""
+            if isinstance(out, ops.Blob):
+                self._send(200, out.content_type, out.data, out.cache)
+            else:
+                self._send(200, "application/json", json.dumps(out).encode())
+
+        def _error(self, e):   # keep the studio alive and show the error in the page
+            code, body = ops.http_error(e)
+            self._send(code, "application/json", json.dumps(body).encode())
 
         def do_GET(self):
             u = urlparse(self.path)
@@ -495,83 +165,38 @@ def serve(port=4321, open_browser=True):
                     self.send_response(302)
                     self.send_header("Location", "/workshop")
                     self.end_headers()
-                elif u.path in PAGE_FILES:
-                    body = (PAGES / PAGE_FILES[u.path]).read_bytes()
-                    self.send_response(200)
-                    self.send_header("Content-Type", "text/html; charset=utf-8")
-                    self.send_header("Cache-Control", "no-cache")   # a page edit shows on the next plain reload
-                    self.end_headers()
-                    self.wfile.write(body)
-                elif u.path.startswith("/api/lib/"):
-                    ctype, data = library_get(u.path[9:], q)
-                    self.send_response(200)
-                    self.send_header("Content-Type", ctype)
-                    self.send_header("Cache-Control", "no-store")
-                    self.end_headers()
-                    self.wfile.write(data)
-                    return
-                elif u.path.startswith("/api/dun/"):
-                    ctype, data = dungeon_get(u.path[9:], q)
-                    self.send_response(200)
-                    self.send_header("Content-Type", ctype)
-                    self.send_header("Content-Length", str(len(data)))
-                    self.send_header("Cache-Control", "no-store" if ctype != "image/png" or "room" in u.path
-                                     or "capture" in u.path else "max-age=3600")
-                    self.end_headers()
-                    self.wfile.write(data)
-                elif u.path == "/api/limner/doc":
-                    from . import limner
-                    fresh(limner)
-                    self._json(limner.doc())
-                elif u.path == "/api/limner/img":
-                    from . import limner
-                    data = limner.image(q["path"][0])
-                    self.send_response(200)
-                    self.send_header("Content-Type", "image/png")
-                    self.send_header("Content-Length", str(len(data)))
-                    self.send_header("Cache-Control", "no-cache")   # a refinish rewrites the file in place
-                    self.end_headers()
-                    self.wfile.write(data)
-                elif u.path == "/api/ws/img":
-                    from . import workshop
-                    data = workshop.image(q["path"][0])
-                    self.send_response(200)
-                    self.send_header("Content-Type", "image/gif" if q["path"][0].endswith(".gif") else "image/png")
-                    self.send_header("Cache-Control", "max-age=3600")
-                    self.end_headers()
-                    self.wfile.write(data)
-                elif u.path == "/api/ws/jobs":
-                    self._json({"jobs": JOBS.snapshot()})
+                elif u.path in PAGE_FILES:   # no-cache: a page edit shows on the next plain reload
+                    self._send(200, "text/html; charset=utf-8", (PAGES / PAGE_FILES[u.path]).read_bytes(), "no-cache")
                 elif u.path == "/api/ops":   # every op: name, summary, doc, typed params (?prefix=items.)
-                    from . import ops
-                    self._json({"ops": ops.describe(q.get("prefix", [""])[0])})
+                    self._result({"ops": ops.describe(q.get("prefix", [""])[0])})
+                elif u.path.startswith("/api/op/"):
+                    self._result(op_query(u.path[8:], q))
                 else:
-                    self.send_error(404)
-            except Exception as e:  # keep the studio alive and show the error in the page
-                self._json({"error": repr(e)}, getattr(e, "status", 500))
+                    out = alias_call(u.path, q, get=True)
+                    if out is None:
+                        self.send_error(404)
+                    else:
+                        self._result(out)
+            except Exception as e:
+                self._error(e)
 
         def do_POST(self):
             u = urlparse(self.path)
-            q = parse_qs(u.query)
             n = int(self.headers.get("Content-Length") or 0)
-            body = json.loads((self.rfile.read(n) or b"{}").decode("utf-8", errors="replace"))
             try:
+                body = json.loads((self.rfile.read(n) or b"{}").decode("utf-8", errors="replace"))
                 if u.path.startswith("/api/op/"):
-                    if not isinstance(body, dict):
-                        raise ops_error("the body must be a JSON object of arguments")
-                    self._json(op_call(u.path[8:], body))
-                elif u.path.startswith("/api/ws/"):
-                    self._json(workshop_post(u.path[8:], body))
-                elif u.path.startswith("/api/dun/"):
-                    self._json(dungeon_post(u.path[9:], body))
-                elif u.path.startswith("/api/lib/"):
-                    self._json(library_post(u.path[9:], body))
-                elif u.path.startswith("/api/limner/"):
-                    self._json(limner_post(u.path[12:], body))
+                    self._result(op_call(u.path[8:], body))
                 else:
-                    self.send_error(404)
+                    if not isinstance(body, dict):
+                        raise ops.OpError("the body must be a JSON object")
+                    out = alias_call(u.path, body)
+                    if out is None:
+                        self.send_error(404)
+                    else:
+                        self._result(out)
             except Exception as e:
-                self._json({"error": repr(e)}, getattr(e, "status", 500))
+                self._error(e)
 
     srv = ThreadingHTTPServer(("127.0.0.1", port), H)
     url = f"http://127.0.0.1:{port}"
