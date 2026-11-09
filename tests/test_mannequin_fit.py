@@ -1,5 +1,6 @@
 """Template-guided mannequin cut (hdart.mannequin_fit), no GPU: a fake mannequin drawn from the template with one arm swung,
 a big extra ear and one hand missing. Run: uv run python tests/test_mannequin_fit.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import numpy as np
 from PIL import Image
 from hdart import mannequin_fit as mf, puppet_paint as ppt, puppet_template as pt

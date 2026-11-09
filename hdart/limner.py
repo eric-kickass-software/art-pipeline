@@ -22,7 +22,7 @@ from PIL import Image
 
 from . import config, contract, jobs, store
 
-SPEC = config.ROOT / "specs" / "limner.json"
+SPEC = config.specs_dir() / "limner.json"
 ICON_CATS = ("items", "gear", "classes", "statuses", "damageTypes", "skills", "ui")
 PORTRAIT_CATS = ("portraits", "monsters", "npcs")   # all export into Art/Portraits with one index.json
 CATS = ICON_CATS + PORTRAIT_CATS + ("tokens",)

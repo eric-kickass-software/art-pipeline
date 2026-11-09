@@ -1,5 +1,6 @@
 """Materials library (no network): palette extraction, repeats, image templates from a cached material.
 Run: uv run python tests/test_library.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import numpy as np
 from PIL import Image
 from hdart import library as L

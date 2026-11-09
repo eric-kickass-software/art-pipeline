@@ -1,6 +1,7 @@
 """Limner (hdart.limner): entry lists from the contract, prompt layers (style > category > entry), generation and
 variations on the fake ComfyUI, the finish re-run without the GPU, approve / archive, export into a temp game project.
 Never touches the real spec, data or game. Run: uv run python tests/test_limner.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import json, os, shutil, tempfile
 from pathlib import Path
 
@@ -19,10 +20,10 @@ os.environ["HD_PROJECT"], os.environ["HD_DATA"] = str(game), str(data)
                          "classes": [{"id": "class.acolyte", "name": "Acolyte", "role": "healer", "text": "Rituals."}],
                          "statuses": [{"id": "status.burn", "name": "Burning"}]}}}), encoding="utf-8")
 L.SPEC = tmp / "limner.json"
-shutil.copyfile(config.ROOT / "specs" / "limner.json", L.SPEC)
+shutil.copyfile(fixture_specs.FIXTURES / "limner.json", L.SPEC)
 _s = json.loads(L.SPEC.read_text(encoding="utf-8")); _s["added"] = {}   # Eric's own ＋ Add entries would change the lists below
 L.SPEC.write_text(json.dumps(_s), encoding="utf-8")
-repo_spec = (config.ROOT / "specs" / "limner.json").read_text(encoding="utf-8")
+repo_spec = (config.ROOT / "specs" / "limner.json").read_text(encoding="utf-8")   # the live spec: must stay untouched
 
 # entries: the contract's wanted lists + the spec's gear, skill placeholders per damage type, portraits per look × gender
 e = L.entries()

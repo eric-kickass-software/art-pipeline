@@ -2,6 +2,7 @@
 the game's vocabulary (R-001), pieces -> game items (R-002), the pack with its layers and index maps, Art/index.json,
 ramps.json, intake files for new ids only (R-003), and `export --check`.
 Run: uv run python tests/test_item_export.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import json, os, shutil, tempfile
 from pathlib import Path
 import numpy as np

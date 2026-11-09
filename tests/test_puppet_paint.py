@@ -1,5 +1,6 @@
 """Puppet Paint step + Parts editor backend (hdart.puppet_paint), on the fake ComfyUI: every pass returns its init
 image, so the flow runs without a GPU. Run: uv run python tests/test_puppet_paint.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import base64, io, json, shutil, tempfile
 from pathlib import Path
 import numpy as np
@@ -38,7 +39,7 @@ for bad in ({"figure": {"front": "no placeholder", "back": "x {body}"}}, {"fix":
     except ValueError:
         pass
 sp["sexes"]["female"]["clothes"] = "plain grey sports bra and grey briefs, bald head, barefoot"; sp["figure"]["front"] = json.loads(
-    (Path(ppt.__file__).parents[1] / "specs" / "paint.json").read_text())["figure"]["front"]
+    (fixture_specs.FIXTURES / "paint.json").read_text())["figure"]["front"]
 ppt.save_spec(sp)
 
 c = ppt.paint("human.female", n=1, seed=4)

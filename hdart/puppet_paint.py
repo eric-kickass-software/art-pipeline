@@ -19,7 +19,7 @@ import json, shutil, time
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-from . import ai_kit, comfy, jobs, store, workshop as ws, puppet as pp, puppet_template as pt
+from . import ai_kit, config, comfy, jobs, store, workshop as ws, puppet as pp, puppet_template as pt
 
 S, SHEET, GAP, MARGIN = 2, 1024, 14, 24
 D_FIGURE, D_COMPLETE = 0.8, 0.9
@@ -29,7 +29,7 @@ LINE = (40, 32, 30)
 BRIEFS = ((92, 94, 100), (176, 178, 184))
 SKIN_DEFAULT = ((150, 92, 66), (232, 176, 138))
 VIEWS = ("front", "back")
-SPEC = ai_kit.ROOT / "specs" / "paint.json"   # the paint prompts (edited in the Workshop's Race tab)
+SPEC = config.specs_dir() / "paint.json"   # the paint prompts (edited in the Workshop's Race tab)
 
 
 def out_dir(build):
@@ -167,7 +167,7 @@ def face_marks(rgba, fc, mode="marks"):
     and a mouth line (the painted head gets its own face)."""
     if mode == "keyed":   # the head gets its own face, with the irises in the magenta colour key (recolourable,
         im = Image.fromarray(rgba); d = ImageDraw.Draw(im)   # harvested into the Face tab's face set)
-        h_ = json.loads((ai_kit.ROOT / "specs" / "face.json").read_text(encoding="utf-8")).get("eye_key", "#d020d0").lstrip("#")
+        h_ = json.loads((config.specs_dir() / "face.json").read_text(encoding="utf-8")).get("eye_key", "#d020d0").lstrip("#")
         key = tuple(int(h_[i:i + 2], 16) for i in (0, 2, 4)) + (255,)
         e0, e1 = np.array(fc["eyes"][0]) * S, np.array(fc["eyes"][1]) * S; r = 0.16 * np.linalg.norm(e1 - e0)
         for e in (e0, e1):

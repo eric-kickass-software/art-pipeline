@@ -19,4 +19,5 @@ __pycache__/
 
 # Machine-specific settings (hdart/config.py)
 /config.local.toml
-specs/*.lock
+# The store's cross-process locks beside each JSON file (hdart/store.py); uv.lock is not one of them
+*.json.lock

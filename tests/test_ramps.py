@@ -1,4 +1,5 @@
 """Ramp editor backend (hdart.workshop) + JS/Python ramp parity. Run: uv run python tests/test_ramps.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import json, shutil, subprocess, tempfile
 from pathlib import Path
 import numpy as np

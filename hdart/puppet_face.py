@@ -19,10 +19,10 @@ import copy, json, shutil
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-from . import ai_kit, comfy, jobs, memo, store, workshop as ws, puppet as pp, puppet_template as pt, puppet_paint as ppt
+from . import ai_kit, config, comfy, jobs, memo, store, workshop as ws, puppet as pp, puppet_template as pt, puppet_paint as ppt
 from .levels import keep_bands, write_bands
 
-SPEC = ai_kit.ROOT / "specs" / "face.json"
+SPEC = config.specs_dir() / "face.json"
 KINDS = ("hair", "face")
 SEXES = ("male", "female")
 S = ppt.S

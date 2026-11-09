@@ -1,0 +1,63 @@
+# AGENTS.md: `hdart/` (the package)
+
+Flat modules, each with a module docstring that says what it does. Read that first. Repo-wide rules: `../AGENTS.md`.
+
+## Entry points
+- `cli.py`: `hdart` commands (`studio`, `puppet-export`, `item-export`, `export [--check]`, `dungeon-export`,
+  `dungeon-capture`, `backup`). Thin wrappers over the export and tool modules.
+- `studio.py`: the web server (`serve()`). Static pages from `studio/`; routes `/api/op/<name>` + `GET /api/ops` (ops),
+  `/api/ws/<action>` (`workshop_post`: Workshop, Paint, Face, Ramps, Template, and the Item Workshop's older routes
+  mapped onto ops), `/api/dun/*` (`dungeon_post` / `dungeon_get`), `/api/lib/*` (materials library), `/api/limner/*`
+  (`limner_post`), `GET /api/ws/jobs`. `JOB_MODULES` and `OP_MODULE_NAMES` are imported at start so the registries
+  are complete; `OP_MODULES` names each op prefix's reload group.
+- `ops.py`: the op registry (`@ops.op("items.approve")` on a typed, documented function; `ops.call()`,
+  `ops.describe()`). Only the Item Workshop is on ops so far (`items_api.py`; `items_api.LEGACY` maps old routes).
+  New tool actions should be ops.
+- `jobs.py`: the queue and `@jobs.kind(name, gpu=, reload=)`. Long work goes through `jobs.enqueue()`.
+- `watchdog.py`: `python -m hdart.watchdog` (started by overnight batches).
+
+## Modules by tool
+| Tool | Modules |
+|---|---|
+| shared core | `config` (settings, data root, specs dir, project profiles), `store` (state files, candidates, archive), `jobs`, `ops`, `locks`, `comfy` (ComfyUI client + workflow builders), `fake_comfy` (tests), `memo` (preview caches), `backup` |
+| Character Workshop | `workshop` (races, ramps, skin key, `workshop.json`), `puppet_template` (the rig), `puppet_paint` (Paint, Parts, AI fix), `puppet_face` (hair, faces), `mannequin_fit`, `puppet` (rig helpers + the old detection puppet), `levels`, `palette`, `ai_kit` (`ROOT`, `AI_DIR`, mask helpers) |
+| Item Workshop | `items_api` (the ops), `puppet_items` (how: zones, keying, levels, split, hidden pass, grips), `item_export` |
+| Dungeon Forge | `dungeon` (3.3k lines: generation, geometry, preview, CRUD, export, capture), `iso`, `patterns`, `library`, `pixel` |
+| Limner | `limner` |
+| Game side | `contract` (reads the project's `ArtContract/requirements.json` and content), `unity_export` (puppets), `item_export` |
+
+## State files (under `config.data_dir()`)
+| File | Owner | Written through |
+|---|---|---|
+| `sprites/ai/workshop.json` | Workshop, Paint, Face, Template, Item Workshop (builds, approvals, sets) | `workshop.edit_state()` |
+| `sprites/ai/items/<race>/state.json` | Item Workshop (approvals per fit key, grips) | `store.State(path).edit()` |
+| `sprites/ai/paint/<build>/<cid>/`, `face/<race>/<hair\|face>/<cid>/`, `items/<race>/<item>/<cid>/` | candidates + `meta.json` | `store.new()`, `store.write_meta()` |
+| `sprites/dungeon/<set>/state.json` + `candidates/` | Dungeon Forge | under `locks.DUNGEON` (atomic writes) |
+| `sprites/limner/state.json` + `<cat>/<id>/<cid>/` | Limner | `store` |
+| `sprites/studio_jobs.json` | the job queue | `jobs.Jobs` |
+| `archive/` | every tool's ✕ / archive | `store.archive()`, `dungeon` archive helpers |
+
+## Invariants
+- **State changes only inside the lock:** `with store.State(path).edit() as s:` (or `workshop.edit_state()`) from the
+  read to the write; writes are atomic (temp + `os.replace`). A GPU job generates first and edits state after; never
+  hold a lock while ComfyUI runs.
+- **Never reloaded:** `jobs`, `ops`, `locks` hold registries, the queue, locks and caches. The Studio reloads tool
+  modules when their files change (`studio.fresh()`, each kind's `reload=`), so don't keep live state in a tool
+  module's globals unless losing it on reload is fine. Known wart: `puppet_items.spec_override` is a module global
+  swapped during a request (A10 chunk 8 fixes it).
+- **Paths:** data paths come from `config.data_dir()`, specs from `config.specs_dir()`, the game from
+  `config.project()`. Many modules still bind them at import (`ai_kit.AI_DIR`, `workshop.STATE`, `*.SPEC`); tests
+  override those attributes. Don't add new import-time path constants.
+- **ComfyUI:** call `comfy.img2img()`, `comfy.repaint()` or `comfy.image(build_*())`; failures raise
+  `comfy.ComfyError` (a `RuntimeError`), never `SystemExit`.
+- **Rig space:** the rest-pose canvas is 576 rig px / 1152 paint px, figure at `puppet.PAD`. Iso conventions for the
+  dungeon are in `iso.py` (piece +x = board −Y, +y = board −X).
+- **Exports:** `Art/index.json` is rewritten by every export; a pack folder is rebuilt whole. `export --check` must
+  stay clean after an export.
+
+## Don't touch without a reason
+- Private helpers used across modules (`pf._hsv`, `pt._joint`, ...): 61 such calls today; A10 chunk 4 moves them into
+  shared `rig` / `imageops` modules. Don't add more.
+- `puppet.py`'s detection puppet is kept for reference (`tests/test_puppet.py`); the template is the rig.
+- Dead helpers flagged for chunk 4: `dungeon.cut_white`, `fresh_approved`, `puppet_face.key_marks`, `hair_colour`,
+  `refresh_previews`, `puppet_items.item_layers`.

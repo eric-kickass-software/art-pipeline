@@ -1,4 +1,5 @@
 """Wall family geometry in hdart.dungeon (no GPU): elevation projection, masks, door slice. Run: uv run python tests/test_walls.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import numpy as np
 from PIL import Image
 import hdart.dungeon as d

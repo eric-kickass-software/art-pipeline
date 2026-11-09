@@ -1,4 +1,5 @@
 """Race mannequin chain in hdart.workshop (ComfyUI stubbed). Run: uv run python tests/test_races.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import shutil, tempfile
 from pathlib import Path
 from PIL import Image

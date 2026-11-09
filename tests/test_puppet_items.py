@@ -3,11 +3,13 @@ generated on a fake-painted puppet, keyed into cel levels per material, split in
 and re-keyed. The fake paints every masked area in the item material's key colour (shaded top to bottom, so there are
 several cel levels) and returns the txt2img sword as a leather grip + metal blade cut-out.
 Run: uv run python tests/test_puppet_items.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import json, shutil, tempfile
 from pathlib import Path
 import numpy as np
 from PIL import Image
 import hdart.ai_kit as ak
+import hdart.config as config
 import hdart.workshop as ws
 import hdart.puppet_paint as ppt
 import hdart.puppet_face as pf
@@ -86,7 +88,7 @@ assert g[y0 + 25, xc].sum() < 150                                               
 pi.save_zone("item.cloth_trousers", "front", u(np.dstack([np.where(Z, 255, 0).astype(np.uint8)] * 3)), sketch=u(np.zeros_like(sk)))
 assert not pi.sketch_path("item.cloth_trousers", "front").exists() and pi.mask_path("item.cloth_trousers", "front").exists()
 pi.reset_zone("item.cloth_trousers", "front"); assert not pi.mask_path("item.cloth_trousers", "front").exists()
-pi.archive("human", "item.cloth_trousers", t2); pi.ZONES = ak.ROOT / "specs" / "item_zones"
+pi.archive("human", "item.cloth_trousers", t2); pi.ZONES = config.specs_dir() / "item_zones"
 
 # held: the cut-out keyed per material (leather grip, metal blade) and framed
 paint_key["m"] = None

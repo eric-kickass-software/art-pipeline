@@ -67,8 +67,9 @@ def plan(data=None):
             if k is not None and _stem("/".join(rel.parts[3:])) not in k:   # sidecars (.npy) share the image's stem
                 continue
         files.append((f, rel))
-    specs = config.ROOT / "specs"
-    files += [(f, Path("specs") / f.relative_to(specs)) for f in sorted(specs.rglob("*")) if f.is_file()]
+    specs = config.specs_dir()
+    files += [(f, Path("specs") / f.relative_to(specs)) for f in sorted(specs.rglob("*"))
+              if f.is_file() and f.suffix != ".lock"]   # .lock: the store's lock files, not specs
     return files
 
 

@@ -1,0 +1,310 @@
+{
+  "_doc": "Prompt descriptors for dungeon sets (hdart/dungeon.py, Studio > Dungeon). Tiles: all groups + the piece text, painted onto a geometry template with img2img. Props: medium + style + rendering + biome + prop_view + piece text + prop_framing. CFG 1: no negative prompts, say what you want.",
+  "groups": {
+    "medium": {
+      "text": "texture for module tile set, seamless, repeating",
+      "hint": "What kind of image it is. No pixel words: pixelation is the Pixelate slider (a downsample after generation). The pixel-art LoRA is off unless you set LoRA on a generation; it wants 'pixel art sprite' here."
+    },
+    "style": {
+      "text": "fine details, clean, stylized, bold, chunky",
+      "hint": "Game references steer strongly. Try 'Sea of Stars', 'Hyper Light Drifter', 'Darkest Dungeon'."
+    },
+    "view": {
+      "text": "isometric view, 2:1 dimetric projection, seen from above",
+      "hint": "Tiles follow the template geometry anyway; this keeps the shading/perspective consistent."
+    },
+    "rendering": {
+      "text": "clean dark outlines, hard edges, crisp pixels, limited palette",
+      "hint": "Line + shading language. Extras: 'moody', 'high contrast', 'muted earthy colours', 'painterly'."
+    },
+    "framing": {
+      "text": "single tile, centered, game asset, plain white background",
+      "hint": "White background is used to cut props out."
+    },
+    "biome": {
+      "text": "ancient crypt, worn grey stone, dust and cobwebs, dark fantasy",
+      "hint": "The set's look. Swap per biome: 'flooded sewer, mossy green brick', 'lava forge, black basalt and glowing cracks'."
+    }
+  },
+  "prop_medium": "pixel art sprite, single 16-bit game object sprite, modern high-resolution pixel art",
+  "prop_view": "isometric three-quarter view from above",
+  "prop_framing": "single object, centered, full object visible, isolated on a pure flat white background",
+  "catalog": [
+    {
+      "group": "floors",
+      "id": "tile.{set}_floor_moss",
+      "kind": "tile",
+      "shape": "floor",
+      "variants": 2,
+      "prompt": "flagstones with patches of green moss growing in the cracks"
+    },
+    {
+      "group": "floors",
+      "id": "tile.{set}_grate",
+      "kind": "tile",
+      "shape": "floor",
+      "variants": 1,
+      "prompt": "a rusty iron drain grate set into stone flagstones"
+    },
+    {
+      "group": "floors",
+      "id": "tile.{set}_rug",
+      "kind": "tile",
+      "shape": "floor",
+      "variants": 1,
+      "prompt": "a worn red woven rug with a gold border lying on stone flagstones"
+    },
+    {
+      "group": "walls",
+      "id": "tile.{set}_wall_cracked",
+      "kind": "wall_decor",
+      "shape": "wall",
+      "height": 2.0,
+      "of": "tile.{set}_wall",
+      "prompt": "the same stone wall block, badly cracked with a few bricks missing"
+    },
+    {
+      "group": "walls",
+      "id": "tile.{set}_wall_banner",
+      "kind": "wall_decor",
+      "shape": "wall",
+      "height": 2.0,
+      "of": "tile.{set}_wall",
+      "prompt": "the same stone wall block with a tattered red heraldic banner hanging on the front faces"
+    },
+    {
+      "group": "walls",
+      "id": "tile.{set}_wall_shelf",
+      "kind": "wall_decor",
+      "shape": "wall",
+      "height": 2.0,
+      "of": "tile.{set}_wall",
+      "prompt": "the same stone wall block with a wooden shelf of dusty jars and candles on the front faces"
+    },
+    {
+      "group": "walls",
+      "id": "tile.{set}_wall_chains",
+      "kind": "wall_decor",
+      "shape": "wall",
+      "height": 2.0,
+      "of": "tile.{set}_wall",
+      "prompt": "the same stone wall block with rusty iron shackles and chains hanging on the front faces"
+    },
+    {
+      "group": "walls",
+      "id": "tile.{set}_wall_alcove",
+      "kind": "wall_decor",
+      "shape": "wall",
+      "height": 2.0,
+      "of": "tile.{set}_wall",
+      "prompt": "the same stone wall block with a burial alcove niche holding a skull and candles"
+    },
+    {
+      "group": "traps",
+      "id": "feature.trap_plate",
+      "kind": "tile",
+      "shape": "floor",
+      "prompt": "flagstones with a slightly raised square stone pressure plate in the middle"
+    },
+    {
+      "group": "traps",
+      "id": "feature.trap_pit",
+      "kind": "tile",
+      "shape": "floor",
+      "prompt": "a dark square pit opening in the stone floor with spikes at the bottom"
+    },
+    {
+      "group": "traps",
+      "id": "feature.trap_fire",
+      "kind": "tile",
+      "shape": "floor",
+      "prompt": "flagstones with a scorched iron fire-vent grate in the middle, glowing embers"
+    },
+    {
+      "group": "traps",
+      "id": "feature.trap_dart",
+      "kind": "wall_decor",
+      "shape": "wall",
+      "height": 2.0,
+      "of": "tile.{set}_wall",
+      "prompt": "the same stone wall block with small dart holes in a carved stone face on the front faces"
+    },
+    {
+      "group": "props",
+      "id": "prop.barrel_stack",
+      "kind": "prop",
+      "footprint": 0.8,
+      "prompt": "three old wooden barrels stacked in a pyramid"
+    },
+    {
+      "group": "props",
+      "id": "prop.barrel_broken",
+      "kind": "prop",
+      "footprint": 0.55,
+      "prompt": "a broken wooden barrel with spilled grain"
+    },
+    {
+      "group": "props",
+      "id": "prop.stool",
+      "kind": "prop",
+      "footprint": 0.3,
+      "prompt": "a small three-legged wooden stool"
+    },
+    {
+      "group": "props",
+      "id": "prop.bench",
+      "kind": "prop",
+      "footprint": 0.8,
+      "prompt": "a long rough wooden bench"
+    },
+    {
+      "group": "props",
+      "id": "prop.table_round",
+      "kind": "prop",
+      "footprint": 0.75,
+      "prompt": "a round wooden tavern table with a tankard and a candle"
+    },
+    {
+      "group": "props",
+      "id": "prop.bookshelf",
+      "kind": "prop",
+      "footprint": 0.7,
+      "prompt": "a tall wooden bookshelf full of old dusty books"
+    },
+    {
+      "group": "props",
+      "id": "prop.weapon_rack",
+      "kind": "prop",
+      "footprint": 0.7,
+      "prompt": "a wooden weapon rack holding swords and spears"
+    },
+    {
+      "group": "props",
+      "id": "prop.sarcophagus",
+      "kind": "prop",
+      "footprint": 0.95,
+      "prompt": "a carved stone sarcophagus with a lid"
+    },
+    {
+      "group": "props",
+      "id": "prop.candles",
+      "kind": "prop",
+      "footprint": 0.3,
+      "prompt": "a cluster of melted white candles burning on the floor"
+    },
+    {
+      "group": "props",
+      "id": "prop.candelabra",
+      "kind": "prop",
+      "footprint": 0.3,
+      "prompt": "a tall iron standing candelabra with three burning candles"
+    },
+    {
+      "group": "props",
+      "id": "prop.urn",
+      "kind": "prop",
+      "footprint": 0.35,
+      "prompt": "an old clay burial urn with a cracked lid"
+    },
+    {
+      "group": "props",
+      "id": "prop.sacks",
+      "kind": "prop",
+      "footprint": 0.55,
+      "prompt": "a pile of burlap sacks"
+    },
+    {
+      "group": "props",
+      "id": "prop.cauldron",
+      "kind": "prop",
+      "footprint": 0.5,
+      "prompt": "a black iron cauldron with bubbling green liquid"
+    },
+    {
+      "group": "props",
+      "id": "prop.anvil",
+      "kind": "prop",
+      "footprint": 0.45,
+      "prompt": "an iron anvil on a tree stump"
+    },
+    {
+      "group": "props",
+      "id": "prop.statue",
+      "kind": "prop",
+      "footprint": 0.6,
+      "prompt": "a weathered stone statue of a hooded knight on a plinth"
+    },
+    {
+      "group": "props",
+      "id": "prop.altar",
+      "kind": "prop",
+      "footprint": 0.8,
+      "prompt": "a stone altar with a red cloth, candles and a skull"
+    },
+    {
+      "group": "props",
+      "id": "prop.cobweb",
+      "kind": "prop",
+      "footprint": 0.5,
+      "prompt": "a dusty cobweb, white, nothing else"
+    },
+    {
+      "group": "props",
+      "id": "prop.mushrooms",
+      "kind": "prop",
+      "footprint": 0.35,
+      "prompt": "a small cluster of glowing blue cave mushrooms"
+    },
+    {
+      "group": "props",
+      "id": "prop.torch_stand",
+      "kind": "prop",
+      "footprint": 0.3,
+      "prompt": "a standing iron torch post with a burning torch on top"
+    },
+    {
+      "group": "props",
+      "id": "prop.cage",
+      "kind": "prop",
+      "footprint": 0.55,
+      "prompt": "a rusty iron cage"
+    },
+    {
+      "group": "features",
+      "id": "feature.chest_open",
+      "kind": "prop",
+      "footprint": 0.62,
+      "prompt": "an open wooden treasure chest with iron bands, glittering gold coins inside"
+    },
+    {
+      "group": "features",
+      "id": "feature.stairs_down",
+      "kind": "tile",
+      "shape": "floor",
+      "prompt": "a square stone stairwell going down into darkness, steps visible"
+    }
+  ],
+  "descriptor_ideas": {
+    "stone": [
+      "cracked flagstones",
+      "mossy brick",
+      "carved runes",
+      "rough cobblestone",
+      "polished marble",
+      "bone mosaic"
+    ],
+    "wood": [
+      "rotting planks",
+      "iron-banded oak",
+      "charred timber",
+      "splintered"
+    ],
+    "mood": [
+      "candle-lit",
+      "eerie green glow",
+      "blood stains",
+      "frost-covered",
+      "flooded puddles"
+    ]
+  }
+}

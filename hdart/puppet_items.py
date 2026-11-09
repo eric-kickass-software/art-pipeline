@@ -25,9 +25,9 @@ import numpy as np
 from PIL import Image, ImageFilter
 
 from .levels import ISLAND, _spread, keep_bands, smooth_levels, smooth_val, write_bands
-from . import ai_kit, comfy, jobs, memo, store, puppet as pp, puppet_template as pt, puppet_paint as ppt, puppet_face as pf
+from . import ai_kit, config, comfy, jobs, memo, store, puppet as pp, puppet_template as pt, puppet_paint as ppt, puppet_face as pf
 
-SPEC = ai_kit.ROOT / "specs" / "items.json"
+SPEC = config.specs_dir() / "items.json"
 S, N = ppt.S, pf.N
 VIEWS = ("front", "back")
 D_ITEM = 0.85
@@ -440,7 +440,7 @@ def zone_masks(sp, view, parts, zones):
     return out
 
 
-ZONES = ai_kit.ROOT / "specs" / "item_zones"   # painted zones (Item Workshop zone editor), one rest-pose canvas mask (1152 px) per item and view
+ZONES = config.specs_dir() / "item_zones"   # painted zones (Item Workshop zone editor), one rest-pose canvas mask (1152 px) per item and view
 
 
 def mask_path(item_id, view, sex=None):

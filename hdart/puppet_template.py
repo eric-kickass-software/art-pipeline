@@ -22,9 +22,9 @@ import json, math, time
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-from . import ai_kit, jobs, workshop as ws, puppet as pp
+from . import ai_kit, config, jobs, workshop as ws, puppet as pp
 
-SPEC = ai_kit.ROOT / "specs" / "puppet_template.json"
+SPEC = config.specs_dir() / "puppet_template.json"
 PX = pp.PX
 LIMBS = ("armA", "armB", "legA", "legB")
 SEGS = (("upper", "pivot", "mid"), ("lower", "mid", "end"), ("hand", "end", "tip"))

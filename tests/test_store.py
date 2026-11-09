@@ -1,6 +1,7 @@
 """hdart.store: state edits under the lock (threads and a second process never lose an update), atomic writes, the
 standard meta.json, unique candidate ids, archiving, approvals; and that the Paint/Face/Item tools use it (approve and
 archive through their own functions). Run: uv run python tests/test_store.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import json, subprocess, sys, tempfile, threading, time
 from pathlib import Path
 from hdart import store

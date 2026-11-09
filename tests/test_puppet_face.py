@@ -1,5 +1,6 @@
 """Face tab backend (hdart.puppet_face), on the fake ComfyUI: paint passes return their init; hair passes paint the masked
 area in the green key, face passes draw a dark eye with a magenta iris. Run: uv run python tests/test_puppet_face.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import json, shutil, tempfile
 from pathlib import Path
 import numpy as np

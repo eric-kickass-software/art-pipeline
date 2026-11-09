@@ -1,4 +1,5 @@
 """Layout templates (hdart/patterns.py): every pattern repeats exactly once per tile, at its set scale. Run: uv run python tests/test_patterns.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import numpy as np
 from hdart import iso, patterns as P
 

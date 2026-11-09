@@ -1,4 +1,5 @@
 """hdart.config: defaults, config.local.toml overrides, env overrides, project profiles. Run: uv run python tests/test_config.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import os, shutil, tempfile
 from pathlib import Path
 import hdart.config as c
@@ -38,11 +39,14 @@ try:
 except KeyError:
     pass
 
-# old callers: paths.REPO is read when used, not at import
-import hdart.paths as paths
-assert paths.REPO == tmp / "wt"
 for k in ("HD_PROJECT", "HD_PROFILE", "HD_COMFY_URL", "HD_DATA"):
     os.environ.pop(k)
-assert paths.REPO == Path(r"P:\Projects\Unity\Hearthdelve")
+assert c.project().path == Path(r"P:\Projects\Unity\Hearthdelve")
+
+# specs: HD_SPECS (the tests' fixture copy), else <tool>/specs
+assert c.specs_dir() == fixture_specs.SPECS and (c.specs_dir() / "items.json").exists()
+specs_env = os.environ.pop("HD_SPECS")
+assert c.specs_dir() == c.ROOT / "specs"
+os.environ["HD_SPECS"] = specs_env
 shutil.rmtree(tmp)
 print("ok")

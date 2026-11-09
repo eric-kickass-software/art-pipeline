@@ -1,5 +1,6 @@
 """Set material sheet in hdart.dungeon (no GPU): linked templates follow the sheet, matching wall families, prompt
 words, colour match to the floor master. Run: uv run python tests/test_sheet.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import shutil, tempfile
 from pathlib import Path
 import numpy as np

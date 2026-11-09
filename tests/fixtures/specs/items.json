@@ -1,0 +1,863 @@
+{
+  "_doc": "Item Workshop (hdart/puppet_items.py): equipment as overlay layers on the race's painted puppet, one layer per Template part it covers. zones: where an item may sit, as data (an editor comes later): part (fnmatch, e.g. arm*.upper), t = [from, to] along the part's bone (0 = start joint, 1 = end joint; <= 0 / >= 1 include the round ends), rows = [from, to] as fractions of the part's height (head, torso), ellipse = [cx, cy, rx, ry] as fractions of the part's box (curved edges), view = front / back (a zone for one view only), seam = above_waist / below_waist (+ seam_px to move the line down). bulk = px (1024 canvas) the item may paint beyond those zones. depth = stacking order (higher draws over lower). materials = colour keys the item is painted in; each becomes a channel (G of the levels map) coloured by a ramp of that material's palette group. clips = layers this item cuts away where it covers them (hair). kind held = generated alone on white and attached to a hand (grip), not painted on the body. Back view (like the back hair): a FLUX edit (`back_edit`) turns the painted front around; its item pixels guide the masked back pass, which takes that edit (not the front) as its reference.",
+  "materials": {
+    "cloth": {
+      "key": "#22c822",
+      "word": "green",
+      "channel": 4,
+      "group": "cloth"
+    },
+    "leather": {
+      "key": "#2850e0",
+      "word": "blue",
+      "channel": 5,
+      "group": "leather"
+    },
+    "metal": {
+      "key": "#18c4d4",
+      "word": "cyan",
+      "channel": 6,
+      "group": "metal"
+    },
+    "accent": {
+      "key": "#d020d0",
+      "word": "magenta",
+      "channel": 7,
+      "group": "accent"
+    }
+  },
+  "prompt": "{style}. One {body}, full body, three-quarter view facing left, seen slightly from above, standing in an A-pose, now wearing {item}. {materials} Clean dark outlines; the same face, head, skin and body, nothing else added. On a pure white background.",
+  "prompt_back": "{style}. The same {body} seen from behind, three-quarter back view facing away to the right, seen slightly from above, standing in an A-pose, wearing {item}, its back side as in the reference image: the back of the garment over the shoulder blades and the spine; nothing from the front of the body (no chest shape). {materials} Clean dark outlines, on a pure white background.",
+  "prompt_held": "{style}. A single {item} on its own, upright and vertical, pointing straight up, the handle at the bottom, seen from the side, centred, game item art. {materials} Clean dark outlines, on a pure white background.",
+  "material_text": "The {name} parts are one flat vivid pure {word} colour (a colour key), shaded only with darker and lighter {word}.",
+  "items": {
+    "item.cloth_trousers": {
+      "slot": "legs",
+      "depth": 1,
+      "materials": [
+        "cloth"
+      ],
+      "bulk": 5,
+      "text": "simple loose cloth trousers reaching down to the mid shin",
+      "zones": [
+        {
+          "part": "torso",
+          "seam": "below_waist"
+        },
+        {
+          "part": "leg*.upper"
+        },
+        {
+          "part": "leg*.lower",
+          "t": [
+            0,
+            0.6
+          ]
+        }
+      ]
+    },
+    "item.leather_boots": {
+      "slot": "feet",
+      "depth": 2,
+      "materials": [
+        "leather"
+      ],
+      "bulk": 7,
+      "text": "sturdy leather boots up to the mid shin",
+      "zones": [
+        {
+          "part": "leg*.lower",
+          "t": [
+            0.5,
+            1
+          ]
+        },
+        {
+          "part": "leg*.hand"
+        }
+      ]
+    },
+    "item.cloth_tunic": {
+      "slot": "shirt",
+      "depth": 3,
+      "materials": [
+        "cloth"
+      ],
+      "bulk": 6,
+      "text": "a simple cloth tunic with sleeves to the mid forearm and a hem at the hips",
+      "zones": [
+        {
+          "part": "torso"
+        },
+        {
+          "part": "arm*.upper"
+        },
+        {
+          "part": "arm*.lower",
+          "t": [
+            0,
+            0.5
+          ]
+        }
+      ],
+      "fit": "per_sex"
+    },
+    "item.pauldrons": {
+      "slot": "shoulders",
+      "depth": 5,
+      "materials": [
+        "metal"
+      ],
+      "bulk": 24,
+      "text": "rounded steel plate pauldrons on both shoulders",
+      "zones": [
+        {
+          "part": "arm*.upper",
+          "t": [
+            0,
+            0.45
+          ]
+        }
+      ],
+      "item": "item.iron_breastplate"
+    },
+    "item.iron_helm": {
+      "slot": "head",
+      "depth": 7,
+      "materials": [
+        "metal"
+      ],
+      "bulk": 20,
+      "clips": [
+        "hair"
+      ],
+      "text": "an open-faced round steel helmet covering the top of the head and the forehead",
+      "zones": [
+        {
+          "part": "head",
+          "view": "front",
+          "ellipse": [
+            0.56,
+            0.12,
+            0.62,
+            0.44
+          ]
+        },
+        {
+          "part": "head",
+          "view": "back",
+          "ellipse": [
+            0.5,
+            0.15,
+            0.72,
+            0.62
+          ]
+        }
+      ]
+    },
+    "item.iron_sword": {
+      "slot": "mainhand",
+      "kind": "held",
+      "materials": [
+        "leather",
+        "metal"
+      ],
+      "hand": "armA",
+      "length": 0.48,
+      "text": "short steel sword with a simple crossguard and a leather-wrapped grip",
+      "fit": "shared",
+      "depth": 3,
+      "grip_angle": -45,
+      "flip": false
+    },
+    "item.iron_greaves": {
+      "slot": "legs",
+      "depth": 1,
+      "materials": [
+        "metal"
+      ],
+      "bulk": 5,
+      "zones": [],
+      "text": "Rounded steel plate leg armor, reaching from the top of the hips down to the mid shin, shiny polished metal, fantasy, anime",
+      "fit": "shared",
+      "complete": true
+    },
+    "item.breastplate": {
+      "slot": "chest",
+      "depth": 3,
+      "materials": [
+        "cloth"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "text": "Shiny steel breastplate, fantasy, medieval,",
+      "fit": "shared",
+      "complete": true,
+      "item": "item.iron_breastplate"
+    },
+    "item.cloth_cape": {
+      "slot": "back",
+      "depth": 3,
+      "materials": [
+        "cloth"
+      ],
+      "bulk": 0,
+      "zones": [],
+      "text": "A flowing cloth cloak wrapped around the neck.",
+      "fit": "shared",
+      "complete": true
+    },
+    "item.kite_shield": {
+      "slot": "offhand",
+      "depth": 8,
+      "materials": [
+        "leather",
+        "metal"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "text": "A large metal kite-shield, flat on top, curved sides come to point at bottom. Line down the middle",
+      "fit": "shared",
+      "complete": true,
+      "kind": "held",
+      "hand": "armB",
+      "length": 0.48,
+      "grip_angle": 0,
+      "flip": false,
+      "grip_at": [
+        0.565,
+        0.439
+      ],
+      "held_as": "shield"
+    },
+    "item.leather_trousers": {
+      "slot": "legs",
+      "depth": 1,
+      "materials": [
+        "cloth"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "text": "Leather pants, adventuring gear, adventuring armor, seam down leg, small leather straps around thighs. Small pouches around belt.",
+      "item": "item.leather_trousers",
+      "fit": "shared",
+      "complete": true
+    },
+    "item.bone_focus": {
+      "slot": "offhand",
+      "depth": 8,
+      "materials": [
+        "cloth",
+        "accent"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "kind": "held",
+      "text": "A polished skull fragment bound in cloth and wire",
+      "hand": "armB",
+      "length": 0.25,
+      "held_as": "focus",
+      "grip_angle": 0,
+      "flip": false,
+      "fit": "shared"
+    },
+    "item.boots_of_haste": {
+      "slot": "feet",
+      "depth": 2,
+      "materials": [
+        "leather",
+        "accent"
+      ],
+      "bulk": 7,
+      "zones": [
+        {
+          "part": "leg*.lower",
+          "t": [
+            0.5,
+            1
+          ]
+        },
+        {
+          "part": "leg*.hand"
+        }
+      ],
+      "text": "leather boots with buckles"
+    },
+    "item.chainmail": {
+      "slot": "chest",
+      "depth": 4,
+      "materials": [
+        "metal",
+        "leather"
+      ],
+      "bulk": 6,
+      "zones": [
+        {
+          "part": "torso"
+        },
+        {
+          "part": "arm*.upper"
+        },
+        {
+          "part": "arm*.lower",
+          "t": [
+            0,
+            0.5
+          ]
+        }
+      ],
+      "fit": "per_sex",
+      "text": "A steel mail shirt over leather, heavy but trusted"
+    },
+    "item.dagger": {
+      "slot": "mainhand",
+      "depth": 3,
+      "materials": [
+        "metal",
+        "leather"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "kind": "held",
+      "text": "A slim steel dagger with a leather handle",
+      "hand": "armA",
+      "length": 0.3,
+      "held_as": "weapon",
+      "grip_angle": -45,
+      "flip": false,
+      "fit": "shared"
+    },
+    "item.greatsword": {
+      "slot": "mainhand",
+      "depth": 3,
+      "materials": [
+        "metal",
+        "leather"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "kind": "held",
+      "text": "A long steel blade swung with both hands",
+      "hand": "armA",
+      "length": 0.7,
+      "held_as": "weapon",
+      "grip_angle": -45,
+      "flip": false,
+      "fit": "shared"
+    },
+    "item.hand_axe": {
+      "slot": "mainhand",
+      "depth": 3,
+      "materials": [
+        "metal",
+        "leather"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "kind": "held",
+      "text": "A short iron axe on a leather-bound haft",
+      "hand": "armA",
+      "length": 0.4,
+      "held_as": "weapon",
+      "grip_angle": -45,
+      "flip": false,
+      "fit": "shared"
+    },
+    "item.holy_symbol": {
+      "slot": "offhand",
+      "depth": 8,
+      "materials": [
+        "metal",
+        "cloth"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "kind": "held",
+      "text": "A sun disc on a cloth cord, held up to the faithful",
+      "hand": "armB",
+      "length": 0.25,
+      "held_as": "focus",
+      "grip_angle": 0,
+      "flip": false,
+      "fit": "shared"
+    },
+    "item.mace": {
+      "slot": "mainhand",
+      "depth": 3,
+      "materials": [
+        "metal",
+        "leather"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "kind": "held",
+      "text": "A flanged iron head on a leather grip",
+      "hand": "armA",
+      "length": 0.42,
+      "held_as": "weapon",
+      "grip_angle": -45,
+      "flip": false,
+      "fit": "shared"
+    },
+    "item.musket": {
+      "slot": "mainhand",
+      "depth": 3,
+      "materials": [
+        "metal",
+        "leather"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "kind": "held",
+      "text": "An iron barrel on a wooden stock",
+      "hand": "armA",
+      "length": 0.7,
+      "held_as": "weapon",
+      "grip_angle": -45,
+      "flip": false,
+      "fit": "shared"
+    },
+    "item.oak_staff": {
+      "slot": "mainhand",
+      "depth": 3,
+      "materials": [
+        "leather",
+        "accent"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "kind": "held",
+      "text": "A gnarled oak staff with a stone in its crook",
+      "hand": "armA",
+      "length": 0.85,
+      "held_as": "weapon",
+      "grip_angle": -45,
+      "flip": false,
+      "fit": "shared"
+    },
+    "item.rapier": {
+      "slot": "mainhand",
+      "depth": 3,
+      "materials": [
+        "metal",
+        "accent"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "kind": "held",
+      "text": "A thin steel blade with a swept hilt",
+      "hand": "armA",
+      "length": 0.5,
+      "held_as": "weapon",
+      "grip_angle": -45,
+      "flip": false,
+      "fit": "shared"
+    },
+    "item.shortbow": {
+      "slot": "mainhand",
+      "depth": 3,
+      "materials": [
+        "leather",
+        "cloth"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "kind": "held",
+      "text": "A short curved bow of horn and wood, bowstring",
+      "hand": "armA",
+      "length": 0.6,
+      "held_as": "weapon",
+      "grip_angle": -45,
+      "flip": false,
+      "fit": "shared"
+    },
+    "item.spear": {
+      "slot": "mainhand",
+      "depth": 3,
+      "materials": [
+        "metal",
+        "leather"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "kind": "held",
+      "text": "An iron spearhead on a long ash shaft",
+      "hand": "armA",
+      "length": 0.95,
+      "held_as": "weapon",
+      "grip_angle": -45,
+      "flip": false,
+      "fit": "shared"
+    },
+    "item.throwing_flasks": {
+      "slot": "mainhand",
+      "depth": 3,
+      "materials": [
+        "leather",
+        "accent"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "kind": "held",
+      "text": "A bandolier of glass flasks, ready to throw",
+      "hand": "armA",
+      "length": 0.22,
+      "held_as": "weapon",
+      "grip_angle": -45,
+      "flip": false,
+      "fit": "shared"
+    },
+    "item.wand": {
+      "slot": "mainhand",
+      "depth": 3,
+      "materials": [
+        "leather",
+        "accent"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "kind": "held",
+      "text": "A wooden wand tipped with a crystal",
+      "hand": "armA",
+      "length": 0.28,
+      "held_as": "weapon",
+      "grip_angle": -45,
+      "flip": false,
+      "fit": "shared"
+    },
+    "item.war_banner": {
+      "slot": "offhand",
+      "depth": 8,
+      "materials": [
+        "cloth",
+        "accent"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "kind": "held",
+      "text": "A banner with trim on a short pole",
+      "hand": "armB",
+      "length": 0.9,
+      "held_as": "weapon",
+      "grip_angle": -45,
+      "flip": false,
+      "fit": "shared"
+    },
+    "item.whip": {
+      "slot": "mainhand",
+      "depth": 3,
+      "materials": [
+        "leather"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "kind": "held",
+      "text": "A long leather whip with a braided handle",
+      "hand": "armA",
+      "length": 0.45,
+      "held_as": "weapon",
+      "grip_angle": -45,
+      "flip": false,
+      "fit": "shared"
+    },
+    "item.wooden_shield": {
+      "slot": "offhand",
+      "depth": 8,
+      "materials": [
+        "leather",
+        "metal"
+      ],
+      "bulk": 6,
+      "zones": [],
+      "kind": "held",
+      "text": "A round wooden shield with an iron rim and boss",
+      "hand": "armB",
+      "length": 0.48,
+      "held_as": "shield",
+      "grip_angle": 0,
+      "flip": false,
+      "fit": "shared"
+    },
+    "item.cloth_hood": {
+      "slot": "head",
+      "depth": 7,
+      "materials": [
+        "cloth"
+      ],
+      "bulk": 14,
+      "zones": [
+        {
+          "part": "head",
+          "view": "front",
+          "ellipse": [
+            0.55,
+            0.3,
+            0.7,
+            0.72
+          ]
+        },
+        {
+          "part": "head",
+          "view": "front",
+          "ellipse": [
+            0.6,
+            0.66,
+            0.36,
+            0.34
+          ],
+          "cut": true
+        },
+        {
+          "part": "head",
+          "view": "back",
+          "ellipse": [
+            0.5,
+            0.4,
+            0.78,
+            0.8
+          ]
+        },
+        {
+          "part": "torso",
+          "rows": [
+            0,
+            0.14
+          ]
+        }
+      ],
+      "clips": [
+        "hair"
+      ],
+      "text": "a simple cloth hood covering the head, ears and neck, the face left open",
+      "design": "slot.head.cloth"
+    },
+    "item.cloth_shoes": {
+      "slot": "feet",
+      "depth": 2,
+      "materials": [
+        "cloth"
+      ],
+      "bulk": 5,
+      "zones": [
+        {
+          "part": "leg*.hand"
+        },
+        {
+          "part": "leg*.lower",
+          "t": [
+            0.85,
+            1
+          ]
+        }
+      ],
+      "text": "simple cloth shoes with bindings wrapped around the ankles",
+      "design": "slot.feet.cloth"
+    },
+    "item.cloth_wraps": {
+      "slot": "gloves",
+      "depth": 2,
+      "materials": [
+        "cloth"
+      ],
+      "bulk": 3,
+      "zones": [
+        {
+          "part": "arm*.hand",
+          "rows": [
+            0,
+            0.7
+          ]
+        },
+        {
+          "part": "arm*.lower",
+          "t": [
+            0.78,
+            1
+          ]
+        }
+      ],
+      "text": "cloth hand wraps around the palms and wrists, the fingers bare",
+      "design": "slot.hands.cloth"
+    },
+    "item.leather_cap": {
+      "slot": "head",
+      "depth": 7,
+      "materials": [
+        "leather"
+      ],
+      "bulk": 10,
+      "zones": [
+        {
+          "part": "head",
+          "view": "front",
+          "ellipse": [
+            0.56,
+            0.1,
+            0.56,
+            0.34
+          ]
+        },
+        {
+          "part": "head",
+          "view": "back",
+          "ellipse": [
+            0.5,
+            0.12,
+            0.66,
+            0.5
+          ]
+        }
+      ],
+      "clips": [
+        "hair"
+      ],
+      "text": "A plain leather cap laced under the chin",
+      "design": "slot.head.leather"
+    },
+    "item.leather_armor": {
+      "slot": "chest",
+      "depth": 4,
+      "materials": [
+        "leather"
+      ],
+      "bulk": 8,
+      "zones": [
+        {
+          "part": "torso"
+        },
+        {
+          "part": "arm*.upper",
+          "t": [
+            0,
+            0.3
+          ]
+        }
+      ],
+      "fit": "per_sex",
+      "text": "A leather jerkin, stitched and padded at the shoulders",
+      "design": "slot.body.leather"
+    },
+    "item.leather_gloves": {
+      "slot": "gloves",
+      "depth": 2,
+      "materials": [
+        "leather"
+      ],
+      "bulk": 5,
+      "zones": [
+        {
+          "part": "arm*.hand"
+        },
+        {
+          "part": "arm*.lower",
+          "t": [
+            0.86,
+            1
+          ]
+        }
+      ],
+      "text": "Supple leather gloves",
+      "design": "slot.hands.leather"
+    },
+    "item.leather_cloak": {
+      "slot": "back",
+      "depth": 3,
+      "materials": [
+        "leather"
+      ],
+      "bulk": 0,
+      "zones": [],
+      "fit": "shared",
+      "text": "a leather cloak hanging from the shoulders, its hood down on the back",
+      "design": "slot.back.leather"
+    },
+    "item.iron_sabatons": {
+      "slot": "feet",
+      "depth": 2,
+      "materials": [
+        "metal",
+        "leather"
+      ],
+      "bulk": 10,
+      "zones": [
+        {
+          "part": "leg*.hand"
+        },
+        {
+          "part": "leg*.lower",
+          "t": [
+            0.62,
+            1
+          ]
+        }
+      ],
+      "text": "steel plate sabatons over the feet and ankles, strapped on",
+      "design": "slot.feet.plate"
+    },
+    "item.iron_gauntlets": {
+      "slot": "gloves",
+      "depth": 2,
+      "materials": [
+        "metal",
+        "leather"
+      ],
+      "bulk": 9,
+      "zones": [
+        {
+          "part": "arm*.hand"
+        },
+        {
+          "part": "arm*.lower",
+          "t": [
+            0.55,
+            1
+          ]
+        }
+      ],
+      "text": "steel plate gauntlets with flared cuffs",
+      "design": "slot.hands.plate"
+    }
+  },
+  "_doc_game": "Game items (R-002): a Workshop piece (an entry of items) belongs to the game item `item` (default: its own id); several pieces can make one game item (item.iron_breastplate = breastplate + pauldrons). slot is one of the game's art slots (requirements.json). game_items: what an intake file says about a NEW game item (one the game doesn't have yet): name, kind, slot (game slot), weaponType, text (one line for the game), materials (material -> default ramp id). Missing fields are derived from the pieces; items the game already has take all of this from the game's content.",
+  "game_items": {
+    "item.kite_shield": {
+      "name": "Kite Shield",
+      "kind": "weapon",
+      "slot": "off",
+      "weaponType": "shield",
+      "text": "A tall steel kite shield over a leather-backed frame, flat on top and pointed below.",
+      "materials": {
+        "metal": "metal.steel",
+        "leather": "leather.brown"
+      }
+    },
+    "item.cloth_trousers": {
+      "name": "Cloth Trousers",
+      "kind": "armor",
+      "slot": "legs",
+      "text": "Loose cloth trousers down to the shin, light and quiet.",
+      "materials": {
+        "cloth": "cloth.brown"
+      }
+    },
+    "item.cloth_tunic": {
+      "name": "Cloth Tunic",
+      "kind": "armor",
+      "slot": "body",
+      "text": "A simple cloth tunic with half sleeves, belted at the hips.",
+      "materials": {
+        "cloth": "cloth.green"
+      }
+    },
+    "item.iron_breastplate": {
+      "name": "Iron Breastplate",
+      "kind": "armor",
+      "slot": "body",
+      "text": "A rounded iron breastplate with matching plate pauldrons.",
+      "materials": {
+        "metal": "metal.iron",
+        "cloth": "cloth.grey"
+      }
+    }
+  }
+}

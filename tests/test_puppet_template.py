@@ -1,6 +1,7 @@
 """Clean puppet template (hdart.puppet_template): renders every part whole from the spec alone (no art), pivots sit
 inside their parts, joints stay covered by the round ends, the torso is one closed shape, and the checked-in spec has
 both views. Run: uv run python tests/test_puppet_template.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import numpy as np
 import hdart.puppet_template as pt
 

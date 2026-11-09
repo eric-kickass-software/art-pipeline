@@ -1,5 +1,6 @@
 """hdart.comfy against the fake ComfyUI (hdart.fake_comfy): the shared image-in/image-out wrapper, txt2img outputs,
 errors as ComfyError (never SystemExit), the queue check and interrupt. Run: uv run python tests/test_comfy.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import tempfile, threading, time
 from pathlib import Path
 import numpy as np

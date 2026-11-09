@@ -1,4 +1,5 @@
 """Archive, orphan restore and locking in hdart.dungeon, on a temp copy of the specs. Run: uv run python tests/test_dungeon_archive.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import json, shutil, tempfile, threading
 from pathlib import Path
 import numpy as np

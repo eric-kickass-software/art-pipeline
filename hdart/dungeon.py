@@ -22,7 +22,7 @@ from .locks import CELLS as _CELL_CACHE, DUNGEON as LOCK, HARMONY as _REF_CACHE
 ROOT = Path(__file__).resolve().parent.parent
 DUN = config.data_dir() / "sprites" / "dungeon"
 ARCHIVE = config.data_dir() / "archive"  # git-ignored: archived sets, candidates and spec history, for removal by hand later
-STYLE = ROOT / "specs" / "dungeon_style.json"
+STYLE = config.specs_dir() / "dungeon_style.json"
 SCALE = 8  # generation is done at 8x the native pixel size
 ORDER = ("medium", "style", "view", "rendering", "framing", "biome")
 
@@ -652,7 +652,7 @@ def pixel_steps(spec):
 
 # ----------------------------------------------------------------------------- sets: candidates, approval, export
 
-SETS = ROOT / "specs" / "dungeon_sets"
+SETS = config.specs_dir() / "dungeon_sets"
 
 
 def export_root():

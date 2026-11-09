@@ -1,0 +1,782 @@
+{
+  "_doc": "Colour ramps for the character channels. Each ramp is 5 colours, darkest first. Give `base` and the ramp is hue-shifted automatically (shadows cooler, highlights warmer), or give `colors` to set it by hand. Ramp ids are <group>.<name>; a channel uses the ramps of the group with the same name (cloth1/cloth2 both use `cloth`).",
+  "rampSize": 5,
+  "outline": "#1b1421",
+  "groups": {
+    "skin": {
+      "fair": {
+        "base": "#f2c7a5",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#6d453c",
+          "#af816c",
+          "#f2c7a5",
+          "#ffdaba",
+          "#ffe1c6"
+        ],
+        "races": [
+          "elf"
+        ]
+      },
+      "rose": {
+        "base": "#dfc1b9",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#644a4a",
+          "#a2827f",
+          "#dfc1b9",
+          "#f2d7cf",
+          "#ffe9e1"
+        ],
+        "races": [
+          "human",
+          "elf"
+        ]
+      },
+      "tan": {
+        "base": "#c98d63",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#5a271d",
+          "#92543b",
+          "#c98d63",
+          "#e2ab81",
+          "#fbcaa2"
+        ],
+        "races": [
+          "human"
+        ]
+      },
+      "olive": {
+        "base": "#b38a5c",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.07,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0
+        },
+        "colors": [
+          "#a65639",
+          "#ad714a",
+          "#b38a5c",
+          "#bd9a6f",
+          "#c7a984"
+        ],
+        "races": [
+          "halforc"
+        ]
+      },
+      "brown": {
+        "base": "#8d5a3b"
+      },
+      "deep": {
+        "base": "#5e3a2a",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.12,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.07
+        },
+        "colors": [
+          "#531a15",
+          "#582a1f",
+          "#5e3a2a",
+          "#6e4b3a",
+          "#7e5e4d"
+        ],
+        "races": [
+          "human"
+        ]
+      },
+      "orc": {
+        "base": "#7d9a58",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#25451d",
+          "#4d7037",
+          "#7d9a58",
+          "#a3c07a",
+          "#cbe6a1"
+        ]
+      },
+      "ash": {
+        "base": "#9aa3b5"
+      },
+      "human_monk1": {
+        "base": "#f6ede4",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#6f635f",
+          "#b2a69f",
+          "#f6ede4",
+          "#fff7ef",
+          "#fff9f2"
+        ]
+      },
+      "human_monk3": {
+        "base": "#f7ead0",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#6f5e54",
+          "#b3a28f",
+          "#f7ead0",
+          "#fff4dd",
+          "#fff6e3"
+        ]
+      },
+      "human_monk5": {
+        "base": "#d7bd96",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#614537",
+          "#9c7d63",
+          "#d7bd96",
+          "#ecd5b0",
+          "#ffebc9"
+        ]
+      },
+      "human_monk7": {
+        "base": "#825c43",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#3a1a14",
+          "#5e3729",
+          "#825c43",
+          "#af8567",
+          "#dbb191"
+        ],
+        "races": [
+          "human"
+        ]
+      },
+      "human_monk9": {
+        "base": "#3a312a",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#1a1210",
+          "#2a201c",
+          "#3a312a",
+          "#7a6b5e",
+          "#bba897"
+        ]
+      },
+      "Pale_Rose": {
+        "base": "#cdbab1",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#5c4a48",
+          "#957f7a",
+          "#cdbab1",
+          "#e5d4ca",
+          "#fdeee5"
+        ],
+        "races": [
+          "elf"
+        ]
+      },
+      "pale_drow": {
+        "base": "#eecbfb",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#675071",
+          "#a98ab6",
+          "#eecbfb",
+          "#f7d6ff",
+          "#fcddff"
+        ],
+        "races": [
+          "elf"
+        ]
+      },
+      "medium_drow": {
+        "base": "#927996",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#403044",
+          "#68526d",
+          "#927996",
+          "#bb9ebd",
+          "#e4c5e3"
+        ],
+        "races": [
+          "elf"
+        ]
+      },
+      "dark_drow": {
+        "base": "#483b4f",
+        "tune": {
+          "hueOffset": 0.002,
+          "saturation": 1,
+          "shadowHue": 0.48,
+          "shadowShift": 0,
+          "shadowSat": 0.2,
+          "shadowDark": 0,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.38
+        },
+        "colors": [
+          "#46334f",
+          "#47374f",
+          "#483b4f",
+          "#74607b",
+          "#a289a6"
+        ],
+        "races": [
+          "elf"
+        ]
+      },
+      "pale_red": {
+        "base": "#ca6363",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#5b1c29",
+          "#923b44",
+          "#ca6363",
+          "#e38480",
+          "#fca8a2"
+        ],
+        "races": [
+          "halforc"
+        ]
+      },
+      "medium_red": {
+        "base": "#994d4d",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#451720",
+          "#6f2e35",
+          "#994d4d",
+          "#bf716e",
+          "#e69b96"
+        ],
+        "races": [
+          "halforc"
+        ]
+      },
+      "dark_red": {
+        "base": "#612323",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1.16,
+          "shadowHue": 0.525,
+          "shadowShift": 0.15,
+          "shadowSat": 0.25,
+          "shadowDark": 0.12,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.38
+        },
+        "colors": [
+          "#550226",
+          "#5b0d1e",
+          "#611919",
+          "#893633",
+          "#b15c55"
+        ],
+        "races": [
+          "halforc"
+        ]
+      },
+      "medium_green": {
+        "base": "#7d9a58",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#25451d",
+          "#4d7037",
+          "#7d9a58",
+          "#a3c07a",
+          "#cbe6a1"
+        ],
+        "races": [
+          "halforc"
+        ]
+      },
+      "pale_green": {
+        "base": "#9da88f",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#3e4c3a",
+          "#6b7a62",
+          "#9da88f",
+          "#bfcab1",
+          "#e2ecd4"
+        ],
+        "races": [
+          "halforc"
+        ]
+      },
+      "dark_green": {
+        "base": "#4e5544",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#1e261b",
+          "#353e2e",
+          "#4e5544",
+          "#858e76",
+          "#bdc7ab"
+        ],
+        "races": [
+          "halforc"
+        ]
+      },
+      "olive_copy": {
+        "base": "#816a51",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.07,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0
+        },
+        "colors": [
+          "#784a3a",
+          "#7c5b45",
+          "#816a51",
+          "#8b775f",
+          "#95846e"
+        ],
+        "races": [
+          "halforc"
+        ]
+      }
+    },
+    "hair": {
+      "black": {
+        "base": "#2c2630"
+      },
+      "chestnut": {
+        "base": "#7a4a2b"
+      },
+      "auburn": {
+        "base": "#a2452c"
+      },
+      "blonde": {
+        "base": "#d9b45a"
+      },
+      "platinum": {
+        "base": "#e6e0cf"
+      },
+      "grey": {
+        "base": "#8e8a90"
+      },
+      "ginger": {
+        "base": "#cf6a2e"
+      },
+      "teal": {
+        "base": "#3f8f8a"
+      },
+      "violet": {
+        "base": "#7a4fa3"
+      }
+    },
+    "eyes": {
+      "brown": {
+        "colors": [
+          "#1b1421",
+          "#2a1b17",
+          "#3d2a20",
+          "#5a3d2a",
+          "#5a3d2a"
+        ]
+      },
+      "blue": {
+        "colors": [
+          "#1b1421",
+          "#16233d",
+          "#22406b",
+          "#3b6aa0",
+          "#3b6aa0"
+        ]
+      },
+      "green": {
+        "colors": [
+          "#1b1421",
+          "#16301f",
+          "#245433",
+          "#3f8a4f",
+          "#3f8a4f"
+        ]
+      },
+      "glow": {
+        "colors": [
+          "#3a1010",
+          "#8a1d1d",
+          "#e0402a",
+          "#ff9a4a",
+          "#ffe08a"
+        ]
+      },
+      "light_brown": {
+        "base": "#b45b13",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#511000",
+          "#832a00",
+          "#b45b13",
+          "#d37d33",
+          "#f2a35a"
+        ]
+      }
+    },
+    "cloth": {
+      "blue": {
+        "base": "#3e5f9a"
+      },
+      "red": {
+        "base": "#9c3434"
+      },
+      "green": {
+        "base": "#4a7a3d"
+      },
+      "purple": {
+        "base": "#6a4a8c"
+      },
+      "cream": {
+        "base": "#d8ccad"
+      },
+      "black": {
+        "base": "#36313d"
+      },
+      "white": {
+        "base": "#e4e1d8"
+      },
+      "mustard": {
+        "base": "#c49a32"
+      },
+      "teal": {
+        "base": "#2f7f7a"
+      },
+      "brown": {
+        "base": "#7a5a3a"
+      },
+      "grey": {
+        "base": "#7b7884"
+      },
+      "rose": {
+        "base": "#b8607a"
+      }
+    },
+    "leather": {
+      "brown": {
+        "base": "#6e4a2f"
+      },
+      "dark": {
+        "base": "#3f2d24"
+      },
+      "tan": {
+        "base": "#a07a50"
+      },
+      "red": {
+        "base": "#7c3326"
+      },
+      "black": {
+        "base": "#2c2830"
+      }
+    },
+    "metal": {
+      "iron": {
+        "base": "#8c8f99"
+      },
+      "steel": {
+        "base": "#a7b2c2"
+      },
+      "bronze": {
+        "base": "#a8763e"
+      },
+      "gold": {
+        "base": "#d4aa3c"
+      },
+      "dark": {
+        "base": "#4f4c5a"
+      }
+    },
+    "wood": {
+      "oak": {
+        "base": "#7d5634"
+      },
+      "dark": {
+        "base": "#4e3524"
+      },
+      "pale": {
+        "base": "#b08a5c"
+      }
+    },
+    "accent": {
+      "gold": {
+        "base": "#d9b046"
+      },
+      "silver": {
+        "base": "#c5c9d3"
+      },
+      "red": {
+        "base": "#b8333a"
+      },
+      "green": {
+        "base": "#3e9a58"
+      },
+      "blue": {
+        "base": "#3d6fc4"
+      }
+    },
+    "dark": {
+      "ink": {
+        "colors": [
+          "#140e18",
+          "#1b1421",
+          "#241a2a",
+          "#2e2233",
+          "#3a2b3e"
+        ]
+      }
+    },
+    "magic": {
+      "arcane": {
+        "base": "#7a6cf0"
+      },
+      "fire": {
+        "base": "#f07a2a"
+      },
+      "frost": {
+        "base": "#6ad0f0"
+      },
+      "holy": {
+        "base": "#f0d86a"
+      },
+      "nature": {
+        "base": "#6ad07a"
+      },
+      "shadow": {
+        "base": "#8a3fa8"
+      }
+    },
+    "white": {
+      "base": {
+        "colors": [
+          "#c9c3cf",
+          "#e3dde6",
+          "#f4f0f2",
+          "#ffffff",
+          "#ffffff"
+        ]
+      }
+    }
+  }
+}

@@ -2,6 +2,7 @@
 and the Item Workshop's surface (hdart/items_api.py): every op documented, every older /api/ws/items/<action> the page
 calls mapped onto an op, approve/archive through the legacy route, and generation queued as the page queues it.
 Run: uv run python tests/test_ops.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import re, tempfile
 from pathlib import Path
 from hdart import jobs, ops

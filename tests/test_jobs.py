@@ -1,5 +1,6 @@
 """hdart.jobs: the Studio's queue and job-kind registry (persistence, cancel, waiting for a busy ComfyUI, a failing job
 doesn't stall the queue), and that every tool kind the pages queue is registered. Run: uv run python tests/test_jobs.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import json, tempfile, time
 from pathlib import Path
 from PIL import Image

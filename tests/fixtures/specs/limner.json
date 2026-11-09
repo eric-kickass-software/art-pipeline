@@ -1,0 +1,765 @@
+{
+ "_doc": "Limner (Studio /limner): icons and hero portraits. A prompt = style.prefix + category.prefix + subject + category.suffix + style.suffix. Subjects: entries[<cat>/<id>].subject (Eric's edit) > subjects[<cat>][<id>] (drafts) > a draft made from the game's name and text. Finish = what turns a kept master into the exported image (re-run without the GPU). See the vault note Art - Limner.",
+ "styles": {
+  "pixel": {
+   "name": "Pixel icon",
+   "lora": 1.0,
+   "prefix": "pixel art sprite, game asset, ",
+   "suffix": ", dark fantasy dungeon crawler, single object centered, plain white background, 32-bit pixel art"
+  },
+  "painted": {
+   "name": "Painted icon",
+   "lora": 0.0,
+   "prefix": "hand-painted dark fantasy RPG icon, ",
+   "suffix": ", bold readable silhouette, rich colours, soft rim light, single object centered, plain white background, game asset"
+  },
+  "anime": {
+   "name": "Dark anime",
+   "lora": 0.0,
+   "prefix": "dark fantasy anime illustration, highly detailed character portrait, painterly cel shading, dramatic rim light, sharp clean linework, key visual quality, ",
+   "suffix": ", moody atmospheric dungeon background, muted colours with warm candlelight accents"
+  },
+  "animepop": {
+   "name": "Dark anime, more pop",
+   "lora": 0.0,
+   "prefix": "dark fantasy anime key visual, highly detailed character portrait, crisp cel shading with painterly highlights, high contrast, vivid saturated accent colours, strong glowing rim light, luminous eyes, bold dramatic composition, ",
+   "suffix": ", deep shadows, atmospheric dungeon background with glowing particles, masterpiece"
+  },
+  "blend": {
+   "name": "Anime \u00d7 real blend",
+   "lora": 0.0,
+   "prefix": "dark fantasy illustration, anime-inspired semi-realistic digital painting, detailed face with realistic proportions and anime eyes, rich painterly rendering, high contrast lighting, vivid glowing accent colours, strong rim light, ",
+   "suffix": ", deep shadows, atmospheric dungeon background with glowing particles, masterpiece"
+  },
+  "semireal": {
+   "name": "Semi-real anime (house style)",
+   "lora": 0.0,
+   "prefix": "semi-realistic anime-style digital painting, dark fantasy character portrait, detailed expressive face and eyes, painterly brushwork, cinematic lighting, ",
+   "suffix": ", deep shadows, atmospheric background with glowing particles, masterpiece",
+   "reference": "specs/limner_refs/semireal.jpg"
+  },
+  "real": {
+   "name": "Hyper-real",
+   "lora": 0.0,
+   "prefix": "hyper realistic dark fantasy character portrait, cinematic photography, 85mm lens, dramatic chiaroscuro lighting, skin pores, intricate costume detail, ",
+   "suffix": ", moody smoky background"
+  },
+  "token": {
+   "name": "Token, chibi (matches the puppets)",
+   "lora": 0.0,
+   "prefix": "dark fantasy chibi game character, anime, stylized, ",
+   "suffix": ", chibi, super deformed, about 2.5 heads tall, oversized head, small body, short stubby limbs, clean dark outlines, two-tone cel shading, hard edges, stylized, hand painted, single character, no base, no pedestal, nothing beneath the feet, plain white background, game asset"
+  },
+  "creature": {
+   "name": "Creature (beasts)",
+   "lora": 0.0,
+   "prefix": "semi-realistic digital painting, dark fantasy creature art, painterly brushwork, cinematic lighting, ",
+   "suffix": ", an animal-like monster, not a person, deep shadows, atmospheric background with glowing particles, masterpiece"
+  },
+  "token_beast": {
+   "name": "Token, chibi beasts",
+   "lora": 0.0,
+   "prefix": "dark fantasy chibi game monster, cute but menacing, stylized, ",
+   "suffix": ", chibi creature, super deformed, oversized head, small round body, short stubby legs, an animal-like monster, not a person, clean dark outlines, two-tone cel shading, hard edges, stylized, hand painted, no base, nothing beneath it, plain white background, game asset"
+  },
+  "token_mass": {
+   "name": "Token, chibi swarms and blobs",
+   "lora": 0.0,
+   "prefix": "dark fantasy chibi game monster, cute but menacing, super deformed, oversized heads, ",
+   "suffix": ", a shapeless mass with no legs and no body of its own, chunky simplified shapes, clean dark outlines, two-tone cel shading, hard edges, stylized, hand painted, no base, plain white background, game asset"
+  }
+ },
+ "categories": {
+  "items": {
+   "name": "Items",
+   "hint": "The game's base items without a slot (consumables, tools, keys, loose trinkets), plus your own (+ Add).",
+   "style": "pixel",
+   "prefix": "",
+   "suffix": "",
+   "gen": {
+    "width": 512,
+    "height": 512,
+    "steps": 4,
+    "remove_bg": true
+   },
+   "finish": {
+    "kind": "icon",
+    "size": 64,
+    "colors": 24,
+    "margin": 4,
+    "outline": "#1b1421"
+   }
+  },
+  "gear": {
+   "name": "Gear",
+   "hint": "Every equippable base item (armour, weapons, held, trinkets), plus fallbacks: cloth / leather / plate per armour slot and one per weapon type. Add your own with + Add.",
+   "style": "pixel",
+   "prefix": "",
+   "suffix": "",
+   "gen": {
+    "width": 512,
+    "height": 512,
+    "steps": 4,
+    "remove_bg": true
+   },
+   "finish": {
+    "kind": "icon",
+    "size": 64,
+    "colors": 24,
+    "margin": 4,
+    "outline": "#1b1421"
+   }
+  },
+  "classes": {
+   "name": "Classes",
+   "hint": "One emblem per class (the creator's class grid, the hero panel).",
+   "style": "painted",
+   "prefix": "emblem icon, ",
+   "suffix": "",
+   "gen": {
+    "width": 512,
+    "height": 512,
+    "steps": 4,
+    "remove_bg": true
+   },
+   "finish": {
+    "kind": "icon",
+    "size": 64,
+    "colors": 0,
+    "margin": 4,
+    "outline": ""
+   }
+  },
+  "statuses": {
+   "name": "Statuses",
+   "hint": "Small badges over heroes and monsters: read at 32 px.",
+   "style": "pixel",
+   "prefix": "status effect icon, ",
+   "suffix": "",
+   "gen": {
+    "width": 512,
+    "height": 512,
+    "steps": 4,
+    "remove_bg": true
+   },
+   "finish": {
+    "kind": "icon",
+    "size": 64,
+    "colors": 20,
+    "margin": 4,
+    "outline": "#1b1421"
+   }
+  },
+  "damageTypes": {
+   "name": "Damage types",
+   "hint": "One glyph per damage type; its colour also leads the skill placeholders.",
+   "style": "pixel",
+   "prefix": "magic element symbol icon, ",
+   "suffix": "",
+   "gen": {
+    "width": 512,
+    "height": 512,
+    "steps": 4,
+    "remove_bg": true
+   },
+   "finish": {
+    "kind": "icon",
+    "size": 64,
+    "colors": 20,
+    "margin": 4,
+    "outline": "#1b1421"
+   }
+  },
+  "skills": {
+   "name": "Skills",
+   "hint": "Placeholders per damage type (active and passive) until each class wave has its final skills.",
+   "style": "painted",
+   "prefix": "spell skill icon, ",
+   "suffix": "",
+   "gen": {
+    "width": 512,
+    "height": 512,
+    "steps": 4,
+    "remove_bg": true
+   },
+   "finish": {
+    "kind": "icon",
+    "size": 64,
+    "colors": 0,
+    "margin": 4,
+    "outline": ""
+   }
+  },
+  "portraits": {
+   "name": "Portraits",
+   "hint": "The static set players pick from when making a hero: archetype \u00d7 look \u00d7 male/female.",
+   "style": "semireal",
+   "prefix": "close-up bust portrait from the chest up, ",
+   "suffix": ", looking at the viewer",
+   "gen": {
+    "width": 832,
+    "height": 1024,
+    "steps": 4,
+    "remove_bg": false
+   },
+   "finish": {
+    "kind": "portrait",
+    "width": 512,
+    "thumb": 128,
+    "crop": [
+     0.25,
+     0.06,
+     0.5
+    ]
+   }
+  },
+  "ui": {
+   "name": "UI",
+   "hint": "Menu screens, buttons and HUD icons. Add your own with + Add.",
+   "style": "painted",
+   "prefix": "game menu icon, ",
+   "suffix": "",
+   "gen": {
+    "width": 512,
+    "height": 512,
+    "steps": 4,
+    "remove_bg": true
+   },
+   "finish": {
+    "kind": "icon",
+    "size": 64,
+    "colors": 0,
+    "margin": 4,
+    "outline": ""
+   }
+  },
+  "monsters": {
+   "name": "Monsters",
+   "hint": "A portrait per monster (the turn-order bar, hover cards). Exported with the hero portraits, archetype: monster.",
+   "style": "semireal",
+   "prefix": "close-up portrait from the chest up, ",
+   "suffix": ", menacing, facing the viewer",
+   "shapes": {
+    "beast": {
+     "style": "creature",
+     "prefix": "close-up of a monster, ",
+     "suffix": ", menacing"
+    },
+    "mass": {
+     "style": "creature",
+     "prefix": "close-up of a monster, ",
+     "suffix": ", menacing"
+    }
+   },
+   "gen": {
+    "width": 832,
+    "height": 1024,
+    "steps": 4,
+    "remove_bg": false
+   },
+   "finish": {
+    "kind": "portrait",
+    "width": 512,
+    "thumb": 128,
+    "crop": [
+     0.25,
+     0.06,
+     0.5
+    ]
+   }
+  },
+  "npcs": {
+   "name": "NPCs",
+   "hint": "Friendly NPCs' portraits (the shop window). Exported with the hero portraits, archetype: npc.",
+   "style": "semireal",
+   "prefix": "close-up bust portrait from the chest up, ",
+   "suffix": ", friendly, looking at the viewer",
+   "gen": {
+    "width": 832,
+    "height": 1024,
+    "steps": 4,
+    "remove_bg": false
+   },
+   "finish": {
+    "kind": "portrait",
+    "width": 512,
+    "thumb": 128,
+    "crop": [
+     0.25,
+     0.06,
+     0.5
+    ]
+   }
+  },
+  "tokens": {
+   "name": "Tokens",
+   "hint": "Board tokens for monsters and NPCs, chibi like the player puppets (simple tokens, detailed portraits): one full-body 3/4 figure facing right (Mirror in the entry when it faces left), feet at the bottom. The game mirrors it for facing and animates it.",
+   "style": "token",
+   "prefix": "full body character standee, three-quarter view facing right, standing on the ground, the whole figure in frame from head to feet, ",
+   "suffix": "",
+   "shapes": {
+    "beast": {
+     "style": "token_beast",
+     "prefix": "full body side view facing right, the whole monster in frame, "
+    },
+    "mass": {
+     "style": "token_mass",
+     "prefix": "low and wide, seen from the side, the whole thing in frame, "
+    }
+   },
+   "gen": {
+    "width": 768,
+    "height": 1024,
+    "steps": 4,
+    "remove_bg": true
+   },
+   "finish": {
+    "kind": "token",
+    "size": 512,
+    "margin": 8,
+    "normal": 2.0
+   }
+  }
+ },
+ "archetypes": {
+  "healer": {
+   "name": "Healer",
+   "classes": [
+    "Acolyte",
+    "Zealot",
+    "Occultist"
+   ],
+   "summary": "Holy and forbidden healers: back-line ritual priests with censers and candles, front-line zealots with mace and shield, occultists who drain life with blood magic.",
+   "looks": {
+    "priest": "ritual priest in hooded white and gold robes holding a smoking censer, candlelight",
+    "zealot": "zealot crusader in battered plate with a holy mace, a faint golden halo",
+    "occultist": "occultist in dark ritual robes with a bloodied dagger and glowing crimson runes"
+   }
+  },
+  "tank": {
+   "name": "Tank",
+   "classes": [
+    "Bastion",
+    "Overlord",
+    "Dominator"
+   ],
+   "summary": "Walls and commanders: knights who take the hit and send it back, warlords who rally the party, battle-mages who hold monsters back with fear and barriers.",
+   "looks": {
+    "bastion": "bastion knight in heavy dented plate armour with a huge tower shield",
+    "overlord": "overlord warlord in a crested helm and fur mantle raising a tattered war banner",
+    "dominator": "dominator battle-mage in dark armour, a staff crackling with violet barrier magic"
+   }
+  },
+  "support": {
+   "name": "Support",
+   "classes": [
+    "Alchemist",
+    "Warden",
+    "Beast Master"
+   ],
+   "summary": "Brewers, keepers and beast-tamers: alchemists with bandoliers of elixirs, nature wardens with totems and vines, beast masters with their war-cats.",
+   "looks": {
+    "alchemist": "alchemist in a leather apron with brass goggles and bandoliers of glowing flasks",
+    "warden": "warden druid in moss-green robes with antler headdress, vines and a carved totem",
+    "beastmaster": "beast master in furs and leather with a coiled whip and a snarling war-cat at the shoulder"
+   }
+  },
+  "ranged": {
+   "name": "Ranged",
+   "classes": [
+    "Necromancer",
+    "Elementalist",
+    "Sniper"
+   ],
+   "summary": "Death, elements and the long shot: necromancers with rot and a skeleton guard, elementalists with fire, frost and lightning, hooded snipers with bow and musket.",
+   "looks": {
+    "necromancer": "necromancer in black tattered robes with a bone staff and green rot flames",
+    "elementalist": "elementalist with fire, frost and lightning swirling around the hands",
+    "sniper": "sniper ranger in a hooded weathered green-brown leather cloak with a long flintlock musket"
+   }
+  },
+  "melee": {
+   "name": "Melee",
+   "classes": [
+    "Spell Blade",
+    "Weapon Master",
+    "Void Reaper"
+   ],
+   "summary": "Up close: spell blades with rune-etched swords, weapon masters with huge two-handers, void reapers who strike from the shadows with twin daggers.",
+   "looks": {
+    "spellblade": "spell blade with a rune-etched sword wreathed in arcane fire",
+    "weaponmaster": "scarred weapon master gladiator with a greatsword over the shoulder",
+    "voidreaper": "void reaper assassin holding twin daggers, face lit from one side by violet light, violet shadow wisps around them"
+   }
+  }
+ },
+ "genders": {
+  "m": "male",
+  "f": "female"
+ },
+ "materials": {
+  "cloth": "cloth",
+  "leather": "leather",
+  "plate": "plate"
+ },
+ "subjects": {
+  "gear": {
+   "slot.head.cloth": "a simple cloth hood",
+   "slot.head.leather": "a leather cap",
+   "slot.head.plate": "a steel plate helmet",
+   "slot.body.cloth": "a cloth tunic",
+   "slot.body.leather": "a studded leather jerkin armour",
+   "slot.body.plate": "a steel plate breastplate",
+   "slot.legs.cloth": "cloth trousers",
+   "slot.legs.leather": "leather trousers",
+   "slot.legs.plate": "steel plate leg greaves",
+   "slot.feet.cloth": "cloth shoes with wrapped bindings",
+   "slot.feet.leather": "leather boots",
+   "slot.feet.plate": "steel plate sabatons",
+   "slot.hands.cloth": "cloth hand wraps",
+   "slot.hands.leather": "leather gloves",
+   "slot.hands.plate": "steel plate gauntlets",
+   "slot.back.cloth": "a folded cloth cape",
+   "slot.back.leather": "a leather hooded cloak",
+   "weapontype.axe": "a one-handed battle axe",
+   "weapontype.banner": "a war banner on a short pole",
+   "weapontype.bow": "a wooden longbow",
+   "weapontype.dagger": "a dagger",
+   "weapontype.flask": "three glass throwing flasks with fuses",
+   "weapontype.focus": "a magic focus orb in a bronze claw setting",
+   "weapontype.mace": "a flanged iron mace",
+   "weapontype.musket": "a flintlock musket",
+   "weapontype.polearm": "a halberd polearm",
+   "weapontype.rapier": "a rapier with a swept hilt",
+   "weapontype.shield": "a round wooden shield with an iron boss",
+   "weapontype.staff": "a gnarled wooden staff",
+   "weapontype.sword": "an iron sword",
+   "weapontype.twohander": "a two-handed greatsword",
+   "weapontype.wand": "a carved wand",
+   "weapontype.whip": "a coiled leather whip"
+  },
+  "classes": {
+   "class.acolyte": "a smoking golden censer beneath a radiant halo",
+   "class.alchemist": "a bubbling round alchemy flask with green smoke and brass fittings",
+   "class.bastion": "a massive tower shield with a fortress emblem",
+   "class.beast_master": "a snarling war-cat head over a coiled whip",
+   "class.dominator": "a dark crystal-topped rod with a violet eye inside a barrier ring",
+   "class.elementalist": "an orb of swirling fire, ice and lightning",
+   "class.necromancer": "a horned skull with green rot flames",
+   "class.occultist": "a ritual dagger dripping blood into a glowing occult circle",
+   "class.overlord": "a tattered war banner behind a crowned helm",
+   "class.sniper": "a long musket and a bow crossed over a crosshair",
+   "class.spell_blade": "a sword wreathed in glowing arcane runes",
+   "class.void_reaper": "twin daggers emerging from a black-violet rift",
+   "class.warden": "a carved wooden totem wrapped in vines and leaves",
+   "class.weapon_master": "a greatsword and a battle axe crossed",
+   "class.zealot": "a holy mace and shield in a radiant aura"
+  },
+  "statuses": {
+   "status.bleed": "a red blood drop splashing from a slash",
+   "status.blessed": "a glowing golden halo with light rays",
+   "status.burn": "a roaring orange flame",
+   "status.caged": "black iron cage bars",
+   "status.cursed": "a purple cursed skull sigil with dark wisps",
+   "status.drunk": "a tilted wooden tankard sloshing ale",
+   "status.fear": "a pale screaming ghost face",
+   "status.mark": "a red crosshair target sigil",
+   "status.poison": "a green poison drop with bubbles",
+   "status.reflect": "a polished mirror shield bouncing a bolt of light",
+   "status.regen": "a sprouting green leaf with a soft glow",
+   "status.root": "thick roots gripping the ground",
+   "status.rune": "a glowing blue carved rune stone",
+   "status.shield": "a translucent blue magic barrier bubble",
+   "status.shock": "a crackling yellow lightning spark",
+   "status.soak": "a splash of blue water droplets",
+   "status.sticky": "a sticky amber glue splat with strands",
+   "status.stun": "circling yellow stars",
+   "status.taunt": "an angry red glaring eye",
+   "status.well_rested": "a small campfire under a crescent moon"
+  },
+  "damageTypes": {
+   "physical": "a steel gauntlet fist with impact lines",
+   "holy": "a radiant golden sunburst",
+   "shadow": "a swirling black-violet smoke orb",
+   "rot": "a rotting green-brown skull with fungus",
+   "poison": "a green venom drop",
+   "fire": "a bright flame",
+   "lightning": "a jagged yellow lightning bolt",
+   "wind": "a pale swirling gust spiral",
+   "water": "a curling blue wave",
+   "earth": "a cracked brown boulder"
+  },
+  "ui": {
+   "ui.menu.play": "a lit lantern at the mouth of a dark dungeon stairway",
+   "ui.menu.heroes": "three small adventurer helmets side by side",
+   "ui.menu.inventory": "a worn leather backpack with buckles",
+   "ui.menu.equipment": "a knight's helmet in front of crossed swords",
+   "ui.menu.skills": "an open spellbook with a glowing rune above it",
+   "ui.menu.party": "three shields overlapping in a row",
+   "ui.menu.stash": "a heavy iron-bound wooden chest",
+   "ui.menu.camp": "a small campfire with logs and a tent behind it",
+   "ui.menu.map": "a rolled parchment dungeon map with a red X",
+   "ui.menu.quests": "a parchment scroll with a wax seal and quill",
+   "ui.menu.settings": "a brass cogwheel",
+   "ui.menu.exit": "a wooden door ajar with light spilling out",
+   "ui.stat.gold": "a small stack of gold coins",
+   "ui.stat.health": "a red heart",
+   "ui.stat.xp": "a glowing blue star",
+   "ui.action.end_turn": "an hourglass with sand running"
+  },
+  "monsters": {
+   "monster.skeleton": "an undead skeleton warrior, old ivory bones in scraps of rusted armour, a notched rusty sword, faint pale light in the empty eye sockets",
+   "monster.ghoul": "a hunched ghoul, grey-green rotting skin, long black claws, a feral starving face, crouched like a beast",
+   "monster.rat_swarm": "a writhing heap of a dozen filthy brown rats piled on top of each other, many small red eyes, bared teeth, only rats",
+   "monster.goblin_cutthroat": "a wiry goblin cutthroat in a dark ragged hood, green skin, a long knife in each hand, a sly grin",
+   "monster.cult_zealot": "a fanatic cultist in blood-red robes, a curved sacrificial blade, wild zealous eyes",
+   "monster.slime": "a gelatinous mound of green translucent slime, a dome-shaped wobbling blob, bones and coins floating inside, glistening, no face, no arms, no legs",
+   "monster.goblin_hexer": "a goblin shaman, wrinkled green skin, bone fetishes and feathers, a gnarled staff with a glowing green tip",
+   "monster.cult_adept": "a cult adept in deep purple robes, a dark tome in one hand and a ritual dagger in the other, faint violet magic",
+   "monster.grave_priest": "an undead priest in tattered black and grey vestments, a swinging censer with pale green smoke, a withered face",
+   "monster.web_spider": "a giant dark spider with long hairy legs, many glinting eyes, dripping fangs",
+   "monster.slimeling": "a small dome-shaped blob of pale-green translucent slime, wobbly, no face, no arms, no legs",
+   "monster.goblin_sapper": "a goblin sapper with a satchel of black blasting-powder bombs, a lit fuse, soot-stained leather and goggles",
+   "monster.cave_crawler": "a many-legged tunnel bug, segmented purple-grey carapace, long antennae, snapping mandibles",
+   "monster.rock_golem": "a rock golem, a hulking walking boulder of brown-grey stone, cracks with faint amber light, huge stone fists",
+   "monster.stone_guardian": "a sandstone temple guardian statue come to life, carved armour, a stone halberd, weathered and cracked",
+   "monster.ruin_wraith": "the pale blue-white ghost of an ancient priest, translucent robes trailing into mist, hollow glowing eyes",
+   "monster.cult_ritualist": "a cult healer in red robes and a hood, a ritual knife and a bowl of glowing blood, painted sigils",
+   "monster.lich": "a lich, a crowned skeletal sorcerer in rich decayed robes, purple soul fire in the eye sockets, a staff with a glowing gem",
+   "monster.goblin_warchief": "Warchief Grizzlegut, a huge muscular goblin warlord, a massive cleaver, bone and skull trophies, scarred green skin, crude spiked armour",
+   "monster.bonelord_varrik": "Bonelord Varrik, a skeleton captain in a battered crested helm and old officer's armour, a long sword raised to drill his dead, a tattered red sash, cold blue light in the eye sockets",
+   "monster.brood_mother": "the Brood Mother, a giant black spider the size of a cart, a swollen egg sac, thick webbing, many glowing violet eyes, tiny spiderlings clinging to her legs",
+   "monster.foreman_grit": "Foreman Grit, a stout goblin foreman in a dented mining helmet with a candle, a bandolier of blasting-powder bombs, a lit fuse in one hand, a scowl",
+   "monster.golem_overseer": "the Golem Overseer, a big old stone-and-iron foreman golem, riveted plates over cracked rock, a glowing rune on its chest, one fist a heavy hammer",
+   "monster.wraith_queen": "the Wraith Queen, the pale ghost of a queen in a tall crown and flowing translucent gown, a hollow wailing mouth, blue-white mist",
+   "monster.stone_colossus": "the Stone Colossus, a towering sandstone temple guardian statue, huge carved shoulders, a stone spear, cracks glowing with faint gold"
+  },
+  "npcs": {
+   "npc.trader": "a cheerful travelling peddler with a huge overstuffed pack, pots and trinkets hanging from it, a fat coin purse",
+   "npc.blacksmith": "a burly blacksmith in a scorched leather apron, a heavy hammer, soot on the arms, a portable anvil",
+   "npc.sage": "an old scholar sage in blue robes, a long white beard, rolled scrolls and a glowing magic trinket",
+   "npc.witch_doctor": "a masked witch doctor healer in green, a carved wooden mask, herbs, bones and potion bottles",
+   "npc.tester": "an arena master duellist in red leather and a crimson cloak, a rapier, a confident challenging smile"
+  }
+ },
+ "entries": {
+  "gear/slot.hands.plate": {
+   "style": "painted",
+   "subject": "a steel plate gauntlet, hand held up."
+  },
+  "gear/weapontype.mace": {
+   "style": "painted"
+  },
+  "gear/weapontype.bow": {
+   "style": "painted",
+   "subject": "a wooden bow and arrow"
+  },
+  "gear/slot.feet.leather": {
+   "style": "painted"
+  },
+  "gear/slot.feet.cloth": {
+   "style": "painted",
+   "subject": "cloth foot wraps"
+  },
+  "gear/slot.legs.leather": {
+   "style": "painted"
+  },
+  "gear/slot.head.plate": {
+   "style": "painted"
+  },
+  "gear/slot.head.leather": {
+   "style": "painted",
+   "subject": "a leather medieval cap"
+  },
+  "gear/weapontype.axe": {
+   "style": "painted"
+  },
+  "classes/class.occultist": {
+   "style": "painted",
+   "subject": "a glowing occult ritual circle with candles"
+  },
+  "classes/class.beast_master": {
+   "subject": "a snarling war-cat head"
+  },
+  "classes/class.elementalist": {
+   "subject": "A solid round sphere of ice, wrapped with fire and lightning"
+  },
+  "classes/class.sniper": {
+   "subject": "a long rifle laid over a crosshair"
+  },
+  "classes/class.zealot": {
+   "subject": "a steel spikey mace sitting in front of aa large bright sun"
+  },
+  "classes/class.necromancer": {
+   "subject": "a skull glowing with green flames sitting on a green pentagram with runes at each point"
+  },
+  "classes/class.bastion": {
+   "subject": "a fortress, bastion, protected by a faint blue barrier"
+  },
+  "classes/class.overlord": {
+   "subject": "a war torn and tattered red tapestry, an intimidating steel helmet in front with glowing orange eyes"
+  },
+  "classes/class.spell_blade": {
+   "subject": "a simple steel scimitar, the blade wrapped in glowing purple flames"
+  },
+  "classes/class.void_reaper": {
+   "subject": "a steel daggers in front of wispy strands of tangled black smoke"
+  },
+  "classes/class.weapon_master": {
+   "subject": "A zoomed in shot of a giant war axe"
+  },
+  "classes/class.dominator": {
+   "subject": "a black iron gauntlet clinching a ball of fire"
+  },
+  "classes/class.alchemist": {
+   "subject": "A collection of bubbling and swirling potions with colorful gas rolling off"
+  },
+  "classes/class.acolyte": {
+   "subject": "a very small leather-bound holy book with a golden ankh on its cover, a bright halo of light surrounding the book"
+  },
+  "portraits/portrait.ranged.elementalist.m": {
+   "subject": "a male human elementalist with a ball of lightening in their hands"
+  },
+  "portraits/portrait.ranged.elementalist.f": {
+   "subject": "a female human elementalist holding a fireball in her hands"
+  },
+  "portraits/portrait.support.alchemist.f": {
+   "subject": "a female human alchemist with a leather apron and brass goggles. Tools are shoved in the pocket of her apron, and she is holding a glowing flask"
+  },
+  "portraits/portrait.support.alchemist.m": {
+   "subject": "a male human alchemist with a leather apron and brass goggles. Tools are shoved in the pocket of his apron, and he is holding a glowing flask"
+  },
+  "statuses/status.bleed": {
+   "subject": "a drop of deep red blood"
+  },
+  "statuses/status.mark": {
+   "subject": "a red cross hairs with triangle indicators"
+  },
+  "statuses/status.poison": {
+   "subject": "a drop of green poison with bubbles"
+  },
+  "statuses/status.soak": {
+   "subject": "a drop of blue water"
+  },
+  "statuses/status.root": {
+   "subject": "a leather boot gripped by roots and vines"
+  },
+  "statuses/status.sticky": {
+   "subject": "A leather boot stuck in amber sticky sap"
+  },
+  "damageTypes/lightning": {
+   "subject": "chain lightening arcs"
+  },
+  "damageTypes/water": {
+   "subject": "a drop of blue water"
+  },
+  "statuses/status.taunt": {
+   "subject": "a cartoonish human face sticking their tongue out mockingly, chibi, anime"
+  },
+  "gear/item.backpack": {
+   "subject": "leather backpack with room for a few things. grey scale"
+  },
+  "items/item.holy_water": {
+   "subject": "a glass flask filled with holy water that hurts the undead, liquid is a pale blue with a slight angelic glow"
+  },
+  "gear/item.throwing_flasks": {
+   "subject": "A thick leather bandolier with a row of thin glass vials filed with glowing green liquid."
+  },
+  "items/item.medium_potion": {
+   "subject": "medium potion, a medium corked vial of red healing draught"
+  },
+  "gear/item.rapier": {
+   "subject": "a thin steal rapier with a looped guard"
+  },
+  "gear/item.oak_staff": {
+   "subject": "a gnarled and knobby oak staff, a nice narrow tapper up the shaft"
+  },
+  "gear/item.mace": {
+   "subject": "spiked steel mace"
+  },
+  "gear/item.holy_symbol": {
+   "subject": "a small carved figurine of a beautiful goddess"
+  },
+  "gear/item.bone_focus": {
+   "subject": "a small effigy of bone and twine"
+  },
+  "gear/item.whip": {
+   "subject": "a thick leather whip coiled up"
+  },
+  "gear/item.chainmail": {
+   "subject": "a chainmail shirt, rings of steel linked together to make a light flexible armor"
+  },
+  "npcs/npc.witch_doctor": {
+   "subject": "a shady old hag of a voodoo witch doctor out in the swamp, thick matted hair with streaks of gray. haunted by the souls of the lost"
+  },
+  "npcs/npc.sage": {
+   "subject": "an old sage in prestigious robes holding a thick tome of arcane knowledge"
+  },
+  "tokens/npc.sage": {
+   "subject": "an old sage in prestigious robes holding a thick tome of arcane knowledge, a short white beard and medium length grey hair"
+  },
+  "tokens/npc.witch_doctor": {
+   "subject": "a shady old hag of a voodoo witch doctor out in the swamp, thick matted hair with streaks of gray. haunted by the souls of the lost"
+  },
+  "tokens/monster.web_spider": {
+   "subject": "a giant spider, with a tiny head covered in small black eyes, two dripping fangs, 8 legs"
+  },
+  "tokens/monster.rat_swarm": {
+   "subject": "a greasy knot of a dozen tangled rats, teeth gnashing and claws ripping"
+  },
+  "tokens/monster.goblin_sapper": {
+   "subject": "a goblin sapper, wrinkled olive green skin and a menacing grin on his face, with a satchel of black blasting-powder bombs, a lit torch, soot-stained leather and googles on top of his head"
+  },
+  "tokens/monster.goblin_cutthroat": {
+   "subject": "a wiry goblin cutthroat in a dark ragged hood, wrinkled olive green skin, a long knife in each hand, a scowl on his face"
+  },
+  "tokens/monster.goblin_warchief": {
+   "subject": "Warchief Grizzlegut, a huge muscular goblin warlord, a massive cleaver, bone and skull trophies, scarred green skin, crude spiked armor, holding a wide two-handed sword"
+  },
+  "statuses/status.enraged": {
+   "subject": "an angry face"
+  },
+  "gear/item.wraith_queens_crown": {
+   "subject": "a cold silver crown of the late queen"
+  },
+  "gear/item.leather_boots": {
+   "subject": "pair of simple brown leather boots for adventuring"
+  },
+  "damageTypes/physical": {
+   "subject": "a steel hammer"
+  },
+  "skills/placeholder.physical.active": {
+   "subject": "a steel hammer"
+  }
+ },
+ "_house_style": "Portraits: 'semireal' (Eric, 2026-11-01: 'that top row is gold'). Reference: specs/limner_refs/semireal.jpg (seed 11, 832x1024, 4 steps, no LoRA). Change the house style only on purpose.",
+ "added": {
+  "items": {
+   "item.medium_potion": {
+    "name": "Medium Potion",
+    "sub": "consumable"
+   }
+  }
+ },
+ "races": {
+  "human": {
+   "name": "Human",
+   "noun": "human"
+  },
+  "halforc": {
+   "name": "Half-orc",
+   "noun": "half-orc",
+   "traits": "green-grey skin, a heavy square jaw, small lower tusks, a broad nose, spade-shaped ears"
+  },
+  "elf": {
+   "name": "Elf",
+   "noun": "elf",
+   "traits": "long pointed elf ears, slender graceful features, high cheekbones"
+  }
+ },
+ "shape_overrides": {
+  "monster.rat_swarm": "mass",
+  "monster.slime": "mass",
+  "monster.slimeling": "mass"
+ }
+}

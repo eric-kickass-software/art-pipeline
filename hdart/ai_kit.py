@@ -2,7 +2,7 @@
 
 The name is historical: this was the AI sprite kit (v3), retired 2026-10-25 (its code is in git history before A10).
 What the tools still share from it:
-    ROOT     the tool's folder (specs/ live here)
+    ROOT     the tool's folder (specs come from config.specs_dir())
     AI_DIR   the data folder of the character tools: <data>/sprites/ai (workshop.json, paint/, face/, items/, ...)
     BIG      the size (px) FLUX paints a 512-px mannequin image at
     foreground(img), clean(mask)   masks of AI images painted on white

@@ -24,7 +24,7 @@ from . import ai_kit, comfy, config, jobs, levels, store
 ROOT = Path(__file__).resolve().parent.parent
 STATE = ai_kit.AI_DIR / "workshop.json"
 CAND = ai_kit.AI_DIR / "candidates"
-STYLE = ROOT / "specs" / "ai_style.json"
+STYLE = config.specs_dir() / "ai_style.json"
 ARCHIVE = config.data_dir() / "archive"  # git-ignored, shared with the Dungeon Forge
 ORDER = ("medium", "style", "proportions", "view", "rendering", "framing", "world")
 
@@ -191,7 +191,7 @@ def back_from_front(front_img, seed, lora=0.8, what="", denoise=BACK_DENOISE):
 # A race = three A-pose mannequins: <race>.unisex (generated), <race>.male / <race>.female (edits of the unisex front that
 # keep head, face, pose, scale and feet), each with a back made as an edit of its front (perspective-correct 3/4 back).
 
-RACES = ROOT / "specs" / "races.json"
+RACES = config.specs_dir() / "races.json"
 SEXES = ("unisex", "male", "female")
 # only the unisex has an A-pose mannequin (the Template's reference art); male and female are painted from the Template
 # (Paint step, hdart/puppet_paint.py). Their old mannequins were archived on 2026-10-24.
@@ -336,7 +336,7 @@ def race_state(race):
 # ----------------------------------------------------------------------------- ramps (Workshop "Ramps" tab)
 # A skin tone is a palette ramp (specs/palettes.json, group "skin"): the art stores cel levels, the game colours them.
 
-PALETTES = ROOT / "specs" / "palettes.json"
+PALETTES = config.specs_dir() / "palettes.json"
 
 
 def skin_mask(a):

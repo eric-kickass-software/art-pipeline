@@ -1,6 +1,7 @@
 """Puppet template (hdart.puppet) on the real approved human.male pair (skipped if absent: the art-based skeleton detection
 needs real mannequin art): runs end to end, writes the files, records state, and refuses without an approved front and
 back. Run: uv run python tests/test_puppet.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import json, shutil, tempfile
 from pathlib import Path
 import hdart.ai_kit as ak

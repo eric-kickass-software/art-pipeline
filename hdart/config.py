@@ -56,6 +56,13 @@ def data_dir():
     return Path(d) if d else ROOT
 
 
+def specs_dir():
+    """The specs folder (prompts, races, ramps, items, zones, dungeon sets, Limner): HD_SPECS, else <tool>/specs.
+    Tests point HD_SPECS at a copy of tests/fixtures/specs, so Eric's live edits never break them."""
+    d = os.environ.get("HD_SPECS")
+    return Path(d) if d else ROOT / "specs"
+
+
 def backups_dir():
     return Path(get()["paths"]["backups"])
 

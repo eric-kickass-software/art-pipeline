@@ -1,5 +1,6 @@
 """Unity puppet export (hdart.unity_export) of a fake-painted race into a temp project (HD_PROJECT): puppet.json's
 rig and options, the cropped parts with their skin index maps, the ramps. Run: uv run python tests/test_unity_export.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import json, os, shutil, tempfile
 from pathlib import Path
 import numpy as np

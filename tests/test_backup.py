@@ -1,5 +1,6 @@
 """hdart backup: what's copied (state, layers, approved dungeon candidates + sidecars, specs) and what isn't (scratch,
 unapproved candidates), and that it refuses a folder inside the tool or its data. Run: uv run python tests/test_backup.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import json, shutil, tempfile
 from pathlib import Path
 from hdart import backup, config

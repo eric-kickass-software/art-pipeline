@@ -1,4 +1,5 @@
 """Master tile + repaint helpers in hdart.dungeon (no GPU). Run: uv run python tests/test_master.py"""
+import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import numpy as np
 from PIL import Image
 import hdart.dungeon as d
