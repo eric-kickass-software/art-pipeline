@@ -1,12 +1,12 @@
-"""Ramp editor backend (hdart.workshop) + JS/Python ramp parity. Run: uv run python tests/test_ramps.py"""
+"""Ramp editor backend (hdart.tools.character.workshop) + JS/Python ramp parity. Run: uv run python tests/test_ramps.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import json, shutil, subprocess, tempfile
 from pathlib import Path
 import numpy as np
 from PIL import Image
-import hdart.levels as levels
-import hdart.palette as palette
-from hdart.palette import Palettes, ramp_from_base, rgb_hex
+import hdart.imaging.levels as levels
+import hdart.imaging.palette as palette
+from hdart.imaging.palette import Palettes, ramp_from_base, rgb_hex
 
 ROOT = Path(__file__).resolve().parent.parent
 tmp = Path(tempfile.mkdtemp())
@@ -40,7 +40,7 @@ try: palette.save_ramp("skin", "bad name"); raise SystemExit("no error")
 except ValueError: pass
 doc = palette.delete_ramp("skin", "test_tone2"); assert "test_tone2" not in doc["groups"]["skin"]
 
-# the editor's JS ramp formula = hdart.palette.ramp_from_base at the default tune (needs node)
+# the editor's JS ramp formula = hdart.imaging.palette.ramp_from_base at the default tune (needs node)
 node = shutil.which("node")
 if node:
     html = (ROOT / "studio" / "workshop.html").read_text(encoding="utf-8")

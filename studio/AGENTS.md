@@ -1,6 +1,6 @@
 # AGENTS.md: `studio/` (the pages)
 
-Single-file HTML pages with inline JS and CSS, served by `hdart/studio.py` (no build step, no framework). Repo-wide
+Single-file HTML pages with inline JS and CSS, served by `hdart/server/studio.py` (no build step, no framework). Repo-wide
 rules: `../AGENTS.md`.
 
 | Page | URLs | Talks to |
@@ -9,7 +9,7 @@ rules: `../AGENTS.md`.
 | `dungeon.html` | `/dungeon` | `/api/dun/<action>`, `/api/lib/<action>` (aliases of `dungeon.*` ops), `/api/ws/jobs` |
 | `limner.html` | `/limner` | `/api/limner/<action>` (aliases of `limner.*` ops), `/api/ws/jobs` |
 
-Every route is an alias of an op (`hdart/<tool>_api.py`, tables `LEGACY` / `GET_LEGACY`); `tests/test_tool_ops.py`
+Every route is an alias of an op (`hdart/tools/<tool>/<tool>_api.py`, tables `LEGACY` / `GET_LEGACY`); `tests/test_tool_ops.py`
 and `tests/test_ops.py` fail when a page calls a route without one. New page code can call `/api/op/<name>` directly.
 
 - Each page has a small `api(path, body)` helper: GET without a body, POST JSON with one; errors come back as
@@ -19,7 +19,7 @@ and `tests/test_ops.py` fail when a page calls a route without one. New page cod
   `// Item Workshop (/items)` block; the Workshop Editor is the `PA` object.
 - Browser-only preferences (hidden layers, last race/sex/view, outfits) are in `localStorage`, always inside
   `try/catch`. Real state is on the server.
-- The page's ramp maths must match `hdart/palette.py` (`tests/test_ramps.py` runs the page's JS under Node).
+- The page's ramp maths must match `hdart/imaging/palette.py` (`tests/test_ramps.py` runs the page's JS under Node).
 
 ## Invariants
 - Keep old routes working: the page and agents may call either the route or the op.

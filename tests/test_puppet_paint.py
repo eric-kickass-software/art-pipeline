@@ -1,21 +1,21 @@
-"""Puppet Paint step + Parts editor backend (hdart.puppet_paint), on the fake ComfyUI: every pass returns its init
+"""Puppet Paint step + Parts editor backend (hdart.tools.character.puppet_paint), on the fake ComfyUI: every pass returns its init
 image, so the flow runs without a GPU. Run: uv run python tests/test_puppet_paint.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import base64, io, json, os, shutil, tempfile
 from pathlib import Path
 import numpy as np
 from PIL import Image
-import hdart.workshop as ws
-from hdart import config
-import hdart.puppet_paint as ppt
-import hdart.puppet as pp
-import hdart.puppet_face as pf
-import hdart.races as races
+import hdart.tools.character.workshop as ws
+from hdart.core import config
+import hdart.tools.character.puppet_paint as ppt
+import hdart.tools.character.puppet as pp
+import hdart.tools.character.puppet_face as pf
+import hdart.tools.character.races as races
 N = pp.PX * ppt.S   # the rest-pose canvas
 
 tmp =Path(tempfile.mkdtemp())
 os.environ["HD_DATA"] = str(tmp)   # the data root (sprites/ai, archive, ...) is a temp folder
-from hdart.fake_comfy import FakeComfy, default_respond, info
+from hdart.core.fake_comfy import FakeComfy, default_respond, info
 calls = []
 
 

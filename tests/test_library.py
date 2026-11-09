@@ -3,7 +3,7 @@ Run: uv run python tests/test_library.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import numpy as np
 from PIL import Image
-from hdart import library as L
+from hdart.tools.dungeon import library as L
 
 # repeats: whole texture repeats per 1.5 m tile, at least 1
 assert L.repeats_per_tile([0.5, 0.5]) == 3 and L.repeats_per_tile([2.4, 1.2]) == 1 and L.repeats_per_tile(None) == 1

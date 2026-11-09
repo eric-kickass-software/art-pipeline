@@ -1,10 +1,10 @@
-"""hdart.store: state edits under the lock (threads and a second process never lose an update), atomic writes, the
+"""hdart.core.store: state edits under the lock (threads and a second process never lose an update), atomic writes, the
 standard meta.json, unique candidate ids, archiving, approvals; and that the Paint/Face/Item tools use it (approve and
 archive through their own functions). Run: uv run python tests/test_store.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import json, os, subprocess, sys, tempfile, threading, time
 from pathlib import Path
-from hdart import store
+from hdart.core import store
 
 tmp = Path(tempfile.mkdtemp())
 
@@ -12,7 +12,7 @@ tmp = Path(tempfile.mkdtemp())
 st = store.State(tmp / "state.json", {"n": 0, "who": []})
 assert st.load() == {"n": 0, "who": []} and not st.path.exists()
 child = subprocess.Popen([sys.executable, "-c", f"""
-from hdart import store
+from hdart.core import store
 st = store.State(r"{st.path}", {{"n": 0, "who": []}})
 for i in range(40):
     with st.edit() as s:
@@ -81,10 +81,10 @@ lst = []; store.member(lst, "a"); store.member(lst, "b"); store.member(lst, "a")
 assert lst == ["b"]
 
 # the tools on the store: Paint approve/archive, Item approve/archive (to archive/workshop/items/...)
-import hdart.workshop as ws
-from hdart import config
-import hdart.puppet_paint as ppt
-import hdart.item_workshop as iw
+import hdart.tools.character.workshop as ws
+from hdart.core import config
+import hdart.tools.character.puppet_paint as ppt
+import hdart.tools.items.item_workshop as iw
 os.environ["HD_DATA"] = str(tmp / "wdata")   # the Workshop's data root: a temp folder
 c1, d1 = store.new(ppt.out_dir("human.male"), 1); store.write_meta(d1, "paint", seed=1, build="human.male")
 c2, d2 = store.new(ppt.out_dir("human.male"), 2); store.write_meta(d2, "paint", seed=2, build="human.male")

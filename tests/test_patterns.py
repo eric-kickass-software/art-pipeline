@@ -1,7 +1,7 @@
-"""Layout templates (hdart/patterns.py): every pattern repeats exactly once per tile, at its set scale. Run: uv run python tests/test_patterns.py"""
+"""Layout templates (hdart/tools/dungeon/patterns.py): every pattern repeats exactly once per tile, at its set scale. Run: uv run python tests/test_patterns.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import numpy as np
-from hdart import iso, patterns as P
+from hdart.tools.dungeon import iso, patterns as P
 
 for name in P.PATTERNS:
     two = P.render(name, None, None, 2, 2.0, 96, 3, True)

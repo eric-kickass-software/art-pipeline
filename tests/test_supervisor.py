@@ -1,4 +1,4 @@
-"""The Studio supervisor (hdart/supervisor.py) and studio.restart, on a throwaway Studio: temp data and specs, a free
+"""The Studio supervisor (hdart/server/supervisor.py) and studio.restart, on a throwaway Studio: temp data and specs, a free
 port, no GPU. A fake job module in a temp folder (loaded through HD_STUDIO_MODULES, watched with --watch) stands in for
 the code: editing it restarts the Studio; a restart waits for a running job, and the job queued behind it runs after;
 a syntax error leaves the old server running until the file is fixed; studio.restart restarts; a server that dies is
@@ -15,7 +15,7 @@ data, plug = tmp / "data", tmp / "plug"
 plug.mkdir()
 FAKE = '''"""Fake job kinds for test_supervisor ({tag})."""
 import time
-from hdart import jobs
+from hdart.core import jobs
 
 
 @jobs.kind("sv_sleep", gpu=False)

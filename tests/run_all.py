@@ -1,5 +1,5 @@
 """Run every test (each in its own process) without the GPU: HD_COMFY_URL points at a closed port, so a test that
-reaches for ComfyUI without the fake (hdart.fake_comfy) fails instead of queueing behind the live Studio.
+reaches for ComfyUI without the fake (hdart.core.fake_comfy) fails instead of queueing behind the live Studio.
 Run: uv run python tests/run_all.py [name-filter]"""
 import os, subprocess, sys, time
 from pathlib import Path

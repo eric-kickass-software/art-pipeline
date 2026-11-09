@@ -1,4 +1,4 @@
-"""The ops of the Dungeon Forge, Limner, Character Workshop and job queue (hdart/<tool>_api.py, hdart/jobs_api.py):
+"""The ops of the Dungeon Forge, Limner, Character Workshop and job queue (hdart/<tool>_api.py, hdart/core/jobs_api.py):
 every op documented and queueing a real job kind, every route the pages call mapped onto an op, a few direct calls
 on temp data (queued job args, renamed legacy arguments, refusals), and the Studio's HTTP surface end to end on a
 throwaway server (GET reads, Blob images, aliases, structured errors). No GPU.
@@ -15,10 +15,14 @@ os.environ.update(HD_DATA=str(data), HD_PROJECT=str(game), HD_COMFY_URL="http://
 (game / "ArtContract" / "requirements.json").write_text(json.dumps({"damageTypes": ["fire"], "wanted": {"icons": {
     "items": [{"id": "item.bandage", "name": "Bandage", "kind": "consumable"}]}}}), encoding="utf-8")
 
-from hdart import jobs, ops, studio
+from hdart.core import jobs, ops
+from hdart.server import studio
 for m in studio.JOB_MODULES + studio.OP_MODULE_NAMES:
-    __import__(f"hdart.{m}")
-from hdart import character_api, dungeon_api, jobs_api, limner_api
+    __import__(m)
+from hdart.tools.character import character_api
+from hdart.tools.dungeon import dungeon_api
+from hdart.core import jobs_api
+from hdart.tools.limner import limner_api
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -84,8 +88,9 @@ assert ops.call("studio.info")["pid"] == os.getpid() and ops.call("studio.info")
 refused(lambda: ops.call("studio.restart", {}), 409)
 
 # Data and specs are temp folders through HD_DATA / HD_SPECS
-from hdart import dungeon as d, limner as L
-assert str(d.sets_dir()).startswith(str(fixture_specs.SPECS)) and str(d.dun_dir()).startswith(str(data))
+from hdart.tools.dungeon import sets as dsets
+from hdart.tools.limner import limner as L
+assert str(dsets.sets_dir()).startswith(str(fixture_specs.SPECS)) and str(dsets.dun_dir()).startswith(str(data))
 assert str(L.spec_path()).startswith(str(fixture_specs.SPECS))
 
 assert "crypt" in ops.call("dungeon.sets")
@@ -126,7 +131,7 @@ jobs.QUEUE.add("limner_gen", {}, "Limner batch b1 · items · x"); jobs.QUEUE.ad
 assert ops.call("limner.cancel_batch", {"batch": "b1"}) == {"cancelled": 1}
 
 # character: the auto-queued back view moved out of the Studio into character.approve_mannequin
-from hdart import workshop as W
+from hdart.tools.character import workshop as W
 with W.edit_state() as s:
     s.setdefault("builds", {})["human.unisex"] = {"front": {"candidates": ["f.png"]}, "back": {"approved": "b.png"}}
 r = ops.call_alias(character_api.LEGACY, "race/approve", {"build": "human.unisex", "facing": "front", "file": "f.png"})

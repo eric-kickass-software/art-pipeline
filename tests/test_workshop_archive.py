@@ -1,11 +1,11 @@
-"""Archiving mannequin candidates in hdart.workshop, on temp folders. Run: uv run python tests/test_workshop_archive.py"""
+"""Archiving mannequin candidates in hdart.tools.character.workshop, on temp folders. Run: uv run python tests/test_workshop_archive.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import os, shutil, tempfile
 from pathlib import Path
 from PIL import Image
-import hdart.workshop as ws
-from hdart import config
-import hdart.races as races
+import hdart.tools.character.workshop as ws
+from hdart.core import config
+import hdart.tools.character.races as races
 
 tmp = Path(tempfile.mkdtemp())
 os.environ["HD_DATA"] = str(tmp)   # the data root (sprites/ai, archive, ...) is a temp folder

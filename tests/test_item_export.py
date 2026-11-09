@@ -1,4 +1,4 @@
-"""Item export (hdart.item_export, A2) on the fake ComfyUI into a temp game project (HD_PROJECT) with a small contract:
+"""Item export (hdart.export.item_export, A2) on the fake ComfyUI into a temp game project (HD_PROJECT) with a small contract:
 the game's vocabulary (R-001), pieces -> game items (R-002), the pack with its layers and index maps, Art/index.json,
 ramps.json, intake files for new ids only (R-003), and `export --check`.
 Run: uv run python tests/test_item_export.py"""
@@ -7,13 +7,12 @@ import json, os, shutil, tempfile
 from pathlib import Path
 import numpy as np
 from PIL import Image
-import hdart.workshop as ws
-import hdart.puppet_paint as ppt
-import hdart.puppet_face as pf
-import hdart.item_workshop as iw
-import hdart.item_export as ie
-from hdart import contract
-from hdart.fake_comfy import FakeComfy, info
+import hdart.tools.character.puppet_paint as ppt
+import hdart.tools.character.puppet_face as pf
+import hdart.tools.items.item_workshop as iw
+import hdart.export.item_export as ie
+from hdart.export import contract
+from hdart.core.fake_comfy import FakeComfy, info
 
 tmp = Path(tempfile.mkdtemp())
 os.environ["HD_DATA"] = str(tmp)   # the data root (sprites/ai, archive, ...) is a temp folder
@@ -140,7 +139,7 @@ assert json.loads((art / "channels.json").read_text())["materials"]["accent"] ==
 
 # --check: clean now; finds a missing index map, a stray pack, a bad intake row
 assert ie.check() == [], ie.check()
-import hdart.unity_export as ue
+import hdart.export.unity_export as ue
 ue.export("human", size=256)
 assert "race.human" in json.loads((art / "index.json").read_text())["packs"] and ie.check() == [], ie.check()
 (d / m["fits"]["human.male"]["front"][0]["file"].replace(".png", ".idx.png")).unlink()

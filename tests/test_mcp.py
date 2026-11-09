@@ -1,4 +1,4 @@
-"""The MCP server (hdart/mcp_server.py) and `hdart op` (hdart/cli.py) against a throwaway Studio: temp data and specs,
+"""The MCP server (hdart/server/mcp_server.py) and `hdart op` (hdart/cli.py) against a throwaway Studio: temp data and specs,
 a free port, ComfyUI on a closed port (no GPU). The MCP server runs as Claude Code starts it (`hdart mcp`, stdio) and
 talks to the Studio over HTTP: tool list, state reads, candidates, view_candidate images, approve, a patch_spec the op
 refuses and one it saves, generate + jobs_wait (the job fails fast without ComfyUI), list_ops / call_op, and a clear
@@ -39,7 +39,7 @@ png(it / "prev_male_front.png", (576, 576))
 (it / "meta.json").write_text(json.dumps({"seed": 1, "made": 100}), encoding="utf-8")
 
 # the throwaway Studio, in this process (like test_tool_ops)
-from hdart import studio
+from hdart.server import studio
 with socket.socket() as sk:
     sk.bind(("127.0.0.1", 0)); port = sk.getsockname()[1]
 threading.Thread(target=studio.serve, kwargs={"port": port, "open_browser": False}, daemon=True).start()

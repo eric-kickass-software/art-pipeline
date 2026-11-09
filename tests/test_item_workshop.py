@@ -1,4 +1,4 @@
-"""Item Workshop backend (hdart.item_workshop) on the fake ComfyUI: a fitted item (cloth trousers) and a held one (iron sword) are
+"""Item Workshop backend (hdart.tools.items.item_workshop) on the fake ComfyUI: a fitted item (cloth trousers) and a held one (iron sword) are
 generated on a fake-painted puppet, keyed into cel levels per material, split into per-part layers, approved, worn
 and re-keyed. The fake paints every masked area in the item material's key colour (shaded top to bottom, so there are
 several cel levels) and returns the txt2img sword as a leather grip + metal blade cut-out.
@@ -8,13 +8,11 @@ import json, os, shutil, tempfile
 from pathlib import Path
 import numpy as np
 from PIL import Image
-import hdart.config as config
-import hdart.workshop as ws
-import hdart.puppet_paint as ppt
-import hdart.puppet_face as pf
-import hdart.item_workshop as iw
-import hdart.limner as lim
-from hdart.fake_comfy import FakeComfy, info
+import hdart.tools.character.puppet_paint as ppt
+import hdart.tools.character.puppet_face as pf
+import hdart.tools.items.item_workshop as iw
+import hdart.tools.limner.limner as lim
+from hdart.core.fake_comfy import FakeComfy, info
 
 tmp = Path(tempfile.mkdtemp())
 os.environ["HD_DATA"] = str(tmp)   # the data root (sprites/ai, archive, ...) is a temp folder

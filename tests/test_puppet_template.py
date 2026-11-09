@@ -1,10 +1,10 @@
-"""Clean puppet template (hdart.puppet_template): renders every part whole from the spec alone (no art), pivots sit
+"""Clean puppet template (hdart.tools.character.puppet_template): renders every part whole from the spec alone (no art), pivots sit
 inside their parts, joints stay covered by the round ends, the torso is one closed shape, and the checked-in spec has
 both views. Run: uv run python tests/test_puppet_template.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import numpy as np
-import hdart.puppet_template as pt
-import hdart.rig as rig
+import hdart.tools.character.puppet_template as pt
+import hdart.tools.character.rig as rig
 
 spec = pt.load()
 assert spec["schemaVersion"] == 2 and set(spec["views"]) == {"front", "back"}
@@ -49,7 +49,7 @@ assert all((p[n][0][..., 3] > 127).sum() > 50 for n in p)
 assert (p["torso"][1][..., 3] > 0).any()       # waistband guide drawn
 
 # the template is the rig: the walk poses straight from the spec's joints (no art)
-import hdart.puppet as pp
+import hdart.tools.character.puppet as pp
 for v in ("front", "back"):
     assert len(spec["views"][v]["shapes"]["head"]["points"]) >= 8
     B = pt.rig_from_spec(spec, v)
@@ -60,8 +60,7 @@ for v in ("front", "back"):
         assert abs(np.linalg.norm(bones[k][1] - bones[k][0]) - L) < 1.0, (v, k)
 
 # editor saves: validated, the upper cap width sets the joint radius, bad input refused
-import copy, json, tempfile
-from pathlib import Path
+import copy, json
 pt.spec_path().write_text(json.dumps(spec))   # the fixture copy
 e = copy.deepcopy(spec); e["views"]["front"]["limbs"]["armB.upper"]["points"][2] = [0.5, 30]
 out = pt.save(e)

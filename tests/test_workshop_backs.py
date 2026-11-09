@@ -1,9 +1,9 @@
-"""Back mannequin generation in hdart.workshop (no ComfyUI: _i2i is stubbed). Run: uv run python tests/test_workshop_backs.py"""
+"""Back mannequin generation in hdart.tools.character.workshop (no ComfyUI: _i2i is stubbed). Run: uv run python tests/test_workshop_backs.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import numpy as np
 from PIL import Image
-import hdart.imageops as imageops
-import hdart.races as races
+import hdart.imaging.imageops as imageops
+import hdart.tools.character.races as races
 
 SKIN, WHITE = (240, 190, 150), (255, 255, 255)
 a = np.full((512, 512, 3), 255, np.uint8)

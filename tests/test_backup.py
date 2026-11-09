@@ -3,7 +3,7 @@ unapproved candidates), and that it refuses a folder inside the tool or its data
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import json, shutil, tempfile
 from pathlib import Path
-from hdart import backup, config
+from hdart.core import backup, config
 
 tmp = Path(tempfile.mkdtemp())
 data, dest = tmp / "data", tmp / "backups"

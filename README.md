@@ -46,16 +46,16 @@ safe to run again: whatever is already up is left alone. Check: `curl http://127
   itself, after the running job has finished; queued jobs carry on. A change that doesn't import is refused and the
   old server keeps running. Restart by hand: `uv run --no-sync hdart op call studio.restart`. Log: `work/studio.log`.
   `hdart studio --no-supervisor` runs the server alone.
-- Overnight batches start the **watchdog** (`uv run python -m hdart.watchdog`): keeps Windows awake while jobs remain,
+- Overnight batches start the **watchdog** (`uv run python -m hdart.server.watchdog`): keeps Windows awake while jobs remain,
   restarts a dead Studio or ComfyUI, interrupts a job stuck > 15 min. Log: `work/watchdog.log`.
 
 | URL | Tool | Code | Specs (git) | State / candidates (data root) |
 |---|---|---|---|---|
-| /workshop | **Character Workshop**: tabs Template → Race (mannequins, Paint per sex) → Face (hair, faces) → Ramps | `studio/workshop.html`, `hdart/workshop.py`, `puppet_template.py`, `puppet_paint.py`, `puppet_face.py`, `mannequin_fit.py` | `races.json`, `paint.json`, `face.json`, `puppet_template.json`, `palettes.json`, `ai_style.json` | `sprites/ai/workshop.json`, `sprites/ai/paint/<build>/`, `sprites/ai/face/<race>/`, `sprites/ai/puppet_template/` |
-| /items | **Item Workshop**: Items (settings, zone editor, Grip card, generate, candidates), Outfit | `studio/workshop.html`, `hdart/items_api.py` (ops), `puppet_items.py` | `items.json`, `item_zones/` | `sprites/ai/items/<race>/state.json` + `<item>/<candidate>/` |
+| /workshop | **Character Workshop**: tabs Template → Race (mannequins, Paint per sex) → Face (hair, faces) → Ramps | `studio/workshop.html`, `hdart/tools/character/` | `races.json`, `paint.json`, `face.json`, `puppet_template.json`, `palettes.json`, `ai_style.json` | `sprites/ai/workshop.json`, `sprites/ai/paint/<build>/`, `sprites/ai/face/<race>/`, `sprites/ai/puppet_template/` |
+| /items | **Item Workshop**: Items (settings, zone editor, Grip card, generate, candidates), Outfit | `studio/workshop.html`, `hdart/tools/items/` | `items.json`, `item_zones/` | `sprites/ai/items/<race>/state.json` + `<item>/<candidate>/` |
 | /editor | **Workshop Editor**: every layer of a painted puppet and what it wears (paint, bands, AI fix) | `studio/workshop.html` | | the candidates above |
-| /dungeon | **Dungeon Forge**: sets of floors, walls, doors, props → room preview → export | `studio/dungeon.html`, `hdart/dungeon.py`, `iso.py`, `patterns.py`, `library.py`, `blender/mesh_template.py` | `dungeon_sets/<set>.json`, `dungeon_style.json`; `library/` | `sprites/dungeon/<set>/state.json` + `candidates/` |
-| /limner | **Limner**: icons (items, gear, classes, statuses, damage, skills), portraits, monster/NPC tokens | `studio/limner.html`, `hdart/limner.py` | `limner.json`, `limner_refs/` | `sprites/limner/state.json` + `<cat>/<id>/<cid>/` |
+| /dungeon | **Dungeon Forge**: sets of floors, walls, doors, props → room preview → export | `studio/dungeon.html`, `hdart/tools/dungeon/`, `blender/mesh_template.py` | `dungeon_sets/<set>.json`, `dungeon_style.json`; `library/` | `sprites/dungeon/<set>/state.json` + `candidates/` |
+| /limner | **Limner**: icons (items, gear, classes, statuses, damage, skills), portraits, monster/NPC tokens | `studio/limner.html`, `hdart/tools/limner/` | `limner.json`, `limner_refs/` | `sprites/limner/state.json` + `<cat>/<id>/<cid>/` |
 
 `/` opens the Character Workshop. The ☰ menu top left switches tools. Every prompt is editable next to the button that
 generates with it. The style groups in `specs/ai_style.json` have no editor: edit the file.
@@ -104,7 +104,7 @@ Design, pipeline steps and findings are in the tool's vault note; this is the cl
 Every export rewrites `Art/index.json` (all packs on disk); item and puppet exports also write `Art/ramps.json` and
 `Art/channels.json`. Each pack folder is rebuilt whole. Formats: vault `Art - Unity Handoff.md`.
 
-**Scripted use (HTTP).** Ops (`hdart/ops.py`) are the typed, documented API: `GET /api/ops[?prefix=items.]` lists them
+**Scripted use (HTTP).** Ops (`hdart/core/ops.py`) are the typed, documented API: `GET /api/ops[?prefix=items.]` lists them
 with parameters, `POST /api/op/<name>` with a JSON object runs one (bad arguments → 400), and read-only ones also run
 over `GET /api/op/<name>?arg=value`. Every tool is on ops: `items.*`, `character.*`, `dungeon.*`, `limner.*` (e.g.
 `dungeon.generate` → `{"job": id}`, `dungeon.review`, `dungeon.approve`, `dungeon.export`), and `jobs.*` (`jobs.list`,
@@ -131,7 +131,7 @@ is `config.toml` `[studio] url` (env `HD_STUDIO_URL` beats it). Claude Code pick
 - Output goes to the active profile's project (Hearthdelve: `P:\Projects\Unity\Hearthdelve`, the root checkout). Set
   `HD_PROJECT` to aim a run at a worktree.
 - **Tests:** `uv run python tests/run_all.py [name-filter]` (each test in its own process, ~10 min), or one file:
-  `uv run python tests/test_comfy.py`. No GPU: a fake ComfyUI (`hdart/fake_comfy.py`) and a closed ComfyUI port. Tests
+  `uv run python tests/test_comfy.py`. No GPU: a fake ComfyUI (`hdart/core/fake_comfy.py`) and a closed ComfyUI port. Tests
   read a frozen copy of the specs (`tests/fixtures/specs/`), never the live `specs/`. `test_harmonize` and
   `test_puppet` read real approved art (they skip or need `HD_DATA=P:\Tools\art-pipeline` from a worktree).
 - **Backups:** `uv run hdart backup` before risky work. Scratch, unapproved dungeon candidates, `archive/` and `work/`
@@ -140,11 +140,11 @@ is `config.toml` `[studio] url` (env `HD_STUDIO_URL` beats it). Claude Code pick
 ## Where things are
 | Path | What |
 |---|---|
-| `hdart/` | the Python package: Studio server, tools, exports, CLI (see `hdart/AGENTS.md`) |
+| `hdart/` | the Python package: `core/`, `imaging/`, `tools/<tool>/`, `export/`, `server/`, `cli.py` (see `hdart/AGENTS.md`) |
 | `studio/` | the three single-file pages (`workshop.html` serves /workshop, /items, /editor) |
 | `specs/` | everything Eric tunes in the tools: prompts, races, ramps, items, zones, dungeon sets, Limner (git) |
 | `library/` | dungeon recipes and CC0 materials (`materials/*.json` in git, `cache/` downloads git-ignored) |
-| `blender/` | the archway mesh script `hdart/dungeon.py` runs in Blender |
+| `blender/` | the archway mesh script `hdart/tools/dungeon/geometry.py` runs in Blender |
 | `tests/` | script-style tests + `run_all.py`; `fixtures/` frozen spec copies |
 | `sprites/`, `work/`, `archive/` | generated data (git-ignored; under `paths.data`) |
 

@@ -1,16 +1,15 @@
-"""Unity puppet export (hdart.unity_export) of a fake-painted race into a temp project (HD_PROJECT): puppet.json's
+"""Unity puppet export (hdart.export.unity_export) of a fake-painted race into a temp project (HD_PROJECT): puppet.json's
 rig and options, the cropped parts with their skin index maps, the ramps. Run: uv run python tests/test_unity_export.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import json, os, shutil, tempfile
 from pathlib import Path
 import numpy as np
 from PIL import Image
-import hdart.workshop as ws
-import hdart.puppet_paint as ppt
-import hdart.puppet_face as pf
-import hdart.unity_export as ue
-from hdart import config
-from hdart.fake_comfy import FakeComfy
+import hdart.tools.character.puppet_paint as ppt
+import hdart.tools.character.puppet_face as pf
+import hdart.export.unity_export as ue
+from hdart.core import config
+from hdart.core.fake_comfy import FakeComfy
 
 tmp = Path(tempfile.mkdtemp())
 os.environ["HD_DATA"] = str(tmp)   # the data root (sprites/ai, archive, ...) is a temp folder

@@ -1,8 +1,8 @@
-"""hdart.config: defaults, config.local.toml overrides, env overrides, project profiles. Run: uv run python tests/test_config.py"""
+"""hdart.core.config: defaults, config.local.toml overrides, env overrides, project profiles. Run: uv run python tests/test_config.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import os, shutil, tempfile
 from pathlib import Path
-import hdart.config as c
+import hdart.core.config as c
 
 for k in ("HD_PROJECT", "HD_PROFILE", "HD_COMFY_URL", "HD_DATA", "HD_BLENDER", "HD_UNITY"):
     os.environ.pop(k, None)

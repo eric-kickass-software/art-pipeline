@@ -11,25 +11,25 @@ import sys
 
 def cmd_studio(a):
     if a.no_supervisor:
-        from .studio import serve
+        from hdart.server.studio import serve
         serve(a.port, not a.no_browser)
     else:
-        from . import supervisor
+        from hdart.server import supervisor
         supervisor.main(a.port, not a.no_browser, a.watch or ())
 
 
 def cmd_dungeon_export(a):
-    from . import dungeon
-    print(dungeon.export(a.set))
+    from hdart.tools.dungeon import export as dexport
+    print(dexport.export(a.set))
 
 
 def cmd_puppet_export(a):
-    from . import unity_export
+    from hdart.export import unity_export
     print(unity_export.export(a.race, a.size))
 
 
 def cmd_item_export(a):
-    from . import item_export as ie
+    from hdart.export import item_export as ie
     r = ie.export(a.items or None, a.race, a.size)
     for gid, e in r["exported"].items():
         print(f"{gid}: {', '.join(e['builds'])}" + (" + intake" if e["intake"] else ""))
@@ -41,7 +41,7 @@ def cmd_item_export(a):
 
 
 def cmd_export(a):
-    from . import art_pack, item_export as ie, unity_export
+    from hdart.export import art_pack, item_export as ie, unity_export
     if not a.check:   # everything: the race's puppet, then every game item with approved art
         print(unity_export.export(a.race)); cmd_item_export(argparse.Namespace(items=None, race=a.race, size=None))
     problems = ie.check()
@@ -52,20 +52,21 @@ def cmd_export(a):
 
 
 def cmd_dungeon_capture(a):
-    from . import dungeon
-    for f in dungeon.capture(a.set):
-        print(dungeon.captures_dir() / f)
+    from hdart.tools.dungeon import capture as dcapture
+    for f in dcapture.capture(a.set):
+        print(dcapture.captures_dir() / f)
 
 
 def cmd_backup(a):
-    from .backup import backup
+    from hdart.core.backup import backup
     r = backup(a.dest, dry_run=a.dry_run)
     print(f"{'would copy' if a.dry_run else 'copied'} {r['files']} files, {r['bytes'] / 1e6:.0f} MB -> {r['dest']}")
 
 
 def cmd_op(a):
     """`hdart op list [prefix]`, `hdart op show <name>`, `hdart op call <name> key=value ...` against the Studio."""
-    from . import ops, studio_client as sc
+    from hdart.core import ops
+    from hdart.server import studio_client as sc
     if not sys.stdout.isatty():   # piped: UTF-8, not the console code page (labels have "·", names "×")
         sys.stdout.reconfigure(encoding="utf-8")
     try:
@@ -108,7 +109,7 @@ def cmd_op(a):
 
 
 def cmd_mcp(a):
-    from .mcp_server import main
+    from hdart.server.mcp_server import main
     main()
 
 

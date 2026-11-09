@@ -1,10 +1,10 @@
-"""Puppet template (hdart.puppet) on the real approved human.male pair (skipped if absent: the art-based skeleton detection
+"""Puppet template (hdart.tools.character.puppet) on the real approved human.male pair (skipped if absent: the art-based skeleton detection
 needs real mannequin art): runs end to end, writes the files, records state, and refuses without an approved front and
 back. Run: uv run python tests/test_puppet.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import json, os, shutil, tempfile
 from pathlib import Path
-import hdart.workshop as ws
+import hdart.tools.character.workshop as ws
 
 REAL = Path(__file__).resolve().parents[1] / "sprites" / "ai"
 if not (REAL / "workshop.json").exists():   # worktree / fresh clone: the main checkout's sprites, if there
@@ -17,7 +17,7 @@ if not (src["front"] and src["back"]):
 
 tmp = Path(tempfile.mkdtemp())
 os.environ["HD_DATA"] = str(tmp)   # the data root (sprites/ai, archive, ...) is a temp folder
-import hdart.puppet as pp
+import hdart.tools.character.puppet as pp
 
 (ws.candidates_dir() / "test" / "male").mkdir(parents=True)
 for f in ("front", "back"):

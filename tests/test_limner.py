@@ -1,4 +1,4 @@
-"""Limner (hdart.limner): entry lists from the contract, prompt layers (style > category > entry), generation and
+"""Limner (hdart.tools.limner.limner): entry lists from the contract, prompt layers (style > category > entry), generation and
 variations on the fake ComfyUI, the finish re-run without the GPU, approve / archive, export into a temp game project.
 Never touches the real spec, data or game. Run: uv run python tests/test_limner.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
@@ -7,8 +7,9 @@ from pathlib import Path
 
 from PIL import Image
 
-from hdart import config, limner as L
-from hdart.fake_comfy import FakeComfy, info
+from hdart.core import config
+from hdart.tools.limner import limner as L
+from hdart.core.fake_comfy import FakeComfy, info
 
 tmp = Path(tempfile.mkdtemp())
 game, data = tmp / "game", tmp / "data"
@@ -125,7 +126,7 @@ import time; time.sleep(1.1); L.mark_reviewed("statuses")
 assert L.doc()["categories"]["statuses"]["new"] == 0
 
 # the job queue: a failing job with retries is queued again (retries - 1); a job interrupted by a restart is re-queued
-from hdart import jobs
+from hdart.core import jobs
 calls = []
 @jobs.kind("t_flaky", gpu=False)
 def _flaky(a):
@@ -146,7 +147,7 @@ q2.add("t_flaky", {}, "Limner batch b3 · z"); q2.add("t_flaky", {}, "Limner bat
 assert q2.cancel_where("Limner batch b3") == 1 and q2.cancel_where("Limner batch") == 2   # b2's retry + b4
 
 # the watchdog's files: no heartbeat → not alive; a fresh one → alive
-from hdart import watchdog
+from hdart.server import watchdog
 assert not watchdog.alive() and watchdog.status()["alive"] is False
 (data / "work").mkdir(exist_ok=True)
 (data / "work" / "watchdog.json").write_text(json.dumps({"pid": 1, "started": time.time(), "beat": time.time()}))

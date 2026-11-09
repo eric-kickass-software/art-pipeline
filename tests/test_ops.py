@@ -1,12 +1,12 @@
-"""hdart.ops: ops declared from typed functions (params, types, defaults, docs), argument checks and coercion, discovery;
-and the Item Workshop's surface (hdart/items_api.py): every op documented, every older /api/ws/items/<action> the page
+"""hdart.core.ops: ops declared from typed functions (params, types, defaults, docs), argument checks and coercion, discovery;
+and the Item Workshop's surface (hdart/tools/items/items_api.py): every op documented, every older /api/ws/items/<action> the page
 calls mapped onto an op, approve/archive through the legacy route, and generation queued as the page queues it.
 Run: uv run python tests/test_ops.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import os
 import re, tempfile
 from pathlib import Path
-from hdart import jobs, ops
+from hdart.core import jobs, ops
 
 
 # ----------------------------------------------------------------------------- the registry
@@ -70,7 +70,7 @@ ops.OPS.pop("t.paint")
 
 # ----------------------------------------------------------------------------- the Item Workshop's ops
 
-from hdart import items_api
+from hdart.tools.items import items_api
 
 items = ops.describe("items.")
 assert len(items) >= 30, len(items)
@@ -85,7 +85,8 @@ assert used and used <= set(items_api.LEGACY), sorted(used - set(items_api.LEGAC
 assert all(e[0] in ops.OPS for e in items_api.LEGACY.values())
 
 # approve / un-approve / archive through the page's route, on a temp data folder
-from hdart import config, item_workshop as iw, workshop as ws
+from hdart.core import config
+from hdart.tools.items import item_workshop as iw
 tmp = Path(tempfile.mkdtemp()); os.environ["HD_DATA"] = str(tmp)   # temp data root
 cand = iw.out_dir("human", "item.test_helm") / "s1_100"; cand.mkdir(parents=True)
 (cand / "meta.json").write_text('{"seed": 1}', encoding="utf-8")

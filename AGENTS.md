@@ -10,14 +10,14 @@ Per area: `hdart/AGENTS.md` (modules, state, invariants), `studio/AGENTS.md` (pa
 ## Layout
 | Path | Owns | Notes |
 |---|---|---|
-| `hdart/` | all code: Studio server, tools, exports, CLI | flat modules today (A10 later splits it into packages) |
+| `hdart/` | all code: `core/`, `imaging/`, `tools/{character,items,dungeon,limner}/`, `export/`, `server/`, `cli.py` | one AGENTS.md per package |
 | `studio/` | `workshop.html` (/workshop, /items, /editor), `dungeon.html`, `limner.html` | no build step |
 | `specs/` | tunable specs, in git | Eric edits these through the Studio; see below |
 | `library/` | `recipes/*.json`, `materials/*.json` (git), `cache/` (git-ignored downloads) | Dungeon Forge |
-| `blender/mesh_template.py` | archway meshes + normal pass | run by `hdart/dungeon.py` via `config.blender()` |
+| `blender/mesh_template.py` | archway meshes + normal pass | run by `hdart/tools/dungeon/geometry.py` via `config.blender()` |
 | `tests/` | script-style tests, `run_all.py`, `fixtures/` | no GPU |
 | `.mcp.json` | the `hdart` MCP server for Claude Code (project scope) | `uv run hdart mcp`; needs the Studio running |
-| `config.toml` / `config.local.toml` | settings / machine overrides (git-ignored) | read via `hdart/config.py` |
+| `config.toml` / `config.local.toml` | settings / machine overrides (git-ignored) | read via `hdart/core/config.py` |
 | `sprites/`, `work/`, `archive/` | generated data under the data root (`config.data_dir()`) | git-ignored, Eric's live data |
 
 ## Specs (`specs/`, in git, owned by Eric)
@@ -40,7 +40,7 @@ Workshop); `items.json` + `item_zones/<item>[.<sex>].<view>[.sketch].png` (Item 
   `git worktree remove` deletes through junctions.
 - Generated output never goes into git (`.gitignore`); binaries in git (zones, refs) go through LFS (`.gitattributes`).
 - Exports write only into the active project's profile paths (`config.project()`), whole pack folders at a time.
-  The game's `ArtContract/requirements.json` is read, never written (`hdart/contract.py`).
+  The game's `ArtContract/requirements.json` is read, never written (`hdart/export/contract.py`).
 - Removing = archiving to `archive/` (never delete candidates).
 - Never write text files with PowerShell `Get/Set-Content` (mojibake + BOM). Use Python or an editor.
 
@@ -57,11 +57,11 @@ Workshop); `items.json` + `item_zones/<item>[.<sex>].<view>[.sketch].png` (Item 
   `jobs_list` first and only cancel your own jobs. To try them safely, point `HD_STUDIO_URL` at a throwaway Studio.
 
 ## Test and land
-- `uv run python tests/run_all.py` (all pass, ~10 min, no GPU); `uv run python -c "import hdart.studio"`.
+- `uv run python tests/run_all.py` (all pass, ~10 min, no GPU); `uv run python -c "from hdart.server import studio; studio.load_modules()"`.
 - Route or page changes: smoke-test a throwaway Studio (`uv run hdart studio --no-browser --port <other>` with a temp
   `HD_DATA`; in a worktree it watches that worktree's `hdart/`).
 - Prototyping phase: land on `main` (no PRs), fast-forward the root checkout `P:\Tools\art-pipeline`.
-- **Restarting the live Studio after landing:** it runs under the supervisor (`hdart/supervisor.py`), which sees the
+- **Restarting the live Studio after landing:** it runs under the supervisor (`hdart/server/supervisor.py`), which sees the
   fast-forward and restarts the server by itself once the running job has finished (debounced; queued jobs carry on
   after). To restart by hand: `uv run --no-sync hdart op call studio.restart reason="<why>"` (or `POST
   /api/op/studio.restart`); `studio.info` shows the pid and any pending restart. A change that doesn't import is
