@@ -14,8 +14,7 @@ The back view uses the painted front figure as its reference image.
                                  rest_<view>.png, walk_<view>.gif, meta.json)
     approve / archive / state / save_parts (Workshop Parts editor) / preview
 """
-import json, math, shutil, time
-from pathlib import Path
+import json, shutil, time
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter

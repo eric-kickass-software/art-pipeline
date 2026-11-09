@@ -14,8 +14,7 @@ parts' canvas) and ride on the head bone.
 Candidates: sprites/ai/face/<race>/<kind>/<id>/ (layer_<view>.png, prev_<sex>_<view>.png, meta.json). A race's hair
 set and face set (state: builds["<race>.unisex"]["face_sets"]) are the candidates added to them, like skin tone sets.
 """
-import copy, json, math, shutil
-from pathlib import Path
+import copy, json, shutil
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter

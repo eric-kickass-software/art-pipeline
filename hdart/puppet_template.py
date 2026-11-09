@@ -18,7 +18,6 @@ The template is numbers, not pixels (specs/puppet_template.json), per view (fron
     preview(spec)           -> writes sprites/ai/puppet_template/ (parts, guides, sheets, walk previews)
 """
 import json, math, time
-from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont

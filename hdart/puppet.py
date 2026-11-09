@@ -9,7 +9,6 @@ Motion for the preview: a foot-driven IK walk (marionette).
     template(build) -> writes sprites/ai/puppet/<build>/ (pieces per view, template.json, previews) and returns a summary
 """
 import json, math, time
-from pathlib import Path
 
 import heapq
 import numpy as np

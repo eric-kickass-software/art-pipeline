@@ -20,12 +20,11 @@ An item is fitted once on a "fitting build" and its per-part layers are reused o
     dressed(build, worn, view)            -> the build's parts with the worn items' layers stacked on, for previews
 """
 import fnmatch, json, re, shutil, time
-from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageFilter
 
-from .levels import ISLAND, VAL_BLUR, _components_of, _mode, _spread, keep_bands, smooth_levels, smooth_val, write_bands
+from .levels import ISLAND, _spread, keep_bands, smooth_levels, smooth_val, write_bands
 from . import ai_kit, comfy, jobs, memo, store, puppet as pp, puppet_template as pt, puppet_paint as ppt, puppet_face as pf
 
 SPEC = ai_kit.ROOT / "specs" / "items.json"
@@ -1702,7 +1701,7 @@ def levels_from_edit(doc, it, L, cents):
 def layer_save(race, item_id, cid, view, layers):
     """Edited item layers from the Parts editor ({"<part>@item": PNG data URL}): the first edit keeps the originals
     (parts_orig/, plevels_orig/); levels are recomputed from the key colours; empty layers are removed; previews redone."""
-    import base64, io, shutil
+    import base64, io
     doc = spec(); it = doc["items"][item_id]; d = out_dir(race, item_id) / cid; meta = _meta(d)
     cents = {int(k): np.array(v) for k, v in meta.get("cents", {}).items()}
     _keep_orig(d); edited = set(meta.get("bands_edited", []))
@@ -1794,73 +1793,33 @@ def layer_revert(race, item_id, cid):
     return layer_doc(race, item_id, cid)
 
 
-def api(action, b):
-    """The Item Workshop's HTTP actions (/api/ws/items/<action>); the Studio reloads this module per request."""
-    race = b.get("race", "human")
-    if action == "state":
-        return state(race)
-    if action == "prompts":   # the composed prompts of an item on a build (shown next to Generate)
-        return prompts(race, b["build"], b["item"])
-    if action == "item/save":
-        save_item(b["item"], b.get("def", {}), b.get("old_id")); return state(race)
-    if action == "spec/save":
-        save_prompts(b.get("prompts", {})); return state(race)
-    if action == "zone/get":
-        return zone_doc(race, b["item"], b["build"], b["view"])
-    if action == "zone/save":
-        return save_zone(b["item"], b["view"], b["png"], b.get("sex"), b.get("sketch"))
-    if action == "zone/reset":
-        return reset_zone(b["item"], b["view"], b.get("sex"))
-    if action == "approve":
-        return {"approved": approve(race, b["item"], b["id"], b.get("key", "all"), b.get("on", True))}
-    if action == "archive":
-        return archive(race, b["item"], b["id"])
-    if action == "grip/approve":
-        return {"grips": approve_grip(race, b["build"], b["id"], b.get("on", True))}
-    if action == "grip/spec":   # the grip hand prompts and wrist angle (shared by every build)
-        doc = spec(); g = dict(doc.get("grip", {}))
-        for k in ("prompt", "prompt_back"):
-            if k in b and b[k].strip():
-                g[k] = b[k]
-        if "wrist" in b:
-            g["wrist"] = float(b["wrist"])
-        doc["grip"] = g; _write_spec(doc)
-        return state(race)
-    if action == "grip/prompts":
-        return grip_prompts(b["build"])
-    if action == "held/stage":   # the live grip stage (rest pose) the browser turns the held item on
-        return held_stage(race, b["item"], b["build"], b.get("id"), b.get("def"), b.get("ramps"))
-    if action == "held/preview":   # a held item in the hand (rest + one walk frame, both views) with unsaved settings
-        doc = spec(); doc["items"][b["item"]].update(b.get("def", {}))
-        global spec_override
-        spec_override = doc
-        try:
-            r = render(b["build"], [(b["item"], b["id"], b.get("ramps", {}))], frames=8)
-        finally:
-            spec_override = None
-        return {f"{v}_{k}": _url(im) for v in VIEWS for k, im in (("rest", r[v][0]), ("walk", r[v][1][2]), ("walk2", r[v][1][6]))}
-    if action == "layer_doc":
-        return layer_doc(race, b["item"], b["id"])
-    if action == "layer_save":
-        return layer_save(race, b["item"], b["id"], b["view"], b["layers"])
-    if action == "layer_revert":
-        return layer_revert(race, b["item"], b["id"])
-    if action == "bands_save":   # Workshop Editor: hand-edited item bands
-        return bands_save(race, b["item"], b["id"], b["view"], b["bands"])
-    if action == "bands_reset":
-        return bands_reset(race, b["item"], b["id"], b.get("view"), b.get("part"))
-    if action == "editor_walk":   # Workshop Editor: the walk of a paint with the shown items, hair, face and ramps
-        return editor_walk(race, b["build"], b["pcid"], b.get("view", "front"), b.get("items", []), b.get("hair"), b.get("face"), b.get("skin"))
-    if action == "ramp_colours":   # every palettes group's ramps as colours (the editor's ramp previews)
-        from . import workshop as ws
-        return {g: {n: [list(c) for c in pf.group_ramp(g, n)] for n in ramps} for g, ramps in ws.palettes_doc()["groups"].items()}
-    if action == "export":   # pack + layers (+ intake for new ids) of game items into the game (R-003, R-004)
-        from . import item_export as ie
-        return ie.export(b.get("items") or None, race)
-    if action == "outfit":
-        return outfit(race, b["build"], b.get("items", []), b.get("ramps"), b.get("hair"), b.get("hair_ramp"),
-                      b.get("walk", True), b.get("cids"), b.get("part"))
-    raise ValueError(f"unknown items action {action}")
+def save_grip_spec(prompt=None, prompt_back=None, wrist=None):
+    """Save the grip hands' prompts (front, back) and wrist angle, shared by every build. Blank prompts are left as they were."""
+    doc = spec(); g = dict(doc.get("grip", {}))
+    for k, v in (("prompt", prompt), ("prompt_back", prompt_back)):
+        if v and v.strip():
+            g[k] = v
+    if wrist is not None:
+        g["wrist"] = float(wrist)
+    doc["grip"] = g; _write_spec(doc)
+
+
+def held_preview(item_id, cid, build, unsaved=None, ramps=None):
+    """A held item in the hand with unsaved settings: rest + two walk frames per view, as data URLs."""
+    global spec_override
+    doc = spec(); doc["items"][item_id].update(unsaved or {})
+    spec_override = doc   # render() reads spec(); see spec_override (not thread-safe: one preview at a time)
+    try:
+        r = render(build, [(item_id, cid, ramps or {})], frames=8)
+    finally:
+        spec_override = None
+    return {f"{v}_{k}": _url(im) for v in VIEWS for k, im in (("rest", r[v][0]), ("walk", r[v][1][2]), ("walk2", r[v][1][6]))}
+
+
+def ramp_colours():
+    """Every palettes group's ramps as colour lists: {group: {ramp: [[r, g, b], ...]}} (the editor's ramp previews)."""
+    from . import workshop as ws
+    return {g: {n: [list(c) for c in pf.group_ramp(g, n)] for n in ramps} for g, ramps in ws.palettes_doc()["groups"].items()}
 
 
 @jobs.kind("item", reload=("puppet", "puppet_template", "puppet_paint", "puppet_face", "puppet_items"))

@@ -26,8 +26,7 @@ Git holds only the tool and its workflow (code, specs, docs). Generated art (`sp
 
 | URL | What it's for | Code | State / data |
 |---|---|---|---|
-| http://127.0.0.1:4321 | **Studio**: assemble a hero from kit parts and colours, play animations, front+back panes, double-sided voxel card (thickness/relief), save characters, switch part sets | `studio/index.html`, `hdart/studio.py` | `sprites/characters/*.json`, `sprites/sets/*.json`, baked kit in `work/sprite_render/` |
-| /workshop | **Workshop**: curated AI character parts. Coverage board (parts × male/female/slim mannequins), generation queue, approve raw images, then the cut editor (brush/wand), native-grid QA, fix-region reprompts, card backs | `studio/workshop.html`, `hdart/workshop.py`, `hdart/ai_kit.py` | `sprites/ai/workshop.json` (board state), `sprites/ai/candidates/`, `sprites/ai/masks/`, `specs/ai_style.json` (descriptors, builds), `specs/ai_parts.json` (part library) |
+| /workshop | **Character Workshop**: Template (the rig), Race (mannequins, Paint per sex), Face (hair, faces), Ramps; /editor is the Workshop Editor (every layer of a painted puppet) | `studio/workshop.html`, `hdart/workshop.py`, `hdart/puppet*.py` | `sprites/ai/workshop.json`, `sprites/ai/paint/`, `face/`, `specs/races.json`, `specs/paint.json`, `specs/face.json`, `specs/puppet_template.json`, `specs/palettes.json` |
 | /items | **Item Workshop**: equipment as overlay layers on the painted puppets. Items (zone editor, generate, candidates, per-sex fits), Outfit (dress-up with ramps + walk) | `studio/workshop.html`, `hdart/puppet_items.py` | `specs/items.json`, `specs/item_zones/`, `sprites/ai/items/<race>/` |
 | /dungeon | **Dungeon Forge**: dungeon sets. Pieces (walls, floors, doors, archways, wall decor, props, traps) → candidates → approve → room preview → export to Unity → Prototype V capture | `studio/dungeon.html`, `hdart/dungeon.py`, `hdart/iso.py`, `blender/mesh_template.py` | `specs/dungeon_sets/<set>.json` (pieces), `specs/dungeon_style.json` (descriptors + catalog), `sprites/dungeon/<set>/state.json` + `candidates/`, Blender mesh cache `sprites/dungeon/_meshes/` |
 
@@ -35,7 +34,11 @@ Git holds only the tool and its workflow (code, specs, docs). Generated art (`sp
    (`sprites/studio_jobs.json`): after a restart the queued jobs run again; one that was running shows as failed
    ("interrupted"), because it may have written half its outputs. ✕ cancels a job (a running one interrupts ComfyUI).
    Before a GPU job the queue waits while ComfyUI is busy with someone else's work (a test, the CLI, a second Studio).
-4. Scripted use (what earlier sessions did): the same HTTP API the pages use, e.g.
+4. Scripted use: **ops** (`hdart/ops.py`) are the typed, documented API. `GET /api/ops` (optional `?prefix=items.`)
+   lists every op with its summary and parameters; `POST /api/op/<name>` with a JSON object of arguments runs one
+   (unknown or missing arguments are refused with a 400). The Item Workshop is on ops so far (`hdart/items_api.py`:
+   e.g. `items.state`, `items.generate` → `{"job": id}`, `items.candidates`, `items.approve`, `items.export`).
+   The other tools still use the HTTP routes their pages call, e.g.
    `POST /api/dun/generate {"set","piece","n","seed","denoise?","lora?"}` → job id; `GET /api/ws/jobs`;
    `POST /api/dun/approve {"set","piece","rel","on"}`; `GET /api/dun/room?set=crypt&tile=64&scale=2` (PNG);
    `POST /api/dun/export {"set"}`; `POST /api/dun/capture {"set"}` (job). Or call `hdart.dungeon` / `hdart.workshop`
@@ -97,28 +100,15 @@ Git holds only the tool and its workflow (code, specs, docs). Generated art (`sp
 ## Commands
 | Command | Does | Output |
 |---|---|---|
-| `hdart kit-build [--force]` | Generates the modular character kit .blend from `specs/character_kit.json` | `kit/character_kit.blend` |
-| `hdart kit-render [--bodies] [--parts] [--views]` | Renders every part into indexed layer sheets (~10 min for everything) | `Assets/Art/Characters/<body>/<part>.<view>.{data,normal}.png`, `manifest.json`, `palettes.json` |
-| `hdart preview [--open]` | Random heroes: lineups, crowd grid, animated GIFs | `work/preview/` |
-| `hdart compose <appearance.json>` | One hero's composed sheets | `work/preview/` |
-| `hdart textures <set>` | Tileable textures + normal maps with FLUX.2 (`specs/textures.json`) | `textures/<set>/` |
-| `hdart pixel-textures` then `hdart tiles` | Shrinks/posterizes the biome textures, then renders the 32×16 iso tile set (`specs/tiles_crypt.json`) | `Assets/Art/Tiles/<biome>/` |
-| `hdart room` | Mock room with tiles, random heroes and torch light | `work/room_preview.png` |
-| `hdart icons [--only id] [--variants n]` | Pixel icons for items/spells (`specs/icons.json`) | `Assets/Art/Icons/{Items,Spells}/` |
-| `hdart mesh <name> --prompt "..."` / `--image x.png` | Concept image → TRELLIS.2 textured GLB | `work/meshes/` |
-| `hdart mesh-render <glb> --name x` | GLB → battle / 4 iso / icon sprites + normals | `Assets/Art/Monsters/` |
-| `hdart vfx` | Procedural spell flipbooks (`specs/spells.json`) | `Assets/Art/VFX/` |
-
 | `hdart studio [--no-browser]` | The web tools above (or use `start-art-tools.cmd`) | http://127.0.0.1:4321 |
 | `hdart backup [--dry-run] [--dest dir]` | Copies state, approved art and specs to a dated folder (see Config, tests, backups) | `P:\Archive\art-pipeline-backups\<date_time>\` |
-| `hdart ai-base` / `ai-part` / `ai-kit` | AI character kit from the CLI (the Workshop is the curated way) | `sprites/ai/` |
 | `hdart dungeon-export [set]` | Approved dungeon pieces → Unity (format 2, with normal maps) | `Assets/StreamingAssets/Art/Dungeon/<set>/` |
 | `hdart puppet-export [race] [--size 512]` | A race's painted puppet (approved Paint per sex, else the newest), its hair and face sets and its skin/hair/eye ramps → Unity, each image with an index map (R = cel level, G = channel 1 skin / 2 hair / 3 eyes, A = mask) for recolouring (`hdart/unity_export.py`) | `Assets/StreamingAssets/Art/Puppets/<race>/` |
 | `hdart item-export [ids] [--race human] [--size 512]` | Game items (Item Workshop pieces, approved) → art packs, `Art/index.json`, `ramps.json`, `channels.json`, and an intake file per id the game doesn't have yet (`hdart/item_export.py`; see "Game items and export") | `Assets/StreamingAssets/Art/Items/<id>/`, `ArtContract/intake/items/<id>.json` |
 | `hdart export [--check]` | Puppet + every item; `--check` only validates `Art/` (manifests, files, index maps, `index.json` = the packs on disk) and the intake files, exit 1 on a problem | — |
 | `hdart dungeon-capture [set]` | Export + Prototype V batch screenshots (`-lightTour` frames via the Unity method) | `work/protov/` |
 
-`work/` is scratch (git-ignored). ComfyUI must be running for `textures`, `icons`, `mesh` and any generation.
+`work/` is scratch (git-ignored). ComfyUI must be running for any generation.
 
 ## Dungeon Forge (dungeon sets)
 A clean prompt, then downsample: FLUX paints at 8× the native size, and the result is area-averaged onto the 32/64 grid.
@@ -269,12 +259,11 @@ A clean prompt, then downsample: FLUX paints at 8× the native size, and the res
   - Wall-run join edges and white outline bleed are cleaned up automatically when pieces are cut.
 
 ## Workshop (curated AI character parts)
-**Three tools** (2026-10-25), switched with the ☰ menu top left: the **Character Workshop** (`/workshop`, tabs in process
-order: **Template** (open on load) > **Race** > **Parts** > **Face** > **Ramps**; `#<tab>` in the URL opens a tab), the **Item
-Workshop** (`/items`: player items: armour, weapons, other equipment; for now the **Board** and **Sets** of the older part
-workflow and the Sprite Studio link; same page as the Character Workshop in "items" mode) and the **Dungeon Forge** (`/dungeon`). Every
-prompt is editable next to the button that generates with it; wording shared by all races is in Race → Shared prompts (the Style
-tab is gone: its descriptor groups are there, its mannequin clothing / builds / prompt preview are in Board → Board prompts).
+**One page, three tools**, switched with the ☰ menu top left: the **Character Workshop** (`/workshop`, tabs in process
+order: **Template** (open on load) > **Race** > **Face** > **Ramps**; `#<tab>` in the URL opens a tab), the **Item
+Workshop** (`/items`: armour, weapons and other equipment, see below) and the **Workshop Editor** (`/editor`). Every
+prompt is editable next to the button that generates with it; wording shared by all races is in Race → Shared prompts.
+The style descriptor groups (`specs/ai_style.json`) have no editor since the part board was retired: edit the file.
 
 0. **Race** tab (2026-10-22; was "Races"): a race = three puppet-ready **A-pose** mannequins, `<race>.unisex`, `<race>.male`,
    `<race>.female` (specs: `specs/races.json`; state in `sprites/ai/workshop.json` next to the older builds).
@@ -384,11 +373,6 @@ tab is gone: its descriptor groups are there, its mannequin clothing / builds / 
    archives every candidate that isn't approved, plus the older files in that build's `_base` folder the tab no longer lists
    (`archive_base`, `/api/ws/base/archive`). They move to `archive/workshop/` (same relative paths). The approved one never moves.
    Tests: `tests/test_workshop_archive.py`.
-2. **Board**: each cell is part × build. Generate candidates, approve a raw image (its back is queued automatically), then **Cut**:
-   auto threshold/speck, brush keep/remove, magic wand, undo, native-grid QA. **Fix region**: paint an area, prompt a
-   correction, and FLUX redoes only that area. Approve → the kit rebuilds.
-3. **Sets**: save the approved parts as a named set; the Studio can switch sets. (The Style tab's prompts moved to Race and Board.)
-4. Cards: backs whose file name has `_card_` are silhouette-matched. Older backs show as `redo-back` on the board.
 4b. **Face** tab (2026-10-24, `hdart/puppet_face.py`, `specs/face.json`): the race's **hair** and **faces**, painted on its
    painted puppets (approved Paint, else the newest; "Paint on" male or female). Male and female share the Template's head,
    so every hairstyle and face fits both; layers are 1024 px RGBA in the rest pose and ride on the head bone.
@@ -610,18 +594,14 @@ players pick from). Lists come from `ArtContract/requirements.json` → `wanted.
   folder is rebuilt whole.
 - Code `hdart/limner.py`, page `studio/limner.html`, test `tests/test_limner.py`.
 
-## Legacy (retired 2026-10-25)
-The first character directions are retired: the Blender modular character kit, the AI sprite kit v3, the hand-drawn
-2D JRPG kit with voxel sheets, and their Unity side (`CharacterComposer`, `CharacterKit`, `CharacterArtImport`,
-Prototype C, removed in Hearthdelve `3ca39de`). Their CLI commands (`kit-build`, `kit-render`, `sprite-kit`,
-`sprite-export`, `ai-base`, `ai-part`, `ai-kit`, `compose`) still exist, but they write into `Assets/Art/...`, which no
-Unity code reads any more. Don't run them for the game. The same goes for `tiles`, `icons`, `mesh-render` and `vfx`
-(`Assets/Art/Tiles|Icons|Monsters|VFX`), until they're moved onto the art packs (vault: `Art - Unity Handoff`).
-Their old documentation is in this file's git history (before this change) and in the vault's
-`Game Dev/Art Pipeline/Logs/Hearthdelve - Art Pipeline v1 (2026-10-25).md`.
+## Legacy (removed 2026-11-08, A10)
+The first character directions (the Blender modular character kit, the AI sprite kit v3, the hand-drawn 2D JRPG kit
+with voxel sheets, the part board with its cut editor and sets) and the CLI writers into `Assets/Art/...` (`kit-build`,
+`kit-render`, `preview`, `compose`, `textures`, `pixel-textures`, `tiles`, `room`, `icons`, `mesh`, `mesh-render`, `vfx`,
+`ai-base`/`ai-part`/`ai-kit`, `sprite-kit`, `sprite-export`, `canvas-migrate`) and the old Studio page at `/` are gone.
+Their code and documentation are in git history before the A10 cleanup and in the vault's
+`Game Dev/Art Pipeline/Logs/Hearthdelve - Art Pipeline v1 (2026-10-25).md`. Local data they made (`kit/`, `textures/`,
+`work/sprite_render*`, `sprites/parts/`, `sprites/sets/`, `sprites/characters/`) can be deleted by hand.
 
 ## Known limits / next steps
-- Texture prompts sometimes produce a 2×2 repeat (visible cross); re-roll with `--seed` or reword.
-- TRELLIS meshes are static: monsters get sprites without animation. Rigging (Blender auto-weights onto a
-  generic rig, or hand rigging) is the next step for animated monsters.
-- Floors map a little brighter than wall faces; tune the stone ramp or the light in `tiles_crypt.json`.
+Open items live in the vault: each tool's `Art -` note and `Art Pipeline - Roadmap.md`.

@@ -1,124 +1,38 @@
-"""Sprite Studio: a local web page for working directly with the character sprite kit.
+"""The Studio: one local web server for every art tool.
 
-    uv run hdart studio            -> http://127.0.0.1:4321 (opens the browser)
+    uv run hdart studio            -> http://127.0.0.1:4321 (opens the Character Workshop)
 
-Pick a body, a part per slot and a colour ramp per channel, play every animation row, switch the grid
-resolution (32/64/128/256), look at the hero as a lit voxel sheet (three.js), and generate new parts with
-FLUX ("Generate part": an edit of the base mannequin, extracted into a modular layer).
+Pages (studio/*.html): /workshop (Character Workshop), /items (Item Workshop), /editor (Workshop Editor; all three are
+workshop.html), /dungeon (Dungeon Forge), /limner (Limner). Each tool's HTTP actions are routed below to its module;
+long work (generation, renders, Unity captures) goes through the job queue (hdart/jobs.py).
 """
-import base64
 import io
 import json
-import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-import numpy as np
 from PIL import Image
 
-from .compose import Kit
-
-ROOT = Path(__file__).resolve().parent.parent
-PAGE = ROOT / "studio" / "index.html"
-RESOLUTIONS = (32, 64, 128, 256)
-
-
-class Studio:
-    def __init__(self, renders, spec, palettes, res=64):
-        self.base_renders, self.spec, self.palettes = Path(renders), spec, palettes
-        self.lock = threading.Lock()
-        self.res = res
-        self.kit = None
-        self.ensure(res)
-
-    def renders(self, res):
-        return self.base_renders if res == 64 else self.base_renders.with_name(f"{self.base_renders.name}_r{res}")
-
-    def ensure(self, res):
-        out = self.renders(res)
-        if not (out / "manifest.json").exists():
-            self.bake(res)
-        self.res = res
-        self.kit = Kit(out, self.spec, self.palettes)
-
-    kit_set = None  # name of the saved set the kit is baked from (None = every part with templates)
-
-    def bake(self, res):
-        from . import sprite_kit, workshop
-        import importlib
-        importlib.reload(sprite_kit)
-        parts, bodies = None, None
-        if self.kit_set:
-            st = workshop.load_set(self.kit_set)
-            if st:
-                bodies = st["builds"] or None
-                parts = {b: ["body.base"] + [p for p, bs in st["parts"].items() if b in bs] for b in (bodies or [])}
-        sprite_kit.bake(self.spec, self.renders(res), res=res, parts=parts, bodies=bodies)
-
-    def use_set(self, name):
-        self.kit_set = name or None
-        for r in RESOLUTIONS:
-            (self.renders(r) / "manifest.json").unlink(missing_ok=True)
-        self.rebuild()
-
-    def rebuild(self, res=None):
-        with self.lock:
-            res = res or self.res
-            self.bake(res)
-            self.res = res
-            self.kit = Kit(self.renders(res), self.spec, self.palettes)
-
-    def generate(self, part, prompt, body, seed):
-        from . import ai_kit
-        import importlib
-        importlib.reload(ai_kit)
-        ai_kit.make_part(part, prompt, body, seed=seed)
-        lib = json.loads((ROOT / "specs" / "ai_parts.json").read_text(encoding="utf-8"))
-        lib["parts"][part] = {"prompt": prompt, "seed": seed}
-        (ROOT / "specs" / "ai_parts.json").write_text(json.dumps(lib, indent=2) + "\n", encoding="utf-8")
-        for r in RESOLUTIONS:  # other resolutions re-bake when next selected
-            if r != self.res:
-                (self.renders(r) / "manifest.json").unlink(missing_ok=True)
-        self.rebuild()
-
-    def meta(self):
-        k = self.kit
-        slots = []
-        for s in k.spec["slots"]:
-            slots.append({"name": s["name"], "required": s["required"],
-                          "parts": {b: k.parts_for(s["name"], b) for b in k.manifest["bodies"]}})
-        channels = []
-        for c in k.spec["channels"]:
-            if c["name"] == "none":
-                continue
-            opts = k.pal.options(c["name"]) if c.get("customizable") else [c["default"]]
-            channels.append({"name": c["name"], "default": c["default"], "options": opts,
-                             "swatch": {o: "#%02x%02x%02x" % tuple(int(v) for v in k.pal.ramps[o][2]) for o in opts
-                                        if o in k.pal.ramps}})
-        return {"bodies": k.manifest["bodies"], "slots": slots, "channels": channels, "views": k.manifest["views"],
-                "res": self.res, "resolutions": RESOLUTIONS, "set": self.kit_set}
-
-    def sheet(self, app, view):
-        with self.lock:
-            color, normal, depth = self.kit.compose_full(app, view)
-        d = depth.clip(0, 255).astype(np.uint8)
-        return {"color": png_url(color), "depth": png_url(np.dstack([d, d, d, np.full_like(d, 255)])),
-                "view": self.kit.manifest["views"][view], "res": self.res}
+PAGES = Path(__file__).resolve().parent.parent / "studio"
+PAGE_FILES = {"/workshop": "workshop.html", "/items": "workshop.html", "/editor": "workshop.html",
+              "/dungeon": "dungeon.html", "/limner": "limner.html"}
 
 
 # Every module that registers Studio job kinds (hdart.jobs.kind); imported at start so the registry is complete.
 JOB_MODULES = ("dungeon", "library", "workshop", "puppet", "puppet_template", "puppet_paint", "puppet_face", "puppet_items", "limner")
+OP_MODULE_NAMES = ("items_api",)   # modules that declare ops (hdart.ops.op); imported at start too
 BASE_RELOAD = ("comfy", "ai_kit", "workshop", "dungeon")   # reloaded before every job (plus each kind's own list)
 
 
 def make_jobs():
     import importlib
     from . import config, jobs
-    for name in JOB_MODULES:
+    for name in JOB_MODULES + OP_MODULE_NAMES:
         importlib.import_module(f"hdart.{name}")
-    return jobs.Jobs(config.data_dir() / "sprites" / "studio_jobs.json", base_reload=BASE_RELOAD)
+    jobs.QUEUE = jobs.Jobs(config.data_dir() / "sprites" / "studio_jobs.json", base_reload=BASE_RELOAD)
+    return jobs.QUEUE
 
 
 JOBS = None
@@ -141,18 +55,38 @@ def fresh(*mods):
             importlib.reload(m)
 
 
-def workshop_post(st, action, b):
+# Ops (hdart/ops.py) per tool: the modules to reload (in order) before a call, so code edits apply without a restart.
+OP_MODULES = {
+    "items.": ("config", "puppet", "puppet_template", "puppet_paint", "puppet_face", "puppet_items", "contract",
+               "unity_export", "item_export", "items_api"),
+}
+
+
+def fresh_ops(name):
+    """Reload the modules behind op `name` (or a "<tool>." prefix) when their files changed."""
+    import importlib
+    mods = next((m for prefix, m in OP_MODULES.items() if name.startswith(prefix)), ())
+    if "config" in mods:
+        importlib.reload(importlib.import_module("hdart.config"))   # cheap; picks up config.toml edits
+    fresh(*(importlib.import_module(f"hdart.{m}") for m in mods if m != "config"))
+
+
+def ops_error(message):
+    from . import ops
+    return ops.OpError(message)
+
+
+def op_call(name, args):
+    """POST /api/op/<name>: run one op with a JSON object of arguments (strict: unknown arguments are refused)."""
+    from . import ops
+    fresh_ops(name)
+    return ops.call(name, args)
+
+
+def workshop_post(action, b):
     """Workshop actions (see hdart/workshop.py). Long ones (generation) block until ComfyUI is done."""
     from . import ai_kit, comfy, workshop as ws
     fresh(comfy, ai_kit, ws)
-    if action == "style":
-        return {"style": ws.save_style(b.get("groups"), b.get("base"), b.get("builds"))}
-    if action == "base/generate":
-        return {"candidates": ws.gen_base(b["build"], b["facing"], int(b.get("n", 4)), int(b.get("seed", 1)),
-                                          b.get("description"))}
-    if action == "base/approve":
-        ws.approve_base(b["build"], b["facing"], b["file"])
-        return {"ok": True}
     if action == "puppet/joints":
         from . import puppet
         fresh(puppet)
@@ -191,31 +125,10 @@ def workshop_post(st, action, b):
         if action == "face/preview":   # previews with another hair / eye ramp (data URLs)
             return pf.previews(b["race"], b["kind"], b["id"], b.get("ramp"), save=False)
         raise ValueError(f"unknown action {action}")
-    if action.startswith("items/"):   # Item Workshop: every action goes through puppet_items.api (reloaded when edited)
-        from . import config, puppet, puppet_template, puppet_paint, puppet_face, puppet_items, contract, unity_export, item_export
-        import importlib
-        importlib.reload(config)   # cheap; picks up config.toml edits
-        fresh(puppet, puppet_template, puppet_paint, puppet_face, puppet_items, contract, unity_export, item_export)
-        if action in ("items/design_batch", "items/design_batch/plan", "items/set_batch", "items/set_batch/plan"):
-            # design_batch: every approved Limner gear item → Workshop pieces → queued. set_batch: the cloth/leather/plate
-            # set pieces (GEAR_SETS) the Workshop lacks → queued (only those new pieces)
-            dry, sets = action.endswith("/plan"), action.startswith("items/set_batch")
-            out = (puppet_items.gear_set_intake if sets else puppet_items.limner_intake)(dry_run=dry)
-            only = out["added"] if sets else None
-            if sets and not only:
-                out.pop("defs", None)
-                return {**out, "batch": None, "jobs": 0, "items": []}
-            bid, plan = puppet_items.plan_design_batch(b.get("race", "human"), int(b.get("n", 2)), items=only,
-                                                       extra=out.pop("defs") if dry else None)
-            out.pop("defs", None)
-            out.update(batch=bid, jobs=len(plan), items=sorted({a["item"] for _, a in plan}))
-            if not dry:
-                from . import limner
-                for label, a in plan:
-                    JOBS.add("item", a, label)
-                out["watchdog"] = limner.ensure_watchdog() or "already running"
-            return out
-        return puppet_items.api(action[6:], b)
+    if action.startswith("items/"):   # Item Workshop: the page's older routes, mapped onto its ops (hdart/items_api.py)
+        from . import items_api
+        fresh_ops("items.")
+        return items_api.legacy_call(action[6:], b)
     if action.startswith("paint/"):   # puppet Paint step (Races) and Parts editor
         from . import puppet, puppet_template, puppet_paint as ppt
         fresh(puppet, puppet_template, ppt)
@@ -275,21 +188,8 @@ def workshop_post(st, action, b):
                             b.get("old_name"))
     if action == "ramp/delete":
         return ws.delete_ramp(b["group"], b["name"])
-    if action == "base/archive":
+    if action == "base/archive":   # Race tab: archive a race mannequin candidate
         return {"archived": ws.archive_base(b["build"], b["facing"], b.get("file"))}
-    if action == "part/generate":
-        return {"candidates": ws.gen_part(b["part"], b["build"], b["facing"], b["text"], int(b.get("n", 4)),
-                                          int(b.get("seed", 5)), float(b.get("lora", 0.6)))}
-    if action == "part/approve_raw":
-        out = ws.approve_raw(b["part"], b["build"], b["facing"], b["file"])
-        if b["facing"] == "front" and b.get("auto_back", True):  # queue the matching back view right away
-            s = ws.load_state()
-            pb = s["parts"][b["part"]]["builds"][b["build"]]
-            if not pb["back"].get("candidates"):
-                JOBS.add("part", {"part": b["part"], "build": b["build"], "facing": "back",
-                                  "text": s["parts"][b["part"]]["text"], "n": b.get("n", 3), "seed": 5},
-                         f"{b['part']} · {b['build']} · back")
-        return out
     if action == "jobs":
         added = [JOBS.add(j["kind"], j, j.get("label", j["kind"]))["id"] for j in b["jobs"]]
         return {"added": added}
@@ -298,26 +198,6 @@ def workshop_post(st, action, b):
         return {"ok": True}
     if action == "jobs/cancel":
         return {"status": JOBS.cancel(int(b["id"]))}
-    if action == "board":
-        return ws.board()
-    if action == "cut/data":
-        return ws.cut_data(b["part"], b["build"], b["facing"])
-    if action == "cut/save":
-        return ws.save_edits(b["part"], b["build"], b["facing"], b["edits"], int(b.get("res", 64)))
-    if action == "part/cut":
-        return ws.cut(b["part"], b["build"], b["facing"], b.get("thresh"), b.get("speck"), int(b.get("res", 64)))
-    if action == "part/approve":
-        ws.approve_cut(b["part"], b["build"])
-        st.rebuild()
-        return {"ok": True}
-    if action == "part/reject":
-        ws.reject(b["part"], b["build"])
-        st.rebuild()
-        return {"ok": True}
-    if action == "set/save":
-        return ws.save_set(b["name"], bool(b.get("include_unreviewed")))
-    if action == "import":
-        return {"state": ws.import_existing(b.get("build", "slim"))}
     raise ValueError(f"unknown action {action}")
 
 
@@ -591,15 +471,8 @@ def limner_post(action, b):
     raise ValueError(f"unknown action {action}")
 
 
-def png_url(arr):
-    buf = io.BytesIO()
-    Image.fromarray(arr).save(buf, "PNG")
-    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
-
-
-def serve(renders, spec, palettes, port=4321, open_browser=True):
+def serve(port=4321, open_browser=True):
     global JOBS
-    st = Studio(renders, spec, palettes)
     JOBS = make_jobs()
 
     class H(BaseHTTPRequestHandler):
@@ -618,10 +491,12 @@ def serve(renders, spec, palettes, port=4321, open_browser=True):
             u = urlparse(self.path)
             q = parse_qs(u.query)
             try:
-                if u.path in ("/", "/index.html", "/workshop", "/items", "/editor", "/dungeon", "/limner"):   # /items, /editor: same page
-                    page = {"/workshop": "workshop.html", "/items": "workshop.html", "/editor": "workshop.html",
-                            "/dungeon": "dungeon.html", "/limner": "limner.html"}.get(u.path, PAGE.name)
-                    body = PAGE.with_name(page).read_bytes()
+                if u.path in ("/", "/index.html"):
+                    self.send_response(302)
+                    self.send_header("Location", "/workshop")
+                    self.end_headers()
+                elif u.path in PAGE_FILES:
+                    body = (PAGES / PAGE_FILES[u.path]).read_bytes()
                     self.send_response(200)
                     self.send_header("Content-Type", "text/html; charset=utf-8")
                     self.send_header("Cache-Control", "no-cache")   # a page edit shows on the next plain reload
@@ -665,24 +540,15 @@ def serve(renders, spec, palettes, port=4321, open_browser=True):
                     self.send_header("Cache-Control", "max-age=3600")
                     self.end_headers()
                     self.wfile.write(data)
-                elif u.path == "/api/ws/state":
-                    from . import workshop
-                    self._json({"state": workshop.load_state(), "style": workshop.style(),
-                                "library": json.loads((ROOT / "specs" / "ai_parts.json").read_text(encoding="utf-8"))["parts"],
-                                "sets": workshop.list_sets(), "slots": [s["name"] for s in st.kit.spec["slots"]]})
                 elif u.path == "/api/ws/jobs":
                     self._json({"jobs": JOBS.snapshot()})
-                elif u.path == "/api/characters":
-                    from . import workshop
-                    self._json({"characters": workshop.list_characters(), "sets": workshop.list_sets(), "set": st.kit_set})
-                elif u.path == "/api/meta":
-                    self._json(st.meta())
-                elif u.path == "/api/sheet":
-                    self._json(st.sheet(json.loads(q["app"][0]), q.get("view", ["battle"])[0]))
+                elif u.path == "/api/ops":   # every op: name, summary, doc, typed params (?prefix=items.)
+                    from . import ops
+                    self._json({"ops": ops.describe(q.get("prefix", [""])[0])})
                 else:
                     self.send_error(404)
             except Exception as e:  # keep the studio alive and show the error in the page
-                self._json({"error": repr(e)}, 500)
+                self._json({"error": repr(e)}, getattr(e, "status", 500))
 
         def do_POST(self):
             u = urlparse(self.path)
@@ -690,42 +556,26 @@ def serve(renders, spec, palettes, port=4321, open_browser=True):
             n = int(self.headers.get("Content-Length") or 0)
             body = json.loads((self.rfile.read(n) or b"{}").decode("utf-8", errors="replace"))
             try:
-                if u.path == "/api/rebuild":
-                    st.rebuild(int(q["res"][0]) if "res" in q else None)
-                    self._json({"ok": True, "res": st.res})
-                elif u.path == "/api/resolution":
-                    with st.lock:
-                        st.ensure(int(q["res"][0]))
-                    self._json({"ok": True, "res": st.res})
-                elif u.path == "/api/generate":
-                    st.generate(body["part"], body["prompt"], body.get("body", "slim"), int(body.get("seed", 5)))
-                    self._json({"ok": True})
+                if u.path.startswith("/api/op/"):
+                    if not isinstance(body, dict):
+                        raise ops_error("the body must be a JSON object of arguments")
+                    self._json(op_call(u.path[8:], body))
                 elif u.path.startswith("/api/ws/"):
-                    self._json(workshop_post(st, u.path[8:], body))
+                    self._json(workshop_post(u.path[8:], body))
                 elif u.path.startswith("/api/dun/"):
                     self._json(dungeon_post(u.path[9:], body))
                 elif u.path.startswith("/api/lib/"):
                     self._json(library_post(u.path[9:], body))
                 elif u.path.startswith("/api/limner/"):
                     self._json(limner_post(u.path[12:], body))
-                elif u.path == "/api/characters/save":
-                    from . import workshop
-                    self._json(workshop.save_character(body["name"], body["appearance"], body.get("note", "")))
-                elif u.path == "/api/characters/delete":
-                    from . import workshop
-                    workshop.delete_character(body["name"])
-                    self._json({"ok": True})
-                elif u.path == "/api/set/use":
-                    st.use_set(body.get("name"))
-                    self._json({"ok": True, "set": st.kit_set})
                 else:
                     self.send_error(404)
             except Exception as e:
-                self._json({"error": repr(e)}, 500)
+                self._json({"error": repr(e)}, getattr(e, "status", 500))
 
     srv = ThreadingHTTPServer(("127.0.0.1", port), H)
     url = f"http://127.0.0.1:{port}"
-    print(f"Sprite Studio: {url}  (Ctrl+C to stop)", flush=True)
+    print(f"Studio: {url}  (Ctrl+C to stop)", flush=True)
     if open_browser:
-        webbrowser.open(url)
+        webbrowser.open(url + "/workshop")
     srv.serve_forever()

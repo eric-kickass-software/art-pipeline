@@ -149,50 +149,6 @@ def build_img2img(image_name, prompt, denoise=0.75, seed=0, steps=8, lora_streng
     return g.nodes
 
 
-def build_img2mesh(image_name, seed=42, prefix="hdart/mesh", resolution=1024):
-    """TRELLIS.2 image -> textured mesh (vertex colours), following the official template's
-    stage settings. `image_name` must already be uploaded (see upload())."""
-    g = Graph()
-    load = g.add("LoadImage", image=image_name)
-    bgm = g.add("LoadBackgroundRemovalModel", bg_removal_name=_m("birefnet"))
-    mask = g.add("RemoveBackground", bg_removal_model=bgm[0], image=load[0])
-    crop = g.add("ImageCropToMask", images=load[0], masks=mask[0], width=1024, height=1024,
-                 pad_factor=1.1, grow_mask=0, background="#000000")
-    cv = g.add("CLIPVisionLoader", clip_name=_m("dino"))
-    cond = g.add("Trellis2Conditioning", clip_vision_model=cv[0], image=crop[0])
-    unet = g.add("UNETLoader", unet_name=_m("trellis"), weight_dtype="default")
-    shape_vae = g.add("VAELoader", vae_name="trellis_2_shape_vae_bf16.safetensors")
-    tex_vae = g.add("VAELoader", vae_name="trellis_2_texture_vae_bf16.safetensors")
-    # stage 1: sparse structure
-    m1 = g.add("ModelSamplingSD3", model=g.add("RescaleCFG", model=g.add("CFGOverride", model=unet[0], cfg=1.0,
-               start_percent=0.667, end_percent=1.0)[0], multiplier=0.7)[0], shift=5.0)
-    s1 = g.add("KSampler", model=m1[0], positive=cond[0], negative=cond[1],
-               latent_image=g.add("EmptyTrellis2LatentStructure", batch_size=1)[0], seed=seed, steps=12, cfg=7.5,
-               sampler_name="euler", scheduler="normal", denoise=1.0)
-    voxel = g.add("VaeDecodeStructureTrellis2", samples=s1[0], vae=shape_vae[0], resolution="32")
-    # stage 2: shape, then upsample
-    m2 = g.add("RescaleCFG", model=g.add("CFGOverride", model=unet[0], cfg=1.0, start_percent=0.769,
-               end_percent=1.0)[0], multiplier=0.5)
-    shp = g.add("Trellis2ShapeStage", positive=cond[0], negative=cond[1], voxel=voxel[0])
-    s2 = g.add("KSampler", model=m2[0], positive=shp[0], negative=shp[1], latent_image=shp[2], seed=seed,
-               steps=20, cfg=7.5, sampler_name="euler", scheduler="normal", denoise=1.0)
-    up = g.add("Trellis2UpsampleStage", positive=shp[0], negative=shp[1], shape_latent=s2[0], vae=shape_vae[0],
-               target_resolution=resolution)
-    s3 = g.add("KSampler", model=m2[0], positive=up[0], negative=up[1], latent_image=up[2], seed=seed,
-               steps=12, cfg=7.5, sampler_name="euler", scheduler="simple", denoise=1.0)
-    mesh = g.add("VaeDecodeShapeTrellis", samples=s3[0], vae=shape_vae[0])
-    # stage 3: texture (voxel colours painted onto the mesh)
-    tx = g.add("Trellis2TextureStage", positive=up[0], negative=up[1], shape_latent=s3[0])
-    s4 = g.add("KSampler", model=unet[0], positive=tx[0], negative=tx[1], latent_image=tx[2], seed=seed,
-               steps=12, cfg=1.0, sampler_name="euler", scheduler="normal", denoise=1.0)
-    colors = g.add("VaeDecodeTextureTrellis", samples=s4[0], vae=tex_vae[0], shape_subdivides=mesh[1])
-    smooth = g.add("MeshSmoothNormals", mesh=mesh[0], crease_angle=180.0)
-    painted = g.add("PaintMesh", mesh=smooth[0], voxel_colors=colors[0])
-    g.add("SaveGLB", mesh=painted[0], filename_prefix=prefix)
-    g.add("SaveImage", images=crop[0], filename_prefix=prefix + "_input")
-    return g.nodes
-
-
 def build_repaint(image_name, mask_name, prompt, denoise=1.0, seed=0, steps=8, lora_strength=0.0,
                   prefix="hdart/repaint", reference=True):
     """FLUX.2-klein masked repaint. The mask is a greyscale image (its red channel is read): black = keep exactly,

@@ -1,5 +1,5 @@
 """Ramp editor backend (hdart.workshop) + JS/Python ramp parity. Run: uv run python tests/test_ramps.py"""
-import json, re, shutil, subprocess, tempfile
+import json, shutil, subprocess, tempfile
 from pathlib import Path
 import numpy as np
 from PIL import Image

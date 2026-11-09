@@ -27,6 +27,14 @@ from pathlib import Path
 KINDS = {}
 STATUSES = ("queued", "running", "done", "failed", "cancelled")
 KEEP = 60   # finished jobs kept in the list (and the file)
+QUEUE = None   # the running Studio's queue (set by hdart.studio); ops add jobs to it through enqueue()
+
+
+def enqueue(kind, args, label):
+    """Add a job to the Studio's queue. Returns the job dict (its "id" is what ops hand back)."""
+    if QUEUE is None:
+        raise RuntimeError("no job queue: long work runs in the Studio (uv run hdart studio)")
+    return QUEUE.add(kind, args, label)
 
 
 @dataclass

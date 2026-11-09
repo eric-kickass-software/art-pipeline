@@ -1,5 +1,5 @@
 """Race mannequin chain in hdart.workshop (ComfyUI stubbed). Run: uv run python tests/test_races.py"""
-import json, shutil, tempfile
+import shutil, tempfile
 from pathlib import Path
 from PIL import Image
 import hdart.ai_kit as ak

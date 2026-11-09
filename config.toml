@@ -37,4 +37,3 @@ art = "Assets/StreamingAssets/Art"   # index.json, ramps.json, channels.json
 puppets = "Assets/StreamingAssets/Art/Puppets"
 dungeon = "Assets/StreamingAssets/Art/Dungeon"
 items = "Assets/StreamingAssets/Art/Items"
-legacy = "Assets/Art"           # the old CLI writers (kit-render, icons, tiles, mesh-render, vfx); the game doesn't read it

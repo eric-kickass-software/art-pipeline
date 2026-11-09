@@ -8,7 +8,6 @@ Native tile size: `tile` px wide (64 -> 64x32 diamond); heights are in tile unit
 matching Prototype V's placeholders).
 """
 import json
-import math
 import re
 import shutil
 import time

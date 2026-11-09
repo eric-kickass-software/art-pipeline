@@ -88,17 +88,6 @@ def make_tileable(img, blend=0.25):
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
 
 
-def pixel_texture(img, size, colors=6, contrast=1.15):
-    """Tileable texture -> tiny pixel-art texture: area-downscale (wrap-safe), boost contrast, posterize
-    to a few colours. Rendered with Closest sampling, one texel lands on about one screen pixel, so tiles
-    get clean pixel clusters instead of minified photo noise."""
-    small = img.convert("RGB").resize((size, size), Image.BOX)
-    a = np.asarray(small).astype(np.float32)
-    m = a.mean(axis=(0, 1), keepdims=True)
-    a = np.clip((a - m) * contrast + m, 0, 255).astype(np.uint8)
-    return quantize(Image.fromarray(a).convert("RGBA"), colors).convert("RGB")
-
-
 def height_to_normal(img, strength=2.0):
     """Tangent-space normal map from luminance (tileable: wraps at the edges)."""
     g = np.asarray(img.convert("L").filter(ImageFilter.GaussianBlur(1))).astype(np.float32) / 255
@@ -108,16 +97,3 @@ def height_to_normal(img, strength=2.0):
     n /= np.linalg.norm(n, axis=-1, keepdims=True)
     return Image.fromarray(((n * 0.5 + 0.5) * 255).astype(np.uint8))
 
-
-def contact_sheet(images, cols=6, scale=4, bg=(38, 34, 44), pad=6):
-    ims = [i.convert("RGBA") for i in images]
-    cw = max(i.width for i in ims) * scale
-    ch = max(i.height for i in ims) * scale
-    rows = (len(ims) + cols - 1) // cols
-    sheet = Image.new("RGBA", (cols * (cw + pad) + pad, rows * (ch + pad) + pad), bg + (255,))
-    for k, i in enumerate(ims):
-        big = i.resize((i.width * scale, i.height * scale), Image.NEAREST)
-        x = pad + (k % cols) * (cw + pad) + (cw - big.width) // 2
-        y = pad + (k // cols) * (ch + pad) + (ch - big.height) // 2
-        sheet.alpha_composite(big, (x, y))
-    return sheet

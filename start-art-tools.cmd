@@ -2,9 +2,7 @@
 rem Starts the Hearthdelve art tools, each in its own minimized window. Safe to run again: anything already
 rem running is left alone.
 rem   ComfyUI  http://127.0.0.1:8188   (FLUX / TRELLIS / BiRefNet; needed for generating, not for browsing)
-rem   Studio   http://127.0.0.1:4321   characters + voxel card
-rem            http://127.0.0.1:4321/workshop   curated AI character parts
-rem            http://127.0.0.1:4321/dungeon    Dungeon Forge (dungeon sets)
+rem   Studio   http://127.0.0.1:4321   every web tool (the links are printed at the end)
 setlocal
 cd /d "%~dp0"
 if "%COMFYUI%"=="" set "COMFYUI=P:\Tools\ComfyUI"
@@ -27,8 +25,8 @@ if errorlevel 1 (
 
 echo.
 echo   Character Workshop  http://127.0.0.1:4321/workshop
-echo   Item Workshop       http://127.0.0.1:4321/items   (Board, Sets, Sprite Studio)
+echo   Item Workshop       http://127.0.0.1:4321/items
+echo   Workshop Editor     http://127.0.0.1:4321/editor
 echo   Dungeon Forge       http://127.0.0.1:4321/dungeon
 echo   Limner              http://127.0.0.1:4321/limner   (icons, portraits, overnight batches)
-echo   Sprite Studio       http://127.0.0.1:4321
 echo   ComfyUI         http://127.0.0.1:8188  (first generation after a start loads the models: ~1 min)

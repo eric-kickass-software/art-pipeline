@@ -66,7 +66,7 @@ for N in (2, 3, 4):
         assert z.min() >= 0.3 - 1e-9 and x.size and np.floor(x.min()) < np.floor(x.max()), (N, seed)
 assert 'continues past' in d.wall_texture_prompt(d.style(), 'x') and d.WALL_SEAMLESS in d.wall_texture_prompt(d.style(), 'x')
 # bands view: kept cap and base tinted, repeated sideways
-import json, shutil, tempfile
+import shutil, tempfile
 from pathlib import Path
 tmp = Path(tempfile.mkdtemp())
 shutil.copytree(d.SETS, tmp / "sets"); d.SETS = tmp / "sets"; d.DUN = tmp / "dun"; d.ARCHIVE = tmp / "archive"

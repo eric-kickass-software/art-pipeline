@@ -1,6 +1,6 @@
 """hdart.jobs: the Studio's queue and job-kind registry (persistence, cancel, waiting for a busy ComfyUI, a failing job
 doesn't stall the queue), and that every tool kind the pages queue is registered. Run: uv run python tests/test_jobs.py"""
-import json, tempfile, threading, time
+import json, tempfile, time
 from pathlib import Path
 from PIL import Image
 from hdart import comfy, jobs, studio

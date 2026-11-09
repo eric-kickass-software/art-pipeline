@@ -70,7 +70,7 @@ class Project:
     exports: dict = field(default_factory=dict)
 
     def export(self, kind):
-        """The export root of one kind of art (art, puppets, dungeon, items, legacy) in this project."""
+        """The export root of one kind of art (art, puppets, dungeon, items) in this project."""
         if kind not in self.exports:
             raise KeyError(f"project {self.name} has no '{kind}' export path in config.toml")
         return self.path / self.exports[kind]
