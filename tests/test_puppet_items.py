@@ -181,6 +181,7 @@ for pid, (mat, slot) in pi.gear_set_pieces().items():
         continue
     z = np.any(list(pi.zone_masks(gsp, "front", gparts["front"], d["zones"]).values()), 0)
     assert z.any() and z.tobytes() not in seen, pid; seen.add(z.tobytes())
-assert "item.cloth_wraps" in pi.gear_set_intake(dry_run=True)["skipped"]   # nothing approved for hands in this temp Limner
+out = pi.gear_set_intake(dry_run=True)   # nothing is approved in this temp Limner: every set piece the spec lacks is skipped
+assert not out["added"] and set(out["skipped"]) == {p for p in pi.gear_set_pieces() if p not in pi.spec()["items"]}, out
 fake.stop(); shutil.rmtree(tmp)
 print("ok")

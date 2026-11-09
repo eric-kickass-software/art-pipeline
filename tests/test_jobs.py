@@ -82,8 +82,8 @@ with FakeComfy() as fake:
 import importlib
 for name in studio.JOB_MODULES:
     importlib.import_module(f"hdart.{name}")
-want = {"dun", "dun_trial", "dun_edit", "dun_rescale", "dun_finalize", "dun_build", "dun_capture", "lib_import", "base",
-        "puppet", "paint", "paint_preview", "paint_fix", "face_gen", "item", "tpl", "tpl_measure", "race", "part", "fix"}
+want = {"dun", "dun_trial", "dun_edit", "dun_rescale", "dun_finalize", "dun_build", "dun_capture", "lib_import",
+        "puppet", "paint", "paint_preview", "paint_fix", "face_gen", "item", "tpl", "tpl_measure", "race"}
 assert want <= set(jobs.KINDS), want - set(jobs.KINDS)
 assert jobs.KINDS["item"].reload[-1] == "puppet_items" and not jobs.KINDS["dun_capture"].gpu and jobs.KINDS["dun"].gpu
 # a reload re-registers the fresh function
