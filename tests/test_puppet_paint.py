@@ -23,7 +23,7 @@ def respond(nodes, uploads):
 fake = FakeComfy(respond).start()
 shutil.copy(ppt.SPEC, tmp / "paint.json"); ppt.SPEC = tmp / "paint.json"
 body, clothes = ppt.prompts("human.female")
-assert "female" in body and ppt.spec()["sexes"]["female"]["extra"] in body and "sports bra" in clothes
+assert "female" in body and ppt.spec()["sexes"]["female"]["extra"] in body and ppt.spec()["sexes"]["female"]["clothes"] in clothes
 
 # the paint prompts are a spec edited in the Workshop: saving changes what gets sent, bad input is refused
 sp = ppt.spec(); sp["sexes"]["female"]["clothes"] = "a red tunic"; sp["figure"]["front"] = "Hero {body} wearing {clothes}."
