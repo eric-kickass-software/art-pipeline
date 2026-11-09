@@ -696,13 +696,40 @@
    "subject": "an old sage in prestigious robes holding a thick tome of arcane knowledge"
   },
   "tokens/npc.sage": {
-   "subject": "an old sage in prestigious robes holding a thick tome of arcane knowledge"
+   "subject": "an old sage in prestigious robes holding a thick tome of arcane knowledge, a short white beard and medium length grey hair"
   },
   "tokens/npc.witch_doctor": {
    "subject": "a shady old hag of a voodoo witch doctor out in the swamp, thick matted hair with streaks of gray. haunted by the souls of the lost"
   },
   "tokens/monster.web_spider": {
-   "subject": "a giant fuzzy spider, with a tiny sunken between its legs, head covered in small black eyes, two dripping fangs"
+   "subject": "a giant spider, with a tiny head covered in small black eyes, two dripping fangs, 8 legs"
+  },
+  "tokens/monster.rat_swarm": {
+   "subject": "a greasy knot of a dozen tangled rats, teeth gnashing and claws ripping"
+  },
+  "tokens/monster.goblin_sapper": {
+   "subject": "a goblin sapper, wrinkled olive green skin and a menacing grin on his face, with a satchel of black blasting-powder bombs, a lit torch, soot-stained leather and googles on top of his head"
+  },
+  "tokens/monster.goblin_cutthroat": {
+   "subject": "a wiry goblin cutthroat in a dark ragged hood, wrinkled olive green skin, a long knife in each hand, a scowl on his face"
+  },
+  "tokens/monster.goblin_warchief": {
+   "subject": "Warchief Grizzlegut, a huge muscular goblin warlord, a massive cleaver, bone and skull trophies, scarred green skin, crude spiked armor, holding a wide two-handed sword"
+  },
+  "statuses/status.enraged": {
+   "subject": "an angry face"
+  },
+  "gear/item.wraith_queens_crown": {
+   "subject": "a cold silver crown of the late queen"
+  },
+  "gear/item.leather_boots": {
+   "subject": "pair of simple brown leather boots for adventuring"
+  },
+  "damageTypes/physical": {
+   "subject": "a steel hammer"
+  },
+  "skills/placeholder.physical.active": {
+   "subject": "a steel hammer"
   }
  },
  "_house_style": "Portraits: 'semireal' (Eric, 2026-11-01: 'that top row is gold'). Reference: specs/limner_refs/semireal.jpg (seed 11, 832x1024, 4 steps, no LoRA). Change the house style only on purpose.",

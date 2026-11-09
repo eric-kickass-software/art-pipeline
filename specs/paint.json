@@ -24,12 +24,12 @@
       "clothes": "plain grey briefs, bald head, barefoot"
     },
     "male": {
-      "extra": "clay render, sculpture, athletic, strong, warrior, chiseled, statuesque, clay model, no facial features, 3D modeled, hand painted, AAA quality",
+      "extra": "clay render, sculpture, athletic, strong, warrior, chiseled, statuesque, clay model, no facial features, 3D modeled, hand painted, AAA quality, slender, thin features, long and pointy elf ears, chiseled features, thick outlines",
       "clothes": "plain grey boxer briefs, bald head, barefoot"
     },
     "female": {
-      "extra": "clay render, sculpture, athletic, strong, warrior, chiseled, statuesque, defined features, clay model, 3D modeled, hand painted, AAA quality, hard shadows.",
-      "clothes": "plain grey sports bra and grey briefs, bald head, barefoot"
+      "extra": "clay render, sculpture, athletic, strong, warrior, chiseled, statuesque, defined features, clay model, 3D modeled, hand painted, AAA quality, hard shadows, slender, thin features, long and pointy elf ears",
+      "clothes": "plain grey bra and grey briefs, bald head, barefoot bra strap across her back, cleavage"
     }
   }
 }
