@@ -117,8 +117,9 @@ image), `generate`, `approve`, `archive`, `get_spec` / `patch_spec` (a JSON merg
 op); `jobs_list`, `jobs_wait`, `jobs_cancel`, `export`, `export_check`; and `list_ops` / `describe_op` / `call_op` for
 any other op. It calls the **running Studio** over HTTP (one queue, one lock owner), so start the Studio first; its URL
 is `config.toml` `[studio] url` (env `HD_STUDIO_URL` beats it). Claude Code picks it up from `.mcp.json` in this repo
-(project scope: approve it once when asked). To add it by hand instead:
-`claude mcp add --scope project hdart -- uv run --quiet --directory P:/Tools/art-pipeline hdart mcp`.
+(project scope: approve it once when asked; it runs with `--no-sync` because the running Studio holds
+`hdart.exe`, so after a dependency change run `uv sync --no-install-project --inexact`). To add it by hand instead:
+`claude mcp add --scope project hdart -- uv run --quiet --no-sync --directory P:/Tools/art-pipeline python -m hdart.cli mcp`.
 
 ## Config, tests, backups
 - **`config.toml`** (git): ComfyUI URL and timeout, model names, the Blender exe, the **data root** (`paths.data`,

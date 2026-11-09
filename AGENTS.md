@@ -46,7 +46,9 @@ Workshop); `items.json` + `item_zones/<item>[.<sex>].<view>[.sketch].png` (Item 
 
 ## Driving the tools (agents)
 - **MCP:** the `hdart` server (`.mcp.json`; by hand: `claude mcp add --scope project hdart -- uv run --quiet
-  --directory P:/Tools/art-pipeline hdart mcp`). Task tools with a `tool` argument (character, items, dungeon,
+  --no-sync --directory P:/Tools/art-pipeline python -m hdart.cli mcp`; `--no-sync` because the running Studio holds
+  `.venv/Scripts/hdart.exe`, so a sync fails until it stops: after a dependency change, `uv sync` with the Studio
+  stopped, or `uv sync --no-install-project --inexact` while it runs). Task tools with a `tool` argument (character, items, dungeon,
   limner): `state` → `generate` → `jobs_wait` → `candidates` → `view_candidate` → `approve` / `archive` → `export` →
   `export_check`; `get_spec` / `patch_spec` for the specs; `list_ops` / `describe_op` / `call_op` reach every op.
 - **CLI:** `uv run hdart op list [prefix]`, `hdart op show <name>`, `hdart op call <name> key=value ...`.

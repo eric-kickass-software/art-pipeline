@@ -2,7 +2,7 @@
   "mcpServers": {
     "hdart": {
       "command": "uv",
-      "args": ["run", "--quiet", "--directory", "P:/Tools/art-pipeline", "hdart", "mcp"],
+      "args": ["run", "--quiet", "--no-sync", "--directory", "P:/Tools/art-pipeline", "python", "-m", "hdart.cli", "mcp"],
       "env": {}
     }
   }
