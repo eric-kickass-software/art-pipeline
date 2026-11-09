@@ -4,7 +4,15 @@ Flat modules, each with a module docstring that says what it does. Read that fir
 
 ## Entry points
 - `cli.py`: `hdart` commands (`studio`, `puppet-export`, `item-export`, `export [--check]`, `dungeon-export`,
-  `dungeon-capture`, `backup`). Thin wrappers over the export and tool modules.
+  `dungeon-capture`, `backup`, `op`, `mcp`). Thin wrappers over the export and tool modules; `op` and `mcp` go
+  through `studio_client`.
+- `studio_client.py`: the HTTP client of the running Studio's ops (`describe()`, `call()` → JSON or `ops.Blob`;
+  `StudioDown` / `StudioError` with the Studio's message). URL: env `HD_STUDIO_URL`, else config `[studio] url`.
+- `mcp_server.py`: the MCP server (`hdart mcp`, stdio, the official `mcp` SDK's `MCPServer`). Task-level verbs over
+  the ops (`state`, `candidates`, `view_candidate`, `generate`, `approve`, `archive`, `get_spec`, `patch_spec`, jobs,
+  `export`, `export_check`) plus `list_ops` / `describe_op` / `call_op`. Each verb maps a `tool` + `target` onto the
+  tool's ops (`VERB_OPS`, `SPECS`; their summaries are the MCP descriptions). It imports the api modules only to read
+  the op docstrings; every call goes over HTTP. A new tool or verb: add its branch there and to `tests/test_mcp.py`.
 - `studio.py`: the web server (`serve()`), routing only. Static pages from `studio/`; `GET /api/ops[?prefix=]`,
   `POST /api/op/<name>` (JSON arguments), `GET /api/op/<name>?arg=` (read-only ops). The pages' older routes
   (`/api/ws/*`, `/api/dun/*`, `/api/lib/*`, `/api/limner/*`) go through `ALIASES` to each api module's alias tables.
@@ -13,7 +21,7 @@ Flat modules, each with a module docstring that says what it does. Read that fir
 - `ops.py`: the op registry (`@ops.op("items.approve")` on a typed, documented function; `ops.call()`,
   `ops.call_query()` (GET), `ops.call_alias()` (old routes), `ops.describe()`, `ops.Blob` for image results,
   `ops.http_error()` for the JSON error body). Every tool action is an op, in the tool's api module:
-  `items_api` (`items.*`), `character_api` (`character.*`: Template, Races, Paint, Face, Ramps, images),
+  `items_api` (`items.*`), `character_api` (`character.*`: Template, Races, Paint, Face, Ramps, images, `character.export`),
   `dungeon_api` (`dungeon.*`, incl. the materials library), `limner_api` (`limner.*`), `jobs_api` (`jobs.*`: list,
   get, wait, cancel, cancel_label, clear, queue). Each has `LEGACY` (POST) / `GET_LEGACY` alias tables. New actions are
   ops there; workflow (auto-queued backs, batch planning, job labels) lives in the api module, not the server.

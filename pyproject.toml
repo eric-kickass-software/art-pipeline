@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Hearthdelve art pipeline: ComfyUI textures/icons, TRELLIS.2 meshes, Blender renders, paper-doll compositing"
 requires-python = ">=3.12"
 dependencies = [
+    "mcp>=1.10",
     "numpy>=2.0",
     "pillow>=11.0",
     "requests>=2.32",

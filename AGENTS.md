@@ -16,6 +16,7 @@ Per area: `hdart/AGENTS.md` (modules, state, invariants), `studio/AGENTS.md` (pa
 | `library/` | `recipes/*.json`, `materials/*.json` (git), `cache/` (git-ignored downloads) | Dungeon Forge |
 | `blender/mesh_template.py` | archway meshes + normal pass | run by `hdart/dungeon.py` via `config.blender()` |
 | `tests/` | script-style tests, `run_all.py`, `fixtures/` | no GPU |
+| `.mcp.json` | the `hdart` MCP server for Claude Code (project scope) | `uv run hdart mcp`; needs the Studio running |
 | `config.toml` / `config.local.toml` | settings / machine overrides (git-ignored) | read via `hdart/config.py` |
 | `sprites/`, `work/`, `archive/` | generated data under the data root (`config.data_dir()`) | git-ignored, Eric's live data |
 
@@ -42,6 +43,16 @@ Workshop); `items.json` + `item_zones/<item>[.<sex>].<view>[.sketch].png` (Item 
   The game's `ArtContract/requirements.json` is read, never written (`hdart/contract.py`).
 - Removing = archiving to `archive/` (never delete candidates).
 - Never write text files with PowerShell `Get/Set-Content` (mojibake + BOM). Use Python or an editor.
+
+## Driving the tools (agents)
+- **MCP:** the `hdart` server (`.mcp.json`; by hand: `claude mcp add --scope project hdart -- uv run --quiet
+  --directory P:/Tools/art-pipeline hdart mcp`). Task tools with a `tool` argument (character, items, dungeon,
+  limner): `state` → `generate` → `jobs_wait` → `candidates` → `view_candidate` → `approve` / `archive` → `export` →
+  `export_check`; `get_spec` / `patch_spec` for the specs; `list_ops` / `describe_op` / `call_op` reach every op.
+- **CLI:** `uv run hdart op list [prefix]`, `hdart op show <name>`, `hdart op call <name> key=value ...`.
+- Both call the **running Studio** over HTTP (`config.toml` `[studio] url`, env `HD_STUDIO_URL`); they never import a
+  tool to do work, so there is one queue and one lock owner. Generating queues GPU work on the shared ComfyUI: check
+  `jobs_list` first and only cancel your own jobs. To try them safely, point `HD_STUDIO_URL` at a throwaway Studio.
 
 ## Test and land
 - `uv run python tests/run_all.py` (all pass, ~10 min, no GPU); `uv run python -c "import hdart.studio"`.

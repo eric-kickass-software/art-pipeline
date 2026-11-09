@@ -24,4 +24,5 @@ Script-style tests: each `test_*.py` is a plain script that asserts and prints `
 - New ops and new rules get a test here. `test_ops.py` covers the registry and the Item Workshop's ops;
   `test_tool_ops.py` the Dungeon, Limner, Character and jobs ops: every op and parameter documented, every route the
   pages call mapped to an op, direct calls on temp data, and a throwaway Studio over HTTP (on a free port, temp
-  `HD_DATA` / `HD_SPECS`, no GPU).
+  `HD_DATA` / `HD_SPECS`, no GPU). `test_mcp.py` runs `hdart op` and the MCP server (`hdart mcp` over stdio, as
+  Claude Code starts it) against a throwaway Studio with hand-made candidates; a failed generate stands in for jobs.

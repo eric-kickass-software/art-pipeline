@@ -1,6 +1,9 @@
 # hdart settings (read by hdart/config.py). Machine-specific overrides go in config.local.toml next to this file
 # (git-ignored, same keys). Env vars beat both: HD_PROJECT (the active project's path), HD_PROFILE (which project),
-# HD_COMFY_URL, HD_DATA, HD_BLENDER, HD_UNITY.
+# HD_COMFY_URL, HD_DATA, HD_BLENDER, HD_UNITY, HD_STUDIO_URL.
+
+[studio]
+url = "http://127.0.0.1:4321"   # the running Studio, for `hdart op` and `hdart mcp` (they call it over HTTP)
 
 [comfy]
 url = "http://127.0.0.1:8188"

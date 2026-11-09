@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "hdart": {
+      "command": "uv",
+      "args": ["run", "--quiet", "--directory", "P:/Tools/art-pipeline", "hdart", "mcp"],
+      "env": {}
+    }
+  }
+}

@@ -96,6 +96,8 @@ Design, pipeline steps and findings are in the tool's vault note; this is the cl
 | `hdart export [--check]` | puppet + every item; `--check` only validates `Art/` and the intake files (exit 1 on a problem) | |
 | `hdart dungeon-export [set]` | a set's approved pieces (format 2, normal maps) | `Assets/StreamingAssets/Art/Dungeon/<set>/` |
 | `hdart dungeon-capture [set]` | export + Prototype V batch screenshots | `work/protov/` |
+| `hdart op list [prefix]` / `op show <name>` / `op call <name> key=value ... [--out img.png]` | any op of the running Studio (values are JSON when they parse, else text) | |
+| `hdart mcp` | the MCP server for agents (stdio), over the running Studio | |
 | `hdart backup [--dry-run] [--dest dir]` | state, layers, approved dungeon candidates and specs to a dated folder | `P:\Archive\art-pipeline-backups\<date_time>\` |
 
 Every export rewrites `Art/index.json` (all packs on disk); item and puppet exports also write `Art/ramps.json` and
@@ -106,13 +108,24 @@ with parameters, `POST /api/op/<name>` with a JSON object runs one (bad argument
 over `GET /api/op/<name>?arg=value`. Every tool is on ops: `items.*`, `character.*`, `dungeon.*`, `limner.*` (e.g.
 `dungeon.generate` → `{"job": id}`, `dungeon.review`, `dungeon.approve`, `dungeon.export`), and `jobs.*` (`jobs.list`,
 `jobs.wait`, `jobs.cancel`). Image ops return the PNG itself. The pages' own routes (`/api/ws/<action>`,
-`/api/dun/<action>`, `/api/lib/<action>`, `/api/limner/<action>`) are aliases of ops.
+`/api/dun/<action>`, `/api/lib/<action>`, `/api/limner/<action>`) are aliases of ops. From a shell:
+`uv run hdart op list dungeon.`, `uv run hdart op call dungeon.review set=crypt piece=tile.crypt_floor`.
+
+**Agents (MCP).** `uv run hdart mcp` is an MCP server (stdio) with task-level tools over the same ops, the same verbs
+for every tool (`tool` = character, items, dungeon, limner): `state`, `candidates`, `view_candidate` (a downscaled
+image), `generate`, `approve`, `archive`, `get_spec` / `patch_spec` (a JSON merge patch, validated by the tool's save
+op); `jobs_list`, `jobs_wait`, `jobs_cancel`, `export`, `export_check`; and `list_ops` / `describe_op` / `call_op` for
+any other op. It calls the **running Studio** over HTTP (one queue, one lock owner), so start the Studio first; its URL
+is `config.toml` `[studio] url` (env `HD_STUDIO_URL` beats it). Claude Code picks it up from `.mcp.json` in this repo
+(project scope: approve it once when asked). To add it by hand instead:
+`claude mcp add --scope project hdart -- uv run --quiet --directory P:/Tools/art-pipeline hdart mcp`.
 
 ## Config, tests, backups
 - **`config.toml`** (git): ComfyUI URL and timeout, model names, the Blender exe, the **data root** (`paths.data`,
   where `sprites/`, `work/`, `archive/` live; empty = this folder), the backup folder, and a **profile per project**
   (path, Unity exe, contract folder, export roots). Machine overrides go in `config.local.toml` (git-ignored, same
-  keys). Env vars beat both: `HD_PROJECT`, `HD_PROFILE`, `HD_COMFY_URL`, `HD_DATA`, `HD_SPECS`, `HD_BLENDER`, `HD_UNITY`.
+  keys). Env vars beat both: `HD_PROJECT`, `HD_PROFILE`, `HD_COMFY_URL`, `HD_DATA`, `HD_SPECS`, `HD_BLENDER`, `HD_UNITY`,
+  `HD_STUDIO_URL` (the Studio `hdart op` and `hdart mcp` call).
 - Output goes to the active profile's project (Hearthdelve: `P:\Projects\Unity\Hearthdelve`, the root checkout). Set
   `HD_PROJECT` to aim a run at a worktree.
 - **Tests:** `uv run python tests/run_all.py [name-filter]` (each test in its own process, ~10 min), or one file:

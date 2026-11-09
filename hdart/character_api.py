@@ -403,6 +403,20 @@ def image(path: str) -> ops.Blob:
     return ops.Blob(_ws().image(path), "image/gif" if path.endswith(".gif") else "image/png", "max-age=3600")
 
 
+# ----------------------------------------------------------------------------- export
+
+@ops.op("character.export")
+def export(race: str = "human", size: int | None = None) -> dict:
+    """Export a race's puppet into the project: its approved paint per sex (else the newest), the hair and face sets
+    and the skin, hair and eye ramps, with index maps (the race's pack folder, rebuilt whole). Returns {"path"}.
+
+    Args:
+        size: canvas px (default: the rig canvas, 576)
+    """
+    from . import unity_export
+    return {"path": str(unity_export.export(race, size))}
+
+
 # ----------------------------------------------------------------------------- the page's older routes
 
 def _paint_spec_route(b: dict) -> dict:
