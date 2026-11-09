@@ -597,15 +597,16 @@ def save_recipe(set: str, pieces: list, title: str, with_sheet: bool = True, not
 
 
 @ops.op("dungeon.apply_recipe")
-def apply_recipe(set: str, recipe: str, use_sheet: bool = True) -> dict:
+def apply_recipe(set: str, recipe: str, use_sheet: bool = True, replace_sheet: bool = False) -> dict:
     """Add new families to a set from a recipe. Returns {"pieces": the new master ids}.
 
     Args:
         recipe: the recipe id (dungeon.recipes lists them)
-        use_sheet: also take the recipe's material sheet
+        use_sheet: take the recipe's material sheet when the set has none yet
+        replace_sheet: take the recipe's material sheet even over the set's own
     """
     from hdart.tools.dungeon import generation as gen
-    return {"pieces": gen.apply_recipe(set, recipe, use_sheet)}
+    return {"pieces": gen.apply_recipe(set, recipe, "replace" if replace_sheet else use_sheet)}
 
 
 # ----------------------------------------------------------------------------- export
@@ -717,7 +718,9 @@ LEGACY = {
     "sheet/update": ("dungeon.update_sheet", {}),
     "sheet/from_floor": ("dungeon.sheet_from_floor", {}),
     "recipe/save": ("dungeon.save_recipe", {}),
-    "recipe/apply": ("dungeon.apply_recipe", {}),
+    "recipe/apply": lambda b: ops.call("dungeon.apply_recipe", {   # the page sent use_sheet "replace"
+        "set": b.get("set"), "recipe": b.get("recipe"), "use_sheet": b.get("use_sheet", True) not in (False, None),
+        "replace_sheet": b.get("use_sheet") == "replace"}),
     "export": ("dungeon.export", {}),
     "capture": ("dungeon.capture", {}),
 }

@@ -40,14 +40,14 @@ try: palette.save_ramp("skin", "bad name"); raise SystemExit("no error")
 except ValueError: pass
 doc = palette.delete_ramp("skin", "test_tone2"); assert "test_tone2" not in doc["groups"]["skin"]
 
-# the editor's JS ramp formula = hdart.imaging.palette.ramp_from_base at the default tune (needs node)
+# the pages' JS ramp formula (studio/js/ramps.js) = hdart.imaging.palette.ramp_from_base at the default tune (needs node)
 node = shutil.which("node")
 if node:
-    html = (ROOT / "studio" / "workshop.html").read_text(encoding="utf-8")
-    js = html[html.index("const TUNE0"):html.index("function curRamp()")]
+    mod = (ROOT / "studio" / "js" / "ramps.js").as_uri()
     bases = ["#f2c7a5", "#825c43", "#292420", "#7d9a58", "#9aa3b5"]
-    prog = js + "\nconsole.log(JSON.stringify(" + json.dumps(bases) + ".map(b => rampFrom(b, TUNE0, 5).map(rgb2hex))));"
-    out = json.loads(subprocess.run([node, "-e", prog], capture_output=True, text=True, check=True).stdout)
+    prog = (f"import {{ rampFrom, TUNE0, rgb2hex }} from {json.dumps(mod)};\n"
+            "console.log(JSON.stringify(" + json.dumps(bases) + ".map(b => rampFrom(b, TUNE0, 5).map(rgb2hex))));")
+    out = json.loads(subprocess.run([node, "--input-type=module", "-e", prog], capture_output=True, text=True, check=True).stdout)
     for b, js_r in zip(bases, out):
         py = [rgb_hex(c) for c in ramp_from_base(b, 5)]
         diff = max(abs(int(x[i:i + 2], 16) - int(y[i:i + 2], 16)) for x, y in zip(py, js_r) for i in (1, 3, 5))

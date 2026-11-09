@@ -51,11 +51,11 @@ safe to run again: whatever is already up is left alone. Check: `curl http://127
 
 | URL | Tool | Code | Specs (git) | State / candidates (data root) |
 |---|---|---|---|---|
-| /workshop | **Character Workshop**: tabs Template → Race (mannequins, Paint per sex) → Face (hair, faces) → Ramps | `studio/workshop.html`, `hdart/tools/character/` | `races.json`, `paint.json`, `face.json`, `puppet_template.json`, `palettes.json`, `ai_style.json` | `sprites/ai/workshop.json`, `sprites/ai/paint/<build>/`, `sprites/ai/face/<race>/`, `sprites/ai/puppet_template/` |
-| /items | **Item Workshop**: Items (settings, zone editor, Grip card, generate, candidates), Outfit | `studio/workshop.html`, `hdart/tools/items/` | `items.json`, `item_zones/` | `sprites/ai/items/<race>/state.json` + `<item>/<candidate>/` |
-| /editor | **Workshop Editor**: every layer of a painted puppet and what it wears (paint, bands, AI fix) | `studio/workshop.html` | | the candidates above |
-| /dungeon | **Dungeon Forge**: sets of floors, walls, doors, props → room preview → export | `studio/dungeon.html`, `hdart/tools/dungeon/`, `blender/mesh_template.py` | `dungeon_sets/<set>.json`, `dungeon_style.json`; `library/` | `sprites/dungeon/<set>/state.json` + `candidates/` |
-| /limner | **Limner**: icons (items, gear, classes, statuses, damage, skills), portraits, monster/NPC tokens | `studio/limner.html`, `hdart/tools/limner/` | `limner.json`, `limner_refs/` | `sprites/limner/state.json` + `<cat>/<id>/<cid>/` |
+| /workshop | **Character Workshop**: tabs Template → Race (mannequins, Paint per sex) → Face (hair, faces) → Ramps | `studio/workshop.html`, `studio/js/workshop/`, `hdart/tools/character/` | `races.json`, `paint.json`, `face.json`, `puppet_template.json`, `palettes.json`, `ai_style.json` | `sprites/ai/workshop.json`, `sprites/ai/paint/<build>/`, `sprites/ai/face/<race>/`, `sprites/ai/puppet_template/` |
+| /items | **Item Workshop**: Items (settings, zone editor, Grip card, generate, candidates), Outfit | `studio/items.html`, `studio/js/workshop/`, `hdart/tools/items/` | `items.json`, `item_zones/` | `sprites/ai/items/<race>/state.json` + `<item>/<candidate>/` |
+| /editor | **Workshop Editor**: every layer of a painted puppet and what it wears (paint, bands, AI fix) | `studio/editor.html`, `studio/js/workshop/editor.js` | | the candidates above |
+| /dungeon | **Dungeon Forge**: sets of floors, walls, doors, props → room preview → export | `studio/dungeon.html`, `studio/js/dungeon/`, `hdart/tools/dungeon/`, `blender/mesh_template.py` | `dungeon_sets/<set>.json`, `dungeon_style.json`; `library/` | `sprites/dungeon/<set>/state.json` + `candidates/` |
+| /limner | **Limner**: icons (items, gear, classes, statuses, damage, skills), portraits, monster/NPC tokens | `studio/limner.html`, `studio/js/limner.js`, `hdart/tools/limner/` | `limner.json`, `limner_refs/` | `sprites/limner/state.json` + `<cat>/<id>/<cid>/` |
 
 `/` opens the Character Workshop. The ☰ menu top left switches tools. Every prompt is editable next to the button that
 generates with it. The style groups in `specs/ai_style.json` have no editor: edit the file.
@@ -108,8 +108,8 @@ Every export rewrites `Art/index.json` (all packs on disk); item and puppet expo
 with parameters, `POST /api/op/<name>` with a JSON object runs one (bad arguments → 400), and read-only ones also run
 over `GET /api/op/<name>?arg=value`. Every tool is on ops: `items.*`, `character.*`, `dungeon.*`, `limner.*` (e.g.
 `dungeon.generate` → `{"job": id}`, `dungeon.review`, `dungeon.approve`, `dungeon.export`), and `jobs.*` (`jobs.list`,
-`jobs.wait`, `jobs.cancel`). Image ops return the PNG itself. The pages' own routes (`/api/ws/<action>`,
-`/api/dun/<action>`, `/api/lib/<action>`, `/api/limner/<action>`) are aliases of ops. From a shell:
+`jobs.wait`, `jobs.cancel`). Image ops return the PNG itself. The pages call the ops directly (`studio/js/api.js`); the older
+routes (`/api/ws/<action>`, `/api/dun/<action>`, `/api/lib/<action>`, `/api/limner/<action>`) stay as aliases of ops. From a shell:
 `uv run hdart op list dungeon.`, `uv run hdart op call dungeon.review set=crypt piece=tile.crypt_floor`.
 
 **Agents (MCP).** `uv run hdart mcp` is an MCP server (stdio) with task-level tools over the same ops, the same verbs
@@ -141,7 +141,7 @@ is `config.toml` `[studio] url` (env `HD_STUDIO_URL` beats it). Claude Code pick
 | Path | What |
 |---|---|
 | `hdart/` | the Python package: `core/`, `imaging/`, `tools/<tool>/`, `export/`, `server/`, `cli.py` (see `hdart/AGENTS.md`) |
-| `studio/` | the three single-file pages (`workshop.html` serves /workshop, /items, /editor) |
+| `studio/` | one page per tool, its ES modules (`js/`) and styles (`css/`); see `studio/AGENTS.md` |
 | `specs/` | everything Eric tunes in the tools: prompts, races, ramps, items, zones, dungeon sets, Limner (git) |
 | `library/` | dungeon recipes and CC0 materials (`materials/*.json` in git, `cache/` downloads git-ignored) |
 | `blender/` | the archway mesh script `hdart/tools/dungeon/geometry.py` runs in Blender |

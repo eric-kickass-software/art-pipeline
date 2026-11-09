@@ -40,9 +40,14 @@ for prefix in ("dungeon.", "limner.", "character.", "jobs.", "studio."):
             assert p["doc"], (o["name"], p["name"], "undocumented parameter")
 # every op is named "<tool>.<action>"
 assert all("." in n for n in ops.OPS), [n for n in ops.OPS if "." not in n]
+# every op (all tools) is a typed public function: a docstring, every parameter annotated and documented, a return type
+import inspect
+for n, o in ops.OPS.items():
+    assert o.summary and inspect.signature(o.fn).return_annotation is not inspect.Signature.empty, (n, "needs a return type")
+    assert all(p.type is not object and (p.doc or ops._shared_doc(n, p.name)) for p in o.params), (n, "untyped or undocumented parameter")
 
 
-# ----------------------------------------------------------------------------- every page route has an alias
+# ----------------------------------------------------------------------------- the pages call ops
 
 def tables(*names):
     out = {}
@@ -53,23 +58,79 @@ def tables(*names):
     return set(out)
 
 
-ws = (ROOT / "studio" / "workshop.html").read_text(encoding="utf-8")
-used = {a for a in re.findall(r'"/api/ws/([\w/]+)"', ws) if not a.startswith("items/")}
-have = tables(character_api.LEGACY, character_api.GET_LEGACY, jobs_api.LEGACY, jobs_api.GET_LEGACY)
-assert used and used <= have, sorted(used - have)
+# the older routes stay for scripts and agents; each still names a real op
+tables(character_api.LEGACY, character_api.GET_LEGACY, jobs_api.LEGACY, jobs_api.GET_LEGACY, dungeon_api.LEGACY,
+       dungeon_api.GET_LEGACY, dungeon_api.LIB_LEGACY, dungeon_api.LIB_GET_LEGACY, limner_api.LEGACY, limner_api.GET_LEGACY)
 
-dun = (ROOT / "studio" / "dungeon.html").read_text(encoding="utf-8")
-used = set(re.findall(r'\bpost\("([\w/]+)"', dun)) | set(re.findall(r'/api/dun/([\w/]+)', dun))
-used = {u.rstrip("/") for u in used} - {"set"}   # "/api/dun/set/new" is matched whole as well
-have = tables(dungeon_api.LEGACY, dungeon_api.GET_LEGACY)
-assert used and used <= have, sorted(used - have)
-used = set(re.findall(r'/api/lib/([\w/]+)', dun))
-assert used and used <= tables(dungeon_api.LIB_LEGACY, dungeon_api.LIB_GET_LEGACY), used
+# Static scan of the page modules (studio/js): every op they call exists, GETs and image URLs only name read-only ops,
+# and an inline object of arguments names only the op's parameters (ops refuse unknown ones). The scoped helpers add an
+# argument: itGet / itPost the page's race (Item Workshop), dget / dpost the open set (Dungeon Forge).
+STUDIO = ROOT / "studio"
+CALL = re.compile(r'\b(get|post|url|itGet|itPost|dget|dpost)\(\s*"(\w+\.\w+)"\s*(,\s*)?')   # op names: "<tool>.<action>"
+ADDED = {"itGet": {"race"}, "itPost": {"race"}, "dget": {"set"}, "dpost": {"set"}}
 
-lim = (ROOT / "studio" / "limner.html").read_text(encoding="utf-8")
-used = set(re.findall(r'/api/limner/([\w/]+)', lim))
-have = tables(limner_api.LEGACY, limner_api.GET_LEGACY)
-assert used and used <= have, sorted(used - have)
+
+def object_keys(src, i):
+    """Top-level keys of the object literal starting at src[i] == "{" (None if a key is computed or spread)."""
+    depth, j, keys, part, quote = 0, i, [], "", None
+    while True:
+        c = src[j]
+        if quote:
+            if c == "\\":
+                part += src[j:j + 2]; j += 2; continue
+            if c == quote:
+                quote = None
+        elif c in "\"'`":
+            quote = c
+        elif c in "{[(":
+            depth += 1
+        elif c in "}])":
+            depth -= 1
+            if depth == 0:
+                keys.append(part); break
+        elif c == "," and depth == 1:
+            keys.append(part); part = ""; j += 1; continue
+        if depth >= 1 and not (depth == 1 and c == "{" and j == i):
+            part += c
+        j += 1
+    out = set()
+    for k in (x.strip() for x in keys):
+        if not k:
+            continue
+        if k.startswith("..."):
+            continue   # a spread: its keys are checked where it is built, or at run time
+        m = re.match(r'^(\w+)\s*(:|$)', k)
+        if not m:
+            return None
+        out.add(m.group(1))
+    return out
+
+
+modules = sorted((STUDIO / "js").rglob("*.js"))
+assert len(modules) >= 20, modules
+called, checked = set(), 0
+for f in modules:
+    src = f.read_text(encoding="utf-8")
+    rel = f.relative_to(STUDIO).as_posix()
+    assert rel == "js/api.js" or "/api/" not in src, (rel, "pages call ops through js/api.js, not routes")
+    for m in CALL.finditer(src):
+        fn, name = m.group(1), m.group(2)
+        assert name in ops.OPS, (rel, fn, name, "no such op")
+        called.add(name)
+        if fn in ("get", "url", "itGet", "dget"):
+            assert ops.OPS[name].read_only, (rel, fn, name, "GET of an op that changes things")
+        if m.group(3) and src[m.end()] == "{":
+            keys = object_keys(src, m.end())
+            if keys is not None:
+                allowed = {p.name for p in ops.OPS[name].params}
+                assert keys - ADDED.get(fn, set()) <= allowed and not (ADDED.get(fn, set()) - allowed), (rel, name, sorted(keys - allowed))
+                checked += 1
+assert len(called) >= 100 and checked >= 100, (len(called), checked)
+for page in ("workshop", "items", "editor", "dungeon", "limner"):   # no inline scripts: each page loads its module
+    html = (STUDIO / f"{page}.html").read_text(encoding="utf-8")
+    assert re.findall(r"<script[^>]*>", html) == [f'<script type="module" src="/js/{"workshop/" if page in ("workshop", "items", "editor") else ""}'
+                                                   f'{ {"workshop": "character", "dungeon": "dungeon/main"}.get(page, page) }.js">'], page
+    assert "/api/" not in html, page
 
 
 # ----------------------------------------------------------------------------- direct calls (no Studio)
@@ -198,6 +259,12 @@ code, ctype, body = http("/api/ops?prefix=dungeon.")
 assert code == 200 and len(json.loads(body)["ops"]) >= 50
 for page in ("/workshop", "/items", "/editor", "/dungeon", "/limner"):
     assert http(page)[:2] == (200, "text/html; charset=utf-8"), page
+for f in [*modules, *(STUDIO / "css").glob("*.css")]:   # every page module and stylesheet is served
+    code, ctype, body = http("/" + f.relative_to(STUDIO).as_posix())
+    assert code == 200 and ctype.startswith("text/javascript" if f.suffix == ".js" else "text/css") and body == f.read_bytes(), f
+for bad in ("/js/../../config.toml", "/js/nope.js", "/css/../workshop.html"):
+    assert http(bad)[0] == 404, bad
+assert http("/api/op/character.image?path=t.png&_=123")[0] in (200, 404)   # "_" cache busters are ignored
 assert json.loads(http("/api/ws/jobs")[2]) == {"jobs": []}
 assert "zz" in json.loads(http("/api/dun/sets")[2])
 st = json.loads(http("/api/op/dungeon.state?set=zz")[2])

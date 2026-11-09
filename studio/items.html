@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Item Workshop</title>
+<link rel="stylesheet" href="/css/workshop.css">
+</head>
+<body>
+<header>
+  <button id="appMenuBtn" title="Switch tool">&#9776;</button>
+  <h1 id="appTitle">Item Workshop</h1>
+  <button class="tab on" data-t="items" data-app="items">Items</button>
+  <button class="tab" data-t="outfit" data-app="items">Outfit</button>
+  <button id="jobsBtn">Queue: idle</button>
+</header>
+<nav id="appMenu" class="hidden">
+  <a href="/workshop" data-app="character">Character Workshop</a>
+  <a href="/items" data-app="items">Item Workshop</a>
+  <a href="/editor" data-app="editor">Workshop Editor</a>
+  <a href="/dungeon" data-app="dungeon">Dungeon Forge</a>
+  <a href="/limner" data-app="limner">Limner <span style="color:var(--muted);font-size:11px">· icons &amp; portraits</span></a>
+</nav>
+
+<div id="jobsPanel"><div class="row"><b>Generation queue</b><button id="jobsClear" style="margin-left:auto">Clear finished</button></div><div id="jobsList"></div></div>
+<main>
+  <div id="err" class="err"></div>
+
+  <!-- ITEM WORKSHOP: ITEMS -->
+  <section id="items" class="on">
+    <p class="hint">Equipment as overlay layers on the race's painted puppet, one layer per Template part it covers. Every build is painted on the
+      same Template, so one fit serves every build; items with <b>fit: per sex</b> get their own fit on the male and the female (gender variants).
+      Paint each item's <b>zone</b> (where it sits) on the puppet, then generate. Spec: <code>specs/items.json</code>, painted zones:
+      <code>specs/item_zones/</code>, code: <code>hdart/item_workshop.py</code>.</p>
+    <div class="itgrid">
+      <div class="card itlist">
+        <div class="row"><label>Race</label><select id="itRace" style="flex:1"><option>human</option></select></div>
+        <div id="itList"></div>
+        <div class="row"><input id="itNewId" placeholder="item.new_thing"><button id="itNew">New item</button></div>
+      </div>
+      <div id="itMain">
+        <div class="card"><div class="row"><h2 style="margin:0">Item</h2><b id="itTitle" style="color:var(--accent)"></b>
+            <span class="hint" id="itFits"></span></div>
+          <div class="itform">
+            <label>Id</label><input id="itId">
+            <label>Slot</label><div class="row" style="margin:0"><select id="itSlot" style="width:160px"></select>
+              <span class="hint" id="itSlotHint">the game's layer slots (ArtContract/requirements.json)</span></div>
+            <label>Game item</label><div class="row" style="margin:0"><input id="itGame" list="itGameIds" style="width:240px" placeholder="(this piece's own id)">
+              <datalist id="itGameIds"></datalist><span class="hint" id="itGameHint"></span></div>
+            <label>Design</label><div class="row" style="margin:0;align-items:center">
+              <img id="itDesignImg" style="width:56px;height:56px;object-fit:contain;background:#fff;border-radius:4px;display:none">
+              <select id="itDesign" style="width:240px"></select>
+              <span class="hint" id="itDesignHint">approved Limner › Gear art the item copies its design from</span></div>
+            <label>Kind</label><select id="itKind"><option value="">fitted (painted on the body)</option><option value="held">held (attached to a hand)</option></select>
+            <label>Fit</label><select id="itFit"><option value="shared">shared: one fit for every build</option><option value="per_sex">per sex: a male and a female fit (gender variant)</option></select>
+            <label>Description</label><textarea id="itText" rows="2" placeholder="what FLUX paints, e.g. a simple cloth tunic with sleeves to the mid forearm"></textarea>
+            <label>Materials</label><div id="itMats" class="row" style="margin:0"></div>
+            <label>Depth</label><div class="row" style="margin:0"><input id="itDepth" type="number" style="width:70px">
+              <span class="hint">stacking: higher draws over lower (trousers 1, boots 2, shirt 3, armour 4, shoulders 5, head 7)</span></div>
+            <label class="itfit">Bulk</label><div class="row itfit" style="margin:0"><input id="itBulk" type="number" style="width:70px">
+              <span class="hint">px (1152 canvas) FLUX may paint past the zone</span>
+              <label><input type="checkbox" id="itClipHair" style="width:auto"> clips the hair</label>
+              <label><input type="checkbox" id="itComplete" style="width:auto"> FLUX pass for hidden joint areas</label></div>
+            <label class="itheld">Held</label><div class="row itheld" style="margin:0"><label>as</label><select id="itHeldAs" style="width:110px" title="picks the held prompt (Prompts below) and the default grip point">
+                <option value="weapon">weapon</option><option value="shield">shield</option><option value="focus">focus</option></select><label>hand</label><select id="itHand" style="width:150px" title="The hand in the front view; the back view uses the other arm (the same hand seen from behind)"><option value="armB">armB (near hand)</option><option value="armA">armA (far hand)</option></select>
+              <label>length</label><input id="itLength" type="number" step="0.02" style="width:70px" title="the weapon's height as a fraction of the figure's">
+              <label>grip angle°</label><input id="itGripAngle" type="number" step="5" style="width:70px" title="turns the weapon in the fist (counter-clockwise in the front view)">
+              <input id="itGripAngleR" type="range" min="-180" max="180" step="1" style="width:160px" title="grip angle: or drag on the stage in the Grip card">
+              <label><input type="checkbox" id="itFlip" style="width:auto"> flip (tip the other way)</label></div>
+          </div>
+          <div class="row"><button class="primary" id="itSave">Save item</button><span class="hint" id="itSaved"></span>
+            <span style="flex:1"></span><button id="itExport" title="hdart item-export: the game item's pack (all its pieces' approved art), Art/index.json, ramps.json, and an intake file if the game doesn't have the item yet">Export to game</button>
+            <button id="itExportAll" title="every game item with approved art">Export all</button></div>
+          <pre class="hint" id="itExportOut" style="white-space:pre-wrap;margin:0"></pre>
+        </div>
+
+        <div class="card itfit" id="zeCard"><div class="row"><h2 style="margin:0">Zone</h2>
+            <span class="hint">Paint where the item sits (cyan). It's shared by every build of the race; tick "this sex only" to paint a gender variant's own zone.
+              Hidden areas (under the near arm, a limb's round end) follow from what you paint.
+              <b>Details</b> (D): sketch the item's parts in its material colours (a leather belt, a metal trim) and seams or edges in the
+              dark line colour; FLUX starts from your sketch. Material strokes also add to the zone.</span></div>
+          <div class="row"><label>On</label><select id="zeBuild" style="width:140px"></select>
+            <button data-zv="front" class="on">Front</button><button data-zv="back">Back</button>
+            <span class="hint" id="zeSource"></span></div>
+          <div class="row"><label>Paint</label><button data-zl="zone" class="on">Zone</button><button data-zl="sketch">Details (D)</button>
+            <span id="zePal" class="row" style="margin:0;display:none"></span>
+            <label id="zeShowL"><input type="checkbox" id="zeShow" checked style="width:auto"> show details</label></div>
+          <div class="row" id="zeTools"><button data-zt="brush" class="on">Brush (B)</button><button data-zt="erase">Eraser (E)</button>
+            <button data-zt="lasso">Lasso add (L)</button><button data-zt="lassox">Lasso erase (K)</button>
+            <label>Size</label><input id="zeSize" type="range" min="4" max="160" value="40" style="width:120px">
+            <label>View</label><input id="zeZoom" type="range" min="400" max="1100" value="640" style="width:120px">
+            <button id="zeUndo">Undo</button><button id="zeRedo">Redo</button><button id="zeClear">Clear</button></div>
+          <canvas id="zeCv" width="1152" height="1152" style="width:640px;cursor:crosshair;border-radius:4px;background:#c4c6cc;touch-action:none"></canvas>
+          <div class="row"><label><input type="checkbox" id="zeSexOnly" style="width:auto"> this sex only</label>
+            <button class="primary" id="zeSave">Save zone + details</button><button id="zeReset" title="deletes this zone and its details sketch">Back to the shared / preset zone</button>
+            <span class="hint" id="zeStatus"></span></div>
+        </div>
+
+        <div class="card itheld" id="gripCard"><div class="row"><h2 style="margin:0">Grip</h2>
+            <span class="hint">A held item sits in a <b>grip hand</b>: per build, FLUX paints each fist closed around a magenta rod (a close-up per hand);
+              the hand splits into the palm behind the weapon and the fingers in front of it (red in the close-ups), and the rod gives the grip line.
+              Without an approved grip hand the weapon sits under the painted hand.</span></div>
+          <div id="gripBuilds"></div>
+          <div class="row"><label>Seed</label><input id="gripSeed" type="number" value="1" style="width:70px">
+            <label>Wrist</label><input id="gripWrist" type="number" step="5" style="width:70px" title="with the arm hanging (the walk), the weapon's tip points up and this many degrees forward">
+            <span class="hint">° forward when the arm hangs (all builds)</span></div>
+          <details><summary class="hint">Grip hand prompts (every build): {style} {body}</summary>
+            <div class="itform"><label>Front close-up</label><textarea id="gripPFront" rows="3"></textarea>
+              <label>Back close-up</label><textarea id="gripPBack" rows="3"></textarea></div>
+            <div class="row"><button id="gripSaveSpec">Save grip prompts + wrist</button></div></details>
+          <h2>Weapon in the hand</h2>
+          <div class="row"><label>Candidate</label><select id="gripCand" style="width:180px"></select><label>On</label><select id="gripBuild" style="width:140px"></select>
+            <label><input type="checkbox" id="gripZoom" style="width:auto" checked> zoom on the hand</label>
+            <span class="hint" id="gripStageMsg">drag on a view to turn the item; angle, length, flip and grip point update live</span></div>
+          <div class="row" style="align-items:flex-start">
+            <figure style="margin:0"><canvas id="gripStage_front" data-gsv="front" width="512" height="512" style="width:384px;background:#c4c6cc;border-radius:4px;cursor:grab;touch-action:none"></canvas><figcaption class="hint">front (rest)</figcaption></figure>
+            <figure style="margin:0"><canvas id="gripStage_back" data-gsv="back" width="512" height="512" style="width:384px;background:#c4c6cc;border-radius:4px;cursor:grab;touch-action:none"></canvas><figcaption class="hint">back (rest)</figcaption></figure></div>
+          <div class="row" style="align-items:flex-start">
+            <figure style="margin:0"><canvas id="gripImg" width="160" height="320" style="background:#fff;border-radius:4px;cursor:crosshair"></canvas>
+              <figcaption class="hint">click the grip point<br><span id="gripAt"></span> <a href="#" id="gripAtReset">auto</a></figcaption></figure>
+            <div><div class="row"><button class="primary" id="gripPreview">Preview walk</button><span class="hint">the full render (rest + walk frames), uses the settings above, saved or not</span></div>
+              <div id="gripOut" class="row" style="align-items:flex-start"></div></div></div>
+        </div>
+
+        <div class="card"><div class="row"><h2 style="margin:0">Generate</h2></div>
+          <div class="row"><label>Fit on</label><select id="itBuild" style="width:140px"></select>
+            <label>Candidates</label><input id="itN" type="number" value="2" min="1" max="6" style="width:60px">
+            <label>Seed</label><input id="itSeed" type="number" value="1" style="width:80px">
+            <button class="primary" id="itGen">Generate</button><span class="hint">~1–3 min each; the queue (top right) shows progress.</span></div>
+          <div class="row"><button id="itBatch" title="Adds a piece for every approved Limner gear item the Workshop doesn't have, then queues Candidates × every piece with a design reference (retries + watchdog: fine overnight)">Queue all Limner gear</button>
+            <button id="itSets" title="Adds the missing pieces of the cloth, leather and plate sets (hood, shoes, wraps, cap, jerkin, gloves, cloak, sabatons, gauntlets), each with its own zones and its Limner icon as the design, then queues Candidates × those new pieces">Queue gear sets</button>
+            <span class="hint" id="itBatchOut"></span></div>
+          <div class="prompt" id="itPrompt"></div>
+          <details style="margin-top:6px"><summary class="hint">Prompt templates (shared by every item): {style} {body} {item} {materials}</summary>
+            <div class="itform">
+              <label>Front</label><textarea id="ipFront" rows="3"></textarea>
+              <label>Back</label><textarea id="ipBack" rows="3"></textarea>
+              <label>Hidden areas</label><textarea id="ipComplete" rows="3"></textarea>
+              <label>Held</label><textarea id="ipHeld" rows="2"></textarea>
+              <label>Held (shield)</label><textarea id="ipHeldShield" rows="2"></textarea>
+              <label>Held (focus)</label><textarea id="ipHeldFocus" rows="2"></textarea>
+              <label>Material text</label><input id="ipMat">
+              <label>Design (fitted)</label><textarea id="ipDesign" rows="2" title="added to the front prompt when the item has a design reference"></textarea>
+              <label>Design (held)</label><textarea id="ipHeldDesign" rows="2" title="{held} = the held prompt; image 1 = the design reference"></textarea>
+            </div>
+            <div class="row"><button id="ipSave">Save templates</button></div></details>
+        </div>
+
+        <div class="card"><div class="row"><h2 style="margin:0">Candidates</h2>
+            <span class="hint">Each candidate on the male and the female (front, back). Approve picks what a build wears.</span></div>
+          <div id="itCands" class="itcands"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ITEM WORKSHOP: OUTFIT -->
+  <section id="outfit">
+    <div class="ofgrid">
+      <div class="card">
+        <div class="row"><label>Build</label><select id="ofBuild" style="width:130px"></select>
+          <label>Hair</label><select id="ofHair" style="width:170px"></select><select id="ofHairRamp" style="width:100px"></select>
+          <button id="ofClear" title="Take everything off">Undress</button></div>
+        <div class="hint">The game's slots: one item each, as the hero equips it (an item brings all its pieces). Each build wears its approved fit.
+          Marks: ✓ approved (♂♀ per build) · ½ some pieces approved · · nothing approved yet · ★ the game wants it, no art yet.</div>
+        <div id="ofSlots"></div>
+      </div>
+      <div class="card ofprev">
+        <div class="row"><b>Preview</b><label style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="ofWalk" style="width:auto"> walk</label>
+          <span class="hint" id="ofStatus"></span></div>
+        <div id="ofOut"></div>
+      </div>
+    </div>
+  </section>
+</main>
+<script type="module" src="/js/workshop/items.js"></script>
+</body>
+</html>

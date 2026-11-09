@@ -11,7 +11,8 @@
 
 One declaration serves every surface:
   - the Studio's HTTP API: `GET /api/ops` lists every op, `POST /api/op/<name>` with a JSON object of arguments calls
-    one, and `GET /api/op/<name>?arg=value` calls a read-only one (list/dict arguments as JSON text)
+    one, and `GET /api/op/<name>?arg=value` calls a read-only one (list/dict arguments as JSON text; `_`-prefixed
+    arguments are cache busters and ignored)
   - an MCP server and the CLI can be generated from the same list (describe())
   - the pages' older routes, through alias tables (`call_alias()`), so the pages work unchanged
 
@@ -133,13 +134,16 @@ def call(name: str, args: dict | None = None, *, lenient: bool = False):
 
 def call_query(name: str, query: dict):
     """Run a read-only op from URL query arguments ({name: text} or parse_qs lists): text is coerced to each
-    parameter's type, list/dict arguments are JSON. Ops that change things refuse GET (405)."""
+    parameter's type, list/dict arguments are JSON. Ops that change things refuse GET (405). Arguments whose name
+    starts with "_" are ignored: they are the pages' cache busters (`?path=a.png&_=1699999`)."""
     o = get(name)
     if not o.read_only:
         raise OpError(f"{name} changes things: POST it (GET is for read-only ops)", 405)
     types_ = {p.name: p.type for p in o.params}
     args = {}
     for k, v in query.items():
+        if k.startswith("_"):
+            continue
         v = v[0] if isinstance(v, list) else v
         if types_.get(k) in (list, dict):
             try:

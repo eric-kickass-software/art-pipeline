@@ -78,10 +78,8 @@ for o in items:
     assert o["summary"] and o["summary"][0].isupper(), o["name"]
     assert o["queues"] in (None, "item"), o["name"]
 
-# every Item Workshop action the page still calls has an alias, and every alias names a real op
-page = (Path(__file__).parent.parent / "studio" / "workshop.html").read_text(encoding="utf-8")
-used = set(re.findall(r'itApi\("([\w/]+)"', page)) | set(re.findall(r'/api/ws/items/([\w/]+)', page))
-assert used and used <= set(items_api.LEGACY), sorted(used - set(items_api.LEGACY))
+# every older /api/ws/items route (kept for scripts and agents) names a real op; the pages call the ops themselves
+# (tests/test_tool_ops.py checks every op the page modules call)
 assert all(e[0] in ops.OPS for e in items_api.LEGACY.values())
 
 # approve / un-approve / archive through the page's route, on a temp data folder

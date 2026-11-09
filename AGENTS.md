@@ -1,7 +1,7 @@
 # AGENTS.md: art pipeline (`hdart`)
 
-Local art tools for Hearthdelve: one Python package (`hdart/`), one web server (the Studio, :4321) with single-file
-pages (`studio/`), ComfyUI (:8188) on the GPU. How to run it: `README.md`. Design and status: the vault,
+Local art tools for Hearthdelve: one Python package (`hdart/`), one web server (the Studio, :4321) with its pages
+(`studio/`: HTML + native ES modules, no build step), ComfyUI (:8188) on the GPU. How to run it: `README.md`. Design and status: the vault,
 `C:/Users/eric/Documents/Notes/Game Dev/Art Pipeline/` (`Art Pipeline - Status.md` first, `Art - Pipeline
 Architecture.md` for the layers, one `Art - <tool>.md` per tool). Record decisions there, not here.
 
@@ -11,7 +11,7 @@ Per area: `hdart/AGENTS.md` (modules, state, invariants), `studio/AGENTS.md` (pa
 | Path | Owns | Notes |
 |---|---|---|
 | `hdart/` | all code: `core/`, `imaging/`, `tools/{character,items,dungeon,limner}/`, `export/`, `server/`, `cli.py` | one AGENTS.md per package |
-| `studio/` | `workshop.html` (/workshop, /items, /editor), `dungeon.html`, `limner.html` | no build step |
+| `studio/` | one page per tool (`workshop.html`, `items.html`, `editor.html`, `dungeon.html`, `limner.html`), `js/` modules, `css/` | no build step; pages call ops via `js/api.js` |
 | `specs/` | tunable specs, in git | Eric edits these through the Studio; see below |
 | `library/` | `recipes/*.json`, `materials/*.json` (git), `cache/` (git-ignored downloads) | Dungeon Forge |
 | `blender/mesh_template.py` | archway meshes + normal pass | run by `hdart/tools/dungeon/geometry.py` via `config.blender()` |

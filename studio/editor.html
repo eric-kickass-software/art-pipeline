@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workshop Editor</title>
+<link rel="stylesheet" href="/css/workshop.css">
+</head>
+<body>
+<header>
+  <button id="appMenuBtn" title="Switch tool">&#9776;</button>
+  <h1 id="appTitle">Workshop Editor</h1>
+  <button class="tab on" data-t="parts" data-app="editor">Editor</button>
+  <button id="jobsBtn">Queue: idle</button>
+</header>
+<nav id="appMenu" class="hidden">
+  <a href="/workshop" data-app="character">Character Workshop</a>
+  <a href="/items" data-app="items">Item Workshop</a>
+  <a href="/editor" data-app="editor">Workshop Editor</a>
+  <a href="/dungeon" data-app="dungeon">Dungeon Forge</a>
+  <a href="/limner" data-app="limner">Limner <span style="color:var(--muted);font-size:11px">· icons &amp; portraits</span></a>
+</nav>
+
+<div id="jobsPanel"><div class="row"><b>Generation queue</b><button id="jobsClear" style="margin-left:auto">Clear finished</button></div><div id="jobsList"></div></div>
+<main>
+  <div id="err" class="err"></div>
+
+  <section id="parts" class="on">
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <!-- icons: Lucide (lucide.dev, ISC licence) line icons, plus a custom ramp swatch -->
+      <defs>
+        <symbol id="i-brush" viewBox="0 0 24 24"><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></symbol>
+        <symbol id="i-eraser" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></symbol>
+        <symbol id="i-heal" viewBox="0 0 24 24"><g transform="rotate(-45 12 12)"><rect x="2" y="7" width="20" height="10" rx="5"/><path d="M8.5 7v10"/><path d="M15.5 7v10"/><path d="M11 11h.01"/><path d="M13 13h.01"/><path d="M13 11h.01"/><path d="M11 13h.01"/></g></symbol>
+        <symbol id="i-outline" viewBox="0 0 24 24"><path d="M15.707 21.293a1 1 0 0 1-1.414 0l-1.586-1.586a1 1 0 0 1 0-1.414l5.586-5.586a1 1 0 0 1 1.414 0l1.586 1.586a1 1 0 0 1 0 1.414z"/><path d="m18 13-1.375-6.874a1 1 0 0 0-.746-.776L3.235 2.028a1 1 0 0 0-1.207 1.207L5.35 15.879a1 1 0 0 0 .776.746L13 18"/><path d="m2.3 2.3 7.286 7.286"/><circle cx="11" cy="11" r="2"/></symbol>
+        <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 2v20"/><path d="m15 19-3 3-3-3"/><path d="m19 9 3 3-3 3"/><path d="M2 12h20"/><path d="m5 9-3 3 3 3"/><path d="m9 5 3-3 3 3"/></symbol>
+        <symbol id="i-ramp" viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="16" rx="3"/><path d="M6.3 4v16M10.1 4v16M13.9 4v16M17.7 4v16" stroke-opacity=".55"/>
+          <rect x="3.6" y="5.1" width="2.2" height="13.8" rx="1" fill="#3b2a6b" stroke="none"/><rect x="6.9" y="5.1" width="2.6" height="13.8" fill="#8a3f8f" stroke="none"/>
+          <rect x="10.7" y="5.1" width="2.6" height="13.8" fill="#d4606a" stroke="none"/><rect x="14.5" y="5.1" width="2.6" height="13.8" fill="#f2a65a" stroke="none"/><rect x="18.3" y="5.1" width="2.2" height="13.8" rx="1" fill="#fbeaa0" stroke="none"/></symbol>
+        <symbol id="i-pick" viewBox="0 0 24 24"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></symbol>
+        <symbol id="i-ai" viewBox="0 0 24 24"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></symbol>
+        <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+        <symbol id="i-top" viewBox="0 0 24 24"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></symbol>
+        <symbol id="i-ghost" viewBox="0 0 24 24"><path d="M5 3a2 2 0 0 0-2 2"/><path d="M19 3a2 2 0 0 1 2 2"/><path d="M21 19a2 2 0 0 1-2 2"/><path d="M5 21a2 2 0 0 1-2-2"/><path d="M9 3h1"/><path d="M9 21h1"/><path d="M14 3h1"/><path d="M14 21h1"/><path d="M3 9v1"/><path d="M21 9v1"/><path d="M3 14v1"/><path d="M21 14v1"/></symbol>
+        <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></symbol>
+        <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"/></symbol>
+        <symbol id="i-save" viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></symbol>
+        <symbol id="i-revert" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+        <symbol id="i-redraw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+        <symbol id="i-zin" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6"/><path d="M8 11h6"/></symbol>
+        <symbol id="i-zout" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M8 11h6"/></symbol>
+        <symbol id="i-fit" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/></symbol>
+        <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></symbol>
+        <symbol id="i-walk" viewBox="0 0 24 24"><circle cx="13" cy="4" r="2"/><path d="m7 21 3-6 3 2v5"/><path d="M9 11.5 11 7l3 2 2 4"/><path d="m11 7-3 1-1 3"/></symbol>
+        <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8z" fill="currentColor"/></symbol>
+        <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/></symbol>
+        <symbol id="i-size" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="8" stroke-dasharray="2 3"/></symbol>
+      </defs>
+    </svg>
+    <div class="row" style="align-items:flex-start;flex-wrap:nowrap;gap:12px;margin:0">
+      <div id="paLayerCol"><div class="row" style="margin:0 0 4px"><b>Layers</b><span class="hint" title="Under the puppet: hair, face and one header per worn slot. Pick what it wears in the left dropdown (its layers fold out below), a ramp to preview it in on the right (none = as painted; the Ramp tool shows the bands instead). Held weapons and shields are edited in their Grip card. 'on ♀' / 'on ♂' = fitted on the other build: shown, but it may not line up." style="cursor:help">ⓘ</span><button id="paAll" style="padding:1px 8px" title="Show every layer">show all</button></div>
+        <div class="ltree"><div class="lgrp" id="paPupHead" style="margin-bottom:0"><div class="lroot" id="paPupRoot"><span class="fold" id="paPupFold">▾</span>
+          <input type="checkbox" id="paPupVis" checked title="show / hide all of it"><span class="slot">puppet</span><span id="paPupNote" class="hint"></span></div>
+          <div class="lslot pup"><select id="paRace" title="Race"></select><select id="paSex" title="Gender"><option>male</option><option>female</option><option>unisex</option></select>
+            <select id="paView" title="View"><option>front</option><option>back</option></select>
+            <select id="paCand" class="wide" title="Paint candidate"></select><span class="rcell" id="paSkinCell"></span></div></div></div>
+        <div id="paLayers" class="ltree"></div></div>
+        <div class="rpop" id="paRampPop" hidden></div>
+      <div>
+        <div id="paStage">
+          <canvas id="paCv" width="760" height="760" style="width:760px;cursor:crosshair"></canvas>
+          <div class="pfloat" id="paRail">
+            <button class="ib" data-tool="brush" title="Brush (B)"><svg><use href="#i-brush"/></svg></button>
+            <button class="ib" data-tool="eraser" title="Eraser (E)"><svg><use href="#i-eraser"/></svg></button>
+            <button class="ib" data-tool="heal" title="Heal (H): fills the stroke from the colours around it (on ramp bands: smooths them)"><svg><use href="#i-heal"/></svg></button>
+            <button class="ib" data-tool="outline" title="Outline (O): the even outline colour and weight"><svg><use href="#i-outline"/></svg></button>
+            <button class="ib" data-tool="move" title="Move (V): drag the selected layer (only the AI-fix mark when there is one); arrows nudge 1 px, Shift 10"><svg><use href="#i-move"/></svg></button>
+            <button class="ib" data-tool="ramp" title="Ramp bands (R): paint the cel levels the ramps colour (skin, item materials, hair); keys 1-5 pick the level. Heal and Eyedropper then work on the bands too"><svg class="keep"><use href="#i-ramp"/></svg></button>
+            <button class="ib" data-tool="pick" title="Eyedropper (I, or Alt-click): a colour (on ramp bands: a level)"><svg><use href="#i-pick"/></svg></button>
+            <label class="swatch" title="Colour"><input id="paColor" type="color" value="#d8a07c"><span id="paSwatch"></span></label>
+            <div class="sep"></div>
+            <button class="ib" data-tool="mask" title="AI fix area (M): mark an area of a puppet part to repaint"><svg><use href="#i-ai"/></svg></button>
+            <div class="sep"></div>
+            <button class="ib tg" data-toggle="paClamp" title="Keep strokes inside the part's template shape"><svg><use href="#i-lock"/></svg></button>
+            <button class="ib tg" data-toggle="paTop" title="Draw the selected layer on top"><svg><use href="#i-top"/></svg></button>
+            <button class="ib tg" data-toggle="paGhost" title="Show the selected part's template outline"><svg><use href="#i-ghost"/></svg></button>
+            <button class="ib tg" data-toggle="paWalkOn" title="Show the walk cycle (W): the layers posed in a walk frame; paint on any frame (strokes land on the part's rest pose)"><svg><use href="#i-walk"/></svg></button>
+            <input id="paClamp" type="checkbox" checked hidden><input id="paTop" type="checkbox" checked hidden><input id="paGhost" type="checkbox" checked hidden><input id="paWalkOn" type="checkbox" hidden>
+          </div>
+          <div class="pfloat" id="paCtx">
+            <span class="tname" id="paToolName"></span>
+            <span class="cgrp" id="paSizeGrp"><svg class="si"><use href="#i-size"/></svg><input id="paSize" type="range" min="1" max="80" value="12"><span class="val" id="paSizeV">12</span></span>
+            <span class="cgrp" id="paLvGrp"><span id="paLv"></span>
+              <button class="ib sm" id="paBandReset" title="Redo the selected layer's bands from its paint (drops its hand edits). Shift-click: the whole puppet / item / hair"><svg><use href="#i-redraw"/></svg></button></span>
+            <span class="cgrp" id="paFixGrp"><input id="paPrompt" placeholder="what to paint there (optional)">
+              <button class="primary sm" id="paFix">Fix marked area</button><button class="sm" id="paClearMask">Clear</button></span>
+            <span class="hint" id="paToolHint"></span>
+          </div>
+          <div class="pfloat" id="paActs">
+            <button class="ib" id="paUndo" title="Undo (Ctrl+Z)"><svg><use href="#i-undo"/></svg></button>
+            <button class="ib" id="paRedo" title="Redo (Ctrl+Y)"><svg><use href="#i-redo"/></svg></button>
+            <button class="ib save" id="paSave" title="Save every edited layer (puppet, items, hair, face)"><svg><use href="#i-save"/></svg><span class="dot" id="paDirtyDot"></span></button>
+            <button class="ib" id="paRevert" title="Revert the selected layer's puppet / item / hair / face to its generated originals (all its edits)"><svg><use href="#i-revert"/></svg></button>
+            <div class="vsep"></div>
+            <button class="ib" id="paZOut" title="Zoom out"><svg><use href="#i-zout"/></svg></button>
+            <span class="val" id="paZv">100%</span>
+            <button class="ib" id="paZIn" title="Zoom in (or the mouse wheel)"><svg><use href="#i-zin"/></svg></button>
+            <button class="ib" id="paReset" title="Fit: zoom back to the whole canvas"><svg><use href="#i-fit"/></svg></button>
+            <select id="paZoom" title="Canvas size"><option value="560">M</option><option value="760" selected>L</option><option value="960">XL</option></select>
+          </div>
+          <div class="pfloat" id="paStatusBox"><span id="paStatus"></span></div>
+          <div class="pfloat" id="paWalkBar" hidden><button class="ib sm" id="paPlay" title="Play / pause the walk (loops)"><svg><use href="#i-play"/></svg></button>
+            <input id="paFrame" type="range" min="0" max="7" value="0" title="Scrub the walk frames (, and . step)"><span class="val" id="paFrameV">1/8</span></div>
+        </div>
+        <p class="hint" style="max-width:760px">Paint on the <b>selected layer</b> (click its name). Wheel zooms; right/middle-drag or Space+drag pans.
+          Keys: B brush, E eraser, H heal, O outline, V move, R ramp, I eyedropper, M AI-fix area, [ ] size, 1-5 band level, Ctrl+Z / Ctrl+Y;
+          W walk cycle, P play / pause, , . step a frame. With the walk on, paint on any frame: each stroke lands on its part's rest pose.</p>
+        <details style="max-width:760px"><summary class="hint">AI fix wording (every fix of a puppet part)</summary>
+          <p class="hint">{body} and {clothes} come from the build's paint prompts in Race; the text typed in the bar is added. The fix repaints only the marked area, inside the part's template shape, with the whole figure as context, then re-renders the walk.</p>
+          <div class="row"><textarea id="paFixBase" rows="3" style="flex:1"></textarea></div>
+          <div class="row"><button id="paFixSave">Save wording</button><span class="hint" id="paFixStatus"></span></div></details>
+      </div>
+    </div>
+  </section>
+</main>
+<script type="module" src="/js/workshop/editor.js"></script>
+</body>
+</html>

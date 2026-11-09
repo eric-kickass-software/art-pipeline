@@ -5,29 +5,35 @@
 `hdart studio` runs this server under the supervisor (hdart/server/supervisor.py), which restarts it when the code
 changes (after the running job) and on `studio.restart`; nothing is reloaded in place. `--no-supervisor` runs it alone.
 
-Pages (studio/*.html): /workshop (Character Workshop), /items (Item Workshop), /editor (Workshop Editor; all three are
-workshop.html), /dungeon (Dungeon Forge), /limner (Limner).
+Pages (studio/*.html): /workshop (Character Workshop), /items (Item Workshop), /editor (Workshop Editor), /dungeon
+(Dungeon Forge), /limner (Limner). Their scripts are native ES modules in studio/js/ and their styles in studio/css/,
+served as static files (no build step); every page talks to the ops below through studio/js/api.js.
 
 Every action is an op (hdart/core/ops.py), declared in the tool's api module (`<tool>_api.py`):
   GET  /api/ops[?prefix=dungeon.]     every op: name, summary, doc, typed params
   POST /api/op/<name>                 call one with a JSON object of arguments
   GET  /api/op/<name>?arg=value       call a read-only one
-The pages' older routes (/api/ws/*, /api/dun/*, /api/lib/*, /api/limner/*) are aliases of ops, through each api
-module's alias tables (ALIASES below). Long work (generation, renders, Unity captures) goes through the job queue
+The older page routes (/api/ws/*, /api/dun/*, /api/lib/*, /api/limner/*) stay as aliases of ops for scripts and
+agents that use them, through each api module's alias tables (ALIASES below). Long work (generation, renders, Unity captures) goes through the job queue
 (hdart/core/jobs.py, ops jobs.*). This module only routes and serves; tool logic lives in the tools.
 """
 import importlib
 import json
 import os
 import webbrowser
+from email.utils import formatdate
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from hdart.core import config
 
 PAGES = config.ROOT / "studio"   # the page files ship with the code
-PAGE_FILES = {"/workshop": "workshop.html", "/items": "workshop.html", "/editor": "workshop.html",
+PAGE_FILES = {"/workshop": "workshop.html", "/items": "items.html", "/editor": "editor.html",
               "/dungeon": "dungeon.html", "/limner": "limner.html"}
+# Static files next to the pages: URL prefix -> content type by extension. Served with Last-Modified and no-cache, so
+# an edit shows on the next plain reload and an unchanged file is a cheap 304.
+STATIC_DIRS = ("/js/", "/css/")
+STATIC_TYPES = {".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8"}
 
 # Every module that registers Studio job kinds (hdart.core.jobs.kind); imported at start so the registry is complete
 # (the saved queue names its jobs by kind, so a kind keeps its name when its module moves).
@@ -104,6 +110,17 @@ def alias_call(path: str, args: dict, get: bool = False):
     raise ops.OpError(f"unknown route {'GET' if get else 'POST'} {path}", 404)
 
 
+def static_file(path: str):
+    """The file under studio/ for a static URL (/js/..., /css/...), or None if it isn't one we serve (unknown type,
+    missing, or outside the folder)."""
+    if not path.startswith(STATIC_DIRS):
+        return None
+    f = (PAGES / path.lstrip("/")).resolve()
+    if f.suffix not in STATIC_TYPES or not f.is_file() or not f.is_relative_to(PAGES.resolve()):
+        return None
+    return f
+
+
 # ----------------------------------------------------------------------------- server
 
 def serve(port: int = 4321, open_browser: bool = True) -> None:
@@ -116,13 +133,25 @@ def serve(port: int = 4321, open_browser: bool = True) -> None:
         def log_message(self, *a):
             pass
 
-        def _send(self, code, ctype, body, cache="no-store"):
+        def _send(self, code, ctype, body, cache="no-store", headers=()):
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", cache)
+            for k, v in headers:
+                self.send_header(k, v)
             self.end_headers()
             self.wfile.write(body)
+
+        def _static(self, f):
+            """A page module or stylesheet: 304 when the browser's copy is current, else the file."""
+            stamp = formatdate(f.stat().st_mtime, usegmt=True)
+            if self.headers.get("If-Modified-Since") == stamp:
+                self.send_response(304)
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                return
+            self._send(200, STATIC_TYPES[f.suffix], f.read_bytes(), "no-cache", (("Last-Modified", stamp),))
 
         def _result(self, out):
             """An op's result: a Blob as its bytes, anything else as JSON."""
@@ -145,6 +174,8 @@ def serve(port: int = 4321, open_browser: bool = True) -> None:
                     self.end_headers()
                 elif u.path in PAGE_FILES:   # no-cache: a page edit shows on the next plain reload
                     self._send(200, "text/html; charset=utf-8", (PAGES / PAGE_FILES[u.path]).read_bytes(), "no-cache")
+                elif (f := static_file(u.path)) is not None:
+                    self._static(f)
                 elif u.path == "/api/ops":   # every op: name, summary, doc, typed params (?prefix=items.)
                     self._result({"ops": ops.describe(q.get("prefix", [""])[0])})
                 elif u.path.startswith("/api/op/"):

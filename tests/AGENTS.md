@@ -23,8 +23,9 @@ Script-style tests: each `test_*.py` is a plain script that asserts and prints `
   copy (write into `*.spec_path()` freely). Never junction or copy Eric's data into the repo.
 - Exports go into a temp game project (`HD_PROJECT`), never the real Hearthdelve checkout.
 - New ops and new rules get a test here. `test_ops.py` covers the registry and the Item Workshop's ops;
-  `test_tool_ops.py` the Dungeon, Limner, Character and jobs ops: every op and parameter documented, every route the
-  pages call mapped to an op, direct calls on temp data, and a throwaway Studio over HTTP (on a free port, temp
+  `test_tool_ops.py` the Dungeon, Limner, Character and jobs ops: every op and parameter documented, every op the page
+  modules (`studio/js/`) call exists with the arguments they send, the older routes mapped to ops, every page and
+  module served, direct calls on temp data, and a throwaway Studio over HTTP (on a free port, temp
   `HD_DATA` / `HD_SPECS`, no GPU). `test_mcp.py` runs `hdart op` and the MCP server (`hdart mcp` over stdio, as
   Claude Code starts it) against a throwaway Studio with hand-made candidates; a failed generate stands in for jobs.
 - `test_modules.py` reads `hdart/` (AST): no private cross-module access, no import cycles, an AGENTS.md per package.
