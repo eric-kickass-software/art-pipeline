@@ -42,9 +42,10 @@ local: approved art is exported into the game project, the rest can be thrown aw
 `start-art-tools.cmd` starts **ComfyUI** (:8188) and the **Studio** (:4321), each in its own minimized window. It's
 safe to run again: whatever is already up is left alone. Check: `curl http://127.0.0.1:4321/api/ws/jobs`.
 - Browsing works without ComfyUI; generating needs it. The first generation after a start loads the models (~1 min).
-- Tool code is reloaded per request and per job when its file changed, so most edits apply without a restart.
-  `studio.py` itself (routes), `jobs.py`, `ops.py` and `locks.py` need a Studio restart: close its window and run the
-  script again.
+- The Studio window runs a **supervisor**: when the code changes (an edit, a `git pull`) it restarts the server by
+  itself, after the running job has finished; queued jobs carry on. A change that doesn't import is refused and the
+  old server keeps running. Restart by hand: `uv run --no-sync hdart op call studio.restart`. Log: `work/studio.log`.
+  `hdart studio --no-supervisor` runs the server alone.
 - Overnight batches start the **watchdog** (`uv run python -m hdart.watchdog`): keeps Windows awake while jobs remain,
   restarts a dead Studio or ComfyUI, interrupts a job stuck > 15 min. Log: `work/watchdog.log`.
 

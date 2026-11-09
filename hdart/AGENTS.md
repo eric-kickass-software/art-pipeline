@@ -3,6 +3,12 @@
 Flat modules, each with a module docstring that says what it does. Read that first. Repo-wide rules: `../AGENTS.md`.
 
 ## Entry points
+- `supervisor.py`: what `hdart studio` runs (and `start-art-tools.cmd`): a light parent process that runs the server
+  as a child (`hdart studio --no-supervisor`), polls `hdart/**/*.py` and restarts the child when the code changes,
+  debounced, through the child's `studio.restart` op: an import check in a fresh process first (a broken change is
+  refused, the old server keeps serving), then the queue pauses, the running job finishes (cap `wait_minutes`), the
+  child exits with code 75 and a new one starts. A child that dies is started again. Log: `work/studio.log`.
+- `studio_api.py`: ops `studio.info` (pid, supervised, pending restart) and `studio.restart`.
 - `cli.py`: `hdart` commands (`studio`, `puppet-export`, `item-export`, `export [--check]`, `dungeon-export`,
   `dungeon-capture`, `backup`, `op`, `mcp`). Thin wrappers over the export and tool modules; `op` and `mcp` go
   through `studio_client`.
@@ -16,16 +22,17 @@ Flat modules, each with a module docstring that says what it does. Read that fir
 - `studio.py`: the web server (`serve()`), routing only. Static pages from `studio/`; `GET /api/ops[?prefix=]`,
   `POST /api/op/<name>` (JSON arguments), `GET /api/op/<name>?arg=` (read-only ops). The pages' older routes
   (`/api/ws/*`, `/api/dun/*`, `/api/lib/*`, `/api/limner/*`) go through `ALIASES` to each api module's alias tables.
-  `JOB_MODULES` and `OP_MODULE_NAMES` are imported at start so the registries are complete; `OP_MODULES` names each
-  op prefix's reload group.
+  `load_modules()` imports `JOB_MODULES` and `OP_MODULE_NAMES` (plus env `HD_STUDIO_MODULES`, e.g. a test's fake
+  job kinds) at start so the registries are complete; the supervisor's import check runs the same function.
 - `ops.py`: the op registry (`@ops.op("items.approve")` on a typed, documented function; `ops.call()`,
   `ops.call_query()` (GET), `ops.call_alias()` (old routes), `ops.describe()`, `ops.Blob` for image results,
   `ops.http_error()` for the JSON error body). Every tool action is an op, in the tool's api module:
   `items_api` (`items.*`), `character_api` (`character.*`: Template, Races, Paint, Face, Ramps, images, `character.export`),
   `dungeon_api` (`dungeon.*`, incl. the materials library), `limner_api` (`limner.*`), `jobs_api` (`jobs.*`: list,
-  get, wait, cancel, cancel_label, clear, queue). Each has `LEGACY` (POST) / `GET_LEGACY` alias tables. New actions are
+  get, wait, cancel, cancel_label, clear, queue), `studio_api` (`studio.*`). Each has `LEGACY` (POST) / `GET_LEGACY` alias tables. New actions are
   ops there; workflow (auto-queued backs, batch planning, job labels) lives in the api module, not the server.
-- `jobs.py`: the queue and `@jobs.kind(name, gpu=, reload=)`. Long work goes through `jobs.enqueue()`.
+- `jobs.py`: the queue and `@jobs.kind(name, gpu=)`. Long work goes through `jobs.enqueue()`. `pause()` stops new
+  jobs from starting (a restart waits that way).
 - `watchdog.py`: `python -m hdart.watchdog` (started by overnight batches).
 
 ## Modules by tool
@@ -54,12 +61,13 @@ Flat modules, each with a module docstring that says what it does. Read that fir
 - **State changes only inside the lock:** `with store.State(path).edit() as s:` (or `workshop.edit_state()`) from the
   read to the write; writes are atomic (temp + `os.replace`). A GPU job generates first and edits state after; never
   hold a lock while ComfyUI runs.
-- **Api modules import their tool per call** (`_dg()`, `_pi()`...), so a reloaded tool module is picked up. Data and
-  spec paths come from env (`HD_DATA`, `HD_SPECS`) in tests that start a Studio: a reload resets module attributes.
-- **Never reloaded:** `jobs`, `ops`, `locks` hold registries, the queue, locks and caches. The Studio reloads tool
-  modules when their files change (`studio.fresh()`, each kind's `reload=`), so don't keep live state in a tool
-  module's globals unless losing it on reload is fine. Known wart: `item_workshop.spec_override` is a module global
-  swapped during a request (A10 chunk 8 fixes it).
+- **Api modules import their tool on first use** (`_dg()`, `_pi()`...), so `hdart mcp`, which imports them only to
+  read the op docs, doesn't load numpy and the image stack.
+- **Code changes apply through a restart, never a reload** (`hdart/supervisor.py`): no `importlib.reload`, no
+  per-module reload lists. Anything a module keeps in memory (caches in `memo.LRU`s, `locks.CELLS`) is rebuilt after
+  a restart; that is cheap today (the outfit previews, the expensive ones, are cached on disk in `work/cache/`). A
+  cache that would be slow to rebuild goes on disk. Requests run on threads: never swap a module global to pass
+  something to a call (pass it as an argument, like `item_workshop.render(doc=)`).
 - **Paths:** data paths come from `config.data_dir()`, specs from `config.specs_dir()`, the game from
   `config.project()`. Many modules still bind them at import (`workshop.AI_DIR`, `workshop.STATE`, `*.SPEC`); tests
   override those attributes. Don't add new import-time path constants.

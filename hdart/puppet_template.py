@@ -556,11 +556,11 @@ def preview(spec=None, s=2, frames=8):
 
 # ----------------------------------------------------------------------------- Studio job kinds (hdart.jobs)
 
-@jobs.kind("tpl", gpu=False, reload=("puppet", "puppet_template"))
+@jobs.kind("tpl", gpu=False)
 def _job_preview(a):   # clean puppet template: preview
     return preview(None)
 
 
-@jobs.kind("tpl_measure", gpu=False, reload=("puppet", "puppet_template"))
+@jobs.kind("tpl_measure", gpu=False)
 def _job_measure(a):   # re-measure from the art, then preview
     return preview(measure(a.get("build", "human.unisex")))

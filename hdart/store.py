@@ -6,8 +6,8 @@ State (a tool's approvals, sets, picks) is a JSON file. Read it with State(path)
     with State(path).edit() as s:      # holds the file's lock from read to write, so two changes never undo each other
         s["approved"][item] = cid
 
-The lock is per file, for the Studio's request threads and its job thread (a threading lock kept in hdart.locks, which
-is never reloaded) and for other processes (the CLI, a test): a <file>.lock beside it. Every write is atomic (a temp
+The lock is per file, for the Studio's request threads and its job thread (a threading lock kept in hdart.locks)
+and for other processes (the CLI, a test): a <file>.lock beside it. Every write is atomic (a temp
 file, then os.replace), so a reader never sees half a file. A long GPU job must not hold the lock: generate first,
 then edit the state.
 
@@ -28,9 +28,6 @@ from . import config, locks
 
 STANDARD = ("tool", "id", "made", "seed", "prompts", "inputs", "params", "git")
 LOCK_TIMEOUT = 30   # seconds to wait for another process's lock
-for _k, _v in (("GUARD", threading.Lock()), ("STATE", {}), ("HELD", threading.local())):
-    if not hasattr(locks, _k):   # a Studio started before these existed: hdart.locks is never reloaded
-        setattr(locks, _k, _v)
 
 
 # ----------------------------------------------------------------------------- files and locks

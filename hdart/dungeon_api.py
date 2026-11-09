@@ -31,7 +31,7 @@ ops.param_docs("dungeon.", {
 
 
 def _dg():
-    """hdart.dungeon as the Studio reloaded it (imported per call so a reload is picked up)."""
+    """hdart.dungeon (imported on first use, so reading the op docs, as `hdart mcp` does, doesn't load the image stack)."""
     from . import dungeon
     return dungeon
 

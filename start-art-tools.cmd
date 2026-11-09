@@ -3,6 +3,8 @@ rem Starts the Hearthdelve art tools, each in its own minimized window. Safe to 
 rem running is left alone.
 rem   ComfyUI  http://127.0.0.1:8188   (FLUX / TRELLIS / BiRefNet; needed for generating, not for browsing)
 rem   Studio   http://127.0.0.1:4321   every web tool (the links are printed at the end)
+rem The Studio window runs the supervisor (hdart/supervisor.py): it restarts the server by itself when the code
+rem changes, after the running job, and on `uv run --no-sync hdart op call studio.restart`. Log: work\studio.log.
 setlocal
 cd /d "%~dp0"
 if "%COMFYUI%"=="" set "COMFYUI=P:\Tools\ComfyUI"
@@ -17,7 +19,7 @@ if errorlevel 1 (
 
 curl -s -o nul http://127.0.0.1:4321/api/ws/jobs
 if errorlevel 1 (
-    echo Starting the Studio ...
+    echo Starting the Studio, supervised: it restarts itself when the code changes ...
     start "Hearthdelve Studio :4321" /min cmd /c "uv run hdart studio --no-browser"
 ) else (
     echo Studio already running.

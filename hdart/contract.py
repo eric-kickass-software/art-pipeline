@@ -57,7 +57,7 @@ def weapon_type(key, v=None):
 
 def game_items():
     """{id: row} of the items in the game's content (every items/*.json of every content pack)."""
-    c = getattr(config.project(), "content", None); out = {}   # None in a Studio started before A2 (config not reloaded)
+    c = config.project().content; out = {}   # None when the profile names no content folder
     if not c or not c.exists():
         return out
     for f in sorted(c.glob("*/items/*.json")):

@@ -25,8 +25,8 @@ An op returns something JSON can hold, or a `Blob` (an image or other bytes, sen
 Errors: `OpError` (bad call: 400, unknown op or thing: 404, wrong method: 405). `http_error()` turns any exception
 into the JSON error body and status the Studio sends.
 
-Like hdart.jobs, this module is never reloaded (it holds the registry); reloading a tool module re-runs its decorators,
-so the registry always holds the fresh functions.
+The registry is filled when the Studio imports the api modules at start (hdart.studio.load_modules); code changes
+apply through a restart (hdart/supervisor.py), never by reloading modules.
 """
 import inspect
 import json

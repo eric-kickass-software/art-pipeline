@@ -888,11 +888,11 @@ def fix_region(build, cid, view, part, mask, prompt="", seed=3, denoise=0.75):
 
 # ----------------------------------------------------------------------------- Studio job kinds (hdart.jobs)
 
-@jobs.kind("paint_preview", gpu=False, reload=("puppet", "puppet_template", "puppet_paint"))   # walk re-render
+@jobs.kind("paint_preview", gpu=False)   # walk re-render
 def _job_preview(a):
     return preview(a["build"], a["id"])["stamp"]
 
 
-@jobs.kind("paint_fix", reload=("puppet", "puppet_template", "puppet_paint"))   # Parts editor: repaint a region
+@jobs.kind("paint_fix")   # Parts editor: repaint a region
 def _job_fix(a):
     return fix_region(a["build"], a["id"], a["view"], a["part"], a["mask"], a.get("prompt", ""), int(a.get("seed", 3)))

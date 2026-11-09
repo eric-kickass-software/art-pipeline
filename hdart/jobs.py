@@ -2,12 +2,11 @@
 
 Tools register their kinds where the work lives, so the Studio has no dispatch chain:
 
-    @jobs.kind("dun", reload=("dungeon",))          # gpu=True by default
+    @jobs.kind("dun")          # gpu=True by default
     def _job_generate(a): return generate(a["set"], ...)
 
-Before each job the runner reloads the kind's modules (hdart.<name>, in order) so code changes apply without a Studio
-restart; reloading the owning module re-runs its decorators, so the registry always holds the fresh function. This
-module is never reloaded (it holds the registry and the queue).
+Code changes apply through a Studio restart (hdart/supervisor.py), never by reloading modules: the supervisor pauses
+the queue (`pause()`), waits for the running job to finish, then restarts the server.
 
 Jobs run one at a time (ComfyUI is single-GPU). The queue is saved to a JSON file on every change: after a restart the
 queued jobs run again, and a job that was running is marked failed ("interrupted"), not re-run, because it may have
@@ -16,7 +15,6 @@ when it fails or is interrupted by a restart; overnight batches use this so one 
 not the night. Before a GPU job the runner waits while ComfyUI is busy with someone else's work (a test, the
 CLI, a second Studio). Cancel drops a queued job, or interrupts ComfyUI for the running one.
 """
-import importlib
 import json
 import os
 import threading
@@ -46,14 +44,13 @@ def enqueue(kind: str, args: dict, label: str) -> dict:
 class Kind:
     fn: object
     gpu: bool
-    reload: tuple
 
 
-def kind(name, gpu=True, reload=()):
-    """Register the decorated function as the handler of job kind `name`. `reload`: module names under hdart to
-    reload (in order) before each job of this kind."""
+def kind(name: str, gpu: bool = True):
+    """Register the decorated function as the handler of job kind `name` (`gpu`: it runs ComfyUI work, so the runner
+    waits while ComfyUI is busy with someone else's and a cancel interrupts ComfyUI)."""
     def deco(fn):
-        KINDS[name] = Kind(fn, gpu, tuple(reload))
+        KINDS[name] = Kind(fn, gpu)
         return fn
     return deco
 
@@ -63,15 +60,16 @@ class Cancelled(Exception):
 
 
 class Jobs:
-    """Sequential background queue. `path`: where the queue is saved (None = memory only). `base_reload`: modules
-    reloaded before every job. `comfy`: the client used for the busy check and interrupts (hdart.comfy)."""
+    """Sequential background queue. `path`: where the queue is saved (None = memory only). `comfy`: the client used for
+    the busy check and interrupts (hdart.comfy)."""
 
-    def __init__(self, path=None, base_reload=(), comfy=None, autostart=True, poll=0.4, busy_poll=2.0):
-        self.path, self.base_reload, self.poll, self.busy_poll = Path(path) if path else None, tuple(base_reload), poll, busy_poll
+    def __init__(self, path=None, comfy=None, autostart=True, poll=0.4, busy_poll=2.0):
+        self.path, self.poll, self.busy_poll = Path(path) if path else None, poll, busy_poll
         if comfy is None:
             from . import comfy
         self.comfy = comfy
         self.items, self.lock, self.n = [], threading.RLock(), 0
+        self.paused = False   # True: no new job starts (a restart is waiting for the running one)
         self._load()
         if autostart:
             threading.Thread(target=self.run, daemon=True).start()
@@ -159,15 +157,27 @@ class Jobs:
                 job["status"] = "cancelled"
             elif job["status"] == "running":
                 job["cancel"] = True
-                if KINDS.get(job["kind"], Kind(None, False, ())).gpu:
+                if KINDS.get(job["kind"], Kind(None, False)).gpu:
                     self.comfy.interrupt()
             status = job["status"]
         self._save()
         return status
 
+    def running(self) -> dict | None:
+        """The job that is running now, if any."""
+        with self.lock:
+            return next((j for j in self.items if j["status"] == "running"), None)
+
+    def pause(self, on: bool = True):
+        """Stop starting new jobs (on=False: start them again). The running job carries on; queued jobs stay queued,
+        in the saved queue too, so a restart picks them up."""
+        self.paused = on
+
     # ------------------------------------------------------------------ worker
     def _next(self):
         with self.lock:
+            if self.paused:
+                return None
             job = next((j for j in self.items if j["status"] == "queued"), None)
             if job:
                 job["status"], job["started"] = "running", time.time()
@@ -188,9 +198,6 @@ class Jobs:
     def run_one(self, job):
         a = job["args"]
         try:
-            k = KINDS.get(job["kind"])
-            for name in self.base_reload + (k.reload if k else ()):   # pick up code changes without a restart
-                importlib.reload(importlib.import_module(f"hdart.{name}"))
             k = KINDS.get(job["kind"])
             if k is None:
                 raise ValueError(f"unknown job kind {job['kind']}")

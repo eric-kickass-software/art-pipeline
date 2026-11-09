@@ -7,6 +7,7 @@ from pathlib import Path
 here = Path(__file__).parent
 env = dict(os.environ, HD_COMFY_URL="http://127.0.0.1:9", PYTHONWARNINGS="ignore::ResourceWarning")
 env.pop("HD_PROJECT", None)
+env.pop("HD_SUPERVISED", None)   # tests start their own Studios; none of them is supervised unless it says so
 pick = sys.argv[1] if len(sys.argv) > 1 else ""
 failed = []
 for t in sorted(here.glob("test_*.py")):

@@ -10,8 +10,12 @@ import sys
 
 
 def cmd_studio(a):
-    from .studio import serve
-    serve(a.port, not a.no_browser)
+    if a.no_supervisor:
+        from .studio import serve
+        serve(a.port, not a.no_browser)
+    else:
+        from . import supervisor
+        supervisor.main(a.port, not a.no_browser, a.watch or ())
 
 
 def cmd_dungeon_export(a):
@@ -115,6 +119,10 @@ def main(argv=None):
     so = sub.add_parser("studio", help="the web tools: Character Workshop, Item Workshop, Editor, Dungeon Forge, Limner")
     so.add_argument("--port", type=int, default=4321)
     so.add_argument("--no-browser", action="store_true")
+    so.add_argument("--no-supervisor", action="store_true",
+                    help="run the server alone: no restart on code changes, no studio.restart")
+    so.add_argument("--watch", action="append", metavar="DIR",
+                    help="another folder whose .py files restart the Studio when they change (tests)")
     so.set_defaults(fn=cmd_studio)
 
     de = sub.add_parser("dungeon-export", help="export a dungeon set's approved pieces to Unity (StreamingAssets)")

@@ -4,8 +4,9 @@
 
 Every CHECK seconds, while the Studio's queue has queued or running jobs:
   - keeps Windows awake (SetThreadExecutionState: the system stays on, the screen may sleep);
-  - Studio not answering (twice in a row) → stops every 'hdart studio' process and starts a new one; the queue file
-    survives, and a job interrupted by the restart is re-queued if it has retries left (hdart/jobs.py);
+  - Studio not answering (twice in a row) → stops every 'hdart studio' process (the supervisor and its server) and
+    starts a new one; the queue file survives, and a job interrupted by the restart is re-queued if it has retries
+    left (hdart/jobs.py);
   - ComfyUI not answering (3×) → stops its processes and starts P:\\Tools\\ComfyUI\\start-comfyui.cmd again;
   - one job running longer than STUCK → interrupts ComfyUI (the job fails and retries); still the same job after
     another STUCK_GRACE → restarts the Studio (its worker is hung on something else).
@@ -101,7 +102,7 @@ def _kill(pattern):
 
 def restart_studio(why):
     log(f"restarting the Studio: {why}")
-    killed = _kill(r'hdart(\.exe)?"? studio')
+    killed = _kill(r'hdart(\.exe|\.cli)?"? studio')   # the supervisor (hdart studio) and its server (-m hdart.cli studio)
     log(f"  stopped {len(killed)} process(es)")
     time.sleep(3)
     subprocess.run('start "Hearthdelve Studio :4321" /min cmd /c "uv run hdart studio --no-browser"', shell=True,

@@ -25,17 +25,17 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # ----------------------------------------------------------------------------- every op: documented, real job kinds
 
-for prefix in ("dungeon.", "limner.", "character.", "jobs."):
+for prefix in ("dungeon.", "limner.", "character.", "jobs.", "studio."):
     got = ops.describe(prefix)
-    assert len(got) >= {"dungeon.": 50, "limner.": 18, "character.": 35, "jobs.": 7}[prefix], (prefix, len(got))
+    assert len(got) >= {"dungeon.": 50, "limner.": 18, "character.": 35, "jobs.": 7, "studio.": 2}[prefix], (prefix, len(got))
     for o in got:
         assert o["summary"] and o["summary"][0].isupper() and o["summary"].rstrip()[-1] in ".)}", o["name"]
         assert o["queues"] is None or o["queues"] in jobs.KINDS, (o["name"], o["queues"])
         for p in o["params"]:
             assert p["type"] != "any", (o["name"], p["name"])
             assert p["doc"], (o["name"], p["name"], "undocumented parameter")
-# every op of every tool belongs to a reload group
-assert all(any(n.startswith(p) for p in studio.OP_MODULES) for n in ops.OPS), [n for n in ops.OPS if "." not in n]
+# every op is named "<tool>.<action>"
+assert all("." in n for n in ops.OPS), [n for n in ops.OPS if "." not in n]
 
 
 # ----------------------------------------------------------------------------- every page route has an alias
@@ -79,7 +79,11 @@ def refused(fn, status, has=""):
     raise AssertionError("not refused")
 
 
-# Data and specs are temp folders through HD_DATA / HD_SPECS (not module attributes: the Studio below reloads modules)
+# studio.*: this process isn't supervised, so a restart is refused (tests/test_supervisor.py covers the real one)
+assert ops.call("studio.info")["pid"] == os.getpid() and ops.call("studio.info")["restart_pending"] is None
+refused(lambda: ops.call("studio.restart", {}), 409)
+
+# Data and specs are temp folders through HD_DATA / HD_SPECS
 from hdart import dungeon as d, limner as L
 assert str(d.SETS).startswith(str(fixture_specs.SPECS)) and str(d.DUN).startswith(str(data))
 assert str(L.SPEC).startswith(str(fixture_specs.SPECS))

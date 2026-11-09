@@ -79,17 +79,18 @@ with FakeComfy() as fake:
     assert g2["status"] == "cancelled" and g2["error"] is None and nxt["status"] == "done"
     fake.delay = 0
 
-# every kind the pages queue is registered by its tool module, with its reload list
-import importlib
-for name in studio.JOB_MODULES:
-    importlib.import_module(f"hdart.{name}")
+# every kind the pages queue is registered by its tool module
+studio.load_modules()
 want = {"dun", "dun_trial", "dun_edit", "dun_rescale", "dun_finalize", "dun_build", "dun_capture", "lib_import",
         "puppet", "paint", "paint_preview", "paint_fix", "face_gen", "item", "tpl", "tpl_measure", "race"}
 assert want <= set(jobs.KINDS), want - set(jobs.KINDS)
-assert jobs.KINDS["item"].reload[-1] == "item_workshop" and not jobs.KINDS["dun_capture"].gpu and jobs.KINDS["dun"].gpu
-# a reload re-registers the fresh function
-import hdart.dungeon as dg
-old = jobs.KINDS["dun"].fn
-importlib.reload(dg)
-assert jobs.KINDS["dun"].fn is not old and jobs.KINDS["dun"].fn is dg._job_generate
+assert not jobs.KINDS["dun_capture"].gpu and jobs.KINDS["dun"].gpu
+
+# pause: no new job starts (a restart waits for the running one); queued jobs stay queued, then run after
+q5 = jobs.Jobs(None, autostart=False)
+p1 = q5.add("fake_ok", {}, "p1")
+q5.pause()
+assert q5._next() is None and q5.running() is None and p1["status"] == "queued"
+q5.pause(False)
+assert q5._next() is p1 and q5.running() is p1
 print("ok")

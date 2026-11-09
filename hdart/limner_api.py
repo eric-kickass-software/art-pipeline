@@ -30,7 +30,7 @@ ops.param_docs("limner.", {
 
 
 def _lm():
-    """hdart.limner as the Studio reloaded it (imported per call so a reload is picked up)."""
+    """hdart.limner (imported on first use, so reading the op docs, as `hdart mcp` does, doesn't load the image stack)."""
     from . import limner
     return limner
 

@@ -59,9 +59,14 @@ Workshop); `items.json` + `item_zones/<item>[.<sex>].<view>[.sketch].png` (Item 
 ## Test and land
 - `uv run python tests/run_all.py` (all pass, ~10 min, no GPU); `uv run python -c "import hdart.studio"`.
 - Route or page changes: smoke-test a throwaway Studio (`uv run hdart studio --no-browser --port <other>` with a temp
-  `HD_DATA`).
-- Prototyping phase: land on `main` (no PRs), fast-forward the root checkout `P:\Tools\art-pipeline`. The live Studio
-  picks up most module edits by itself; `studio.py`, `jobs.py`, `ops.py`, `locks.py` need a restart (only when
-  `/api/ws/jobs` shows nothing running or queued).
+  `HD_DATA`; in a worktree it watches that worktree's `hdart/`).
+- Prototyping phase: land on `main` (no PRs), fast-forward the root checkout `P:\Tools\art-pipeline`.
+- **Restarting the live Studio after landing:** it runs under the supervisor (`hdart/supervisor.py`), which sees the
+  fast-forward and restarts the server by itself once the running job has finished (debounced; queued jobs carry on
+  after). To restart by hand: `uv run --no-sync hdart op call studio.restart reason="<why>"` (or `POST
+  /api/op/studio.restart`); `studio.info` shows the pid and any pending restart. A change that doesn't import is
+  refused and the old server keeps running: read `work/studio.log`. Never kill the Studio's window or processes.
+  Nothing is reloaded in place, so any module may change. A Studio started with `--no-supervisor` (tests) refuses
+  `studio.restart`.
 - Style: typed signatures and docstrings on public functions and ops; comments say what and why, history goes in
   commits.

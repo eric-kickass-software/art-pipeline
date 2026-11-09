@@ -2,6 +2,9 @@
 
     uv run hdart studio            -> http://127.0.0.1:4321 (opens the Character Workshop)
 
+`hdart studio` runs this server under the supervisor (hdart/supervisor.py), which restarts it when the code changes
+(after the running job) and on `studio.restart`; nothing is reloaded in place. `--no-supervisor` runs it alone.
+
 Pages (studio/*.html): /workshop (Character Workshop), /items (Item Workshop), /editor (Workshop Editor; all three are
 workshop.html), /dungeon (Dungeon Forge), /limner (Limner).
 
@@ -29,22 +32,9 @@ PAGE_FILES = {"/workshop": "workshop.html", "/items": "workshop.html", "/editor"
 JOB_MODULES = ("dungeon", "library", "races", "puppet", "puppet_template", "puppet_paint", "puppet_face", "item_workshop",
                "limner")
 # Every module that declares ops (hdart.ops.op); imported at start too.
-OP_MODULE_NAMES = ("items_api", "character_api", "dungeon_api", "limner_api", "jobs_api")
-# The character tools' shared modules, reloaded (in order: dependencies first) before their jobs and ops.
-CHARACTER_CORE = ("imageops", "rig", "levels", "palette", "workshop", "races")
-BASE_RELOAD = ("comfy",) + CHARACTER_CORE + ("dungeon",)   # reloaded before every job (plus each kind's own list)
-
-# Ops per tool: the modules to reload (in order) before a call when their files changed, so code edits apply without
-# a restart. "config" is reloaded on every call of that tool (cheap; picks up config.toml edits).
-OP_MODULES = {
-    "items.": ("config",) + CHARACTER_CORE + ("puppet", "puppet_template", "puppet_paint", "puppet_face", "contract",
-                                             "item_workshop", "art_pack", "unity_export", "item_export", "items_api"),
-    "character.": ("comfy",) + CHARACTER_CORE + ("puppet", "puppet_template", "puppet_paint", "puppet_face",
-                                                 "character_api"),
-    "dungeon.": ("patterns", "library", "dungeon", "dungeon_api"),
-    "limner.": ("limner", "limner_api"),
-    "jobs.": ("jobs_api",),
-}
+OP_MODULE_NAMES = ("items_api", "character_api", "dungeon_api", "limner_api", "jobs_api", "studio_api")
+# Extra modules to load (comma-separated full names, e.g. a test's fake job kinds): env HD_STUDIO_MODULES.
+EXTRA_ENV = "HD_STUDIO_MODULES"
 
 # The pages' older routes: URL prefix -> [(op prefix, api module, POST table, GET table)]. The rest of the path is
 # the alias; the first module whose table has it serves the request (ops.call_alias).
@@ -59,39 +49,20 @@ ALIASES = {
 JOBS = None
 
 
+def load_modules() -> None:
+    """Import every job and op module (complete registries), plus the HD_STUDIO_MODULES extras. The supervisor's
+    import check runs this in a fresh process before a restart."""
+    extra = [m.strip() for m in os.environ.get(EXTRA_ENV, "").split(",") if m.strip()]
+    for name in [f"hdart.{n}" for n in JOB_MODULES + OP_MODULE_NAMES] + extra:
+        importlib.import_module(name)
+
+
 def make_jobs():
-    """Import every job and op module (complete registries) and start the job queue."""
+    """Load every job and op module and start the job queue."""
     from . import config, jobs
-    for name in JOB_MODULES + OP_MODULE_NAMES:
-        importlib.import_module(f"hdart.{name}")
-    jobs.QUEUE = jobs.Jobs(config.data_dir() / "sprites" / "studio_jobs.json", base_reload=BASE_RELOAD)
+    load_modules()
+    jobs.QUEUE = jobs.Jobs(config.data_dir() / "sprites" / "studio_jobs.json")
     return jobs.QUEUE
-
-
-# ----------------------------------------------------------------------------- reloads
-
-_SRC = {}   # module name -> source mtime when fresh() last saw it
-
-
-def fresh(*mods):
-    """Reload `mods` (in order) when any of their source files changed since the last check, so code edits apply without
-    a Studio restart while the modules' in-memory caches (painted puppet, item layers) survive the requests in between."""
-    changed = False
-    for m in mods:
-        t = os.stat(m.__file__).st_mtime_ns
-        if _SRC.get(m.__name__) != t:
-            changed = True; _SRC[m.__name__] = t
-    if changed:
-        for m in mods:
-            importlib.reload(m)
-
-
-def fresh_ops(name: str):
-    """Reload the modules behind op `name` (or a "<tool>." prefix) when their files changed."""
-    mods = next((m for prefix, m in OP_MODULES.items() if name.startswith(prefix)), ())
-    if "config" in mods:
-        importlib.reload(importlib.import_module("hdart.config"))
-    fresh(*(importlib.import_module(f"hdart.{m}") for m in mods if m != "config"))
 
 
 # ----------------------------------------------------------------------------- dispatch
@@ -101,14 +72,12 @@ def op_call(name: str, args: dict):
     from . import ops
     if not isinstance(args, dict):
         raise ops.OpError("the body must be a JSON object of arguments")
-    fresh_ops(name)
     return ops.call(name, args)
 
 
 def op_query(name: str, query: dict):
     """GET /api/op/<name>?...: run a read-only op from URL query arguments."""
     from . import ops
-    fresh_ops(name)
     return ops.call_query(name, query)
 
 
@@ -123,7 +92,6 @@ def alias_call(path: str, args: dict, get: bool = False):
         table_name = get_table if get else post_table
         if not table_name:
             continue
-        fresh_ops(op_prefix)
         table = getattr(importlib.import_module(f"hdart.{module}"), table_name)
         if action in table:
             return ops.call_alias(table, action, args, query=get)
@@ -132,7 +100,8 @@ def alias_call(path: str, args: dict, get: bool = False):
 
 # ----------------------------------------------------------------------------- server
 
-def serve(port=4321, open_browser=True):
+def serve(port: int = 4321, open_browser: bool = True) -> None:
+    """Run the server (blocks). Under the supervisor, `studio.restart` ends the process (hdart/supervisor.py)."""
     global JOBS
     JOBS = make_jobs()
     from . import ops

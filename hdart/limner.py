@@ -388,13 +388,13 @@ def vary(cat, eid, cid, n=3, denoise=0.45):
     return made
 
 
-@jobs.kind("limner_gen", reload=("limner",))
+@jobs.kind("limner_gen")
 def _job_gen(a):
     return generate(a["cat"], a["id"], a.get("n", 3), a.get("seed"), a.get("style"), a.get("extra"), a.get("batch"),
                     a.get("timeout"))
 
 
-@jobs.kind("limner_vary", reload=("limner",))
+@jobs.kind("limner_vary")
 def _job_vary(a):
     return vary(a["cat"], a["id"], a["cid"], a.get("n", 3), a.get("denoise", 0.45))
 

@@ -41,12 +41,9 @@ LEVELS = 5
 D_COMPLETE = 0.55   # the hidden-area pass starts from the smear fill (already in key colours); higher repaints them as skin
 
 
-spec_override = None   # held/preview: the spec with an item's unsaved grip settings, for one render
-
-
-def spec():
-    if spec_override is not None:
-        return spec_override
+def spec() -> dict:
+    """The Item Workshop's spec (specs/items.json), read fresh. Code that draws with unsaved settings takes the
+    changed doc as a `doc` argument instead."""
     return json.loads(SPEC.read_text(encoding="utf-8"))
 
 
@@ -986,12 +983,12 @@ def _skin(build, pcid, view, parts, colours):
     return out
 
 
-def dressed(build, worn, view, hair=None, painted=False, pcid=None, skin=None, face=None):
+def dressed(build, worn, view, hair=None, painted=False, pcid=None, skin=None, face=None, doc=None):
     """The build's parts with items stacked on (`worn` = [(item_id, cid, ramps)], by depth; ramps None = as painted), plus
     an optional hair layer (RGBA, rest pose) on the head that items with clips: [hair] cut away where they cover it.
     pcid = another paint than the build's approved one; skin = ramp colours for its skin bands; face = a face layer (RGBA)
-    drawn on the head with its painted face removed."""
-    race = build.split(".")[0]; doc = spec()
+    drawn on the head with its painted face removed. doc = the items spec to draw with (default: the saved one)."""
+    race = build.split(".")[0]; doc = doc or spec()
     _, sp, parts = pf.base(build, pcid); parts = dict(parts[view])   # read-only arrays: layers below replace entries, never draw in place
     if skin is not None:
         parts = _skin(build, pcid or pf.base_cid(build), view, parts, skin)
@@ -1030,11 +1027,12 @@ def dressed(build, worn, view, hair=None, painted=False, pcid=None, skin=None, f
     return sp, parts
 
 
-def render(build, worn, hair_fn=None, frames=8, painted=False):
-    """{view: (rest RGB, [walk frames RGB]) at rig size (576)} of a build wearing `worn`; hair_fn(view) -> hair RGBA or None."""
+def render(build, worn, hair_fn=None, frames=8, painted=False, doc=None):
+    """{view: (rest RGB, [walk frames RGB]) at rig size (576)} of a build wearing `worn`; hair_fn(view) -> hair RGBA or None.
+    doc = the items spec to draw with (default: the saved one)."""
     out = {}
     for v in VIEWS:
-        sp, parts = dressed(build, worn, v, hair_fn(v) if hair_fn else None, painted)
+        sp, parts = dressed(build, worn, v, hair_fn(v) if hair_fn else None, painted, doc=doc)
         order = sp["views"][v]["order"]
         tup = rig.pivots(sp, v, parts)
         rest = pp.on_bg(np.asarray(rig.compose(tup, order).resize((pp.PX, pp.PX), Image.LANCZOS)))
@@ -1836,13 +1834,8 @@ def save_grip_spec(prompt=None, prompt_back=None, wrist=None):
 
 def held_preview(item_id, cid, build, unsaved=None, ramps=None):
     """A held item in the hand with unsaved settings: rest + two walk frames per view, as data URLs."""
-    global spec_override
     doc = spec(); doc["items"][item_id].update(unsaved or {})
-    spec_override = doc   # render() reads spec(); see spec_override (not thread-safe: one preview at a time)
-    try:
-        r = render(build, [(item_id, cid, ramps or {})], frames=8)
-    finally:
-        spec_override = None
+    r = render(build, [(item_id, cid, ramps or {})], frames=8, doc=doc)
     return {f"{v}_{k}": _url(im) for v in VIEWS for k, im in (("rest", r[v][0]), ("walk", r[v][1][2]), ("walk2", r[v][1][6]))}
 
 
@@ -1851,9 +1844,9 @@ def ramp_colours():
     return {g: {n: [list(c) for c in pf.group_ramp(g, n)] for n in ramps} for g, ramps in palette.palettes_doc()["groups"].items()}
 
 
-@jobs.kind("item", reload=("puppet", "puppet_template", "puppet_paint", "puppet_face", "item_workshop"))
+@jobs.kind("item")
 def job(a):
-    """The Item Workshop's queue jobs (job kind "item", `action` in the args); reloaded per job."""
+    """The Item Workshop's queue jobs (job kind "item", `action` in the args)."""
     race = a.get("race", "human")
     if a["action"] == "generate":
         n, seed = int(a.get("n", 1)), int(a.get("seed", 1))

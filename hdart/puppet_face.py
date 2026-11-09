@@ -736,11 +736,11 @@ def revert_layer(race, kind, fid):
 
 # ----------------------------------------------------------------------------- Studio job kinds (hdart.jobs)
 
-@jobs.kind("paint", reload=("puppet", "puppet_template", "puppet_paint", "puppet_face"))   # puppet Paint step
+@jobs.kind("paint")   # puppet Paint step
 def _job_paint(a):
     return paint(a["build"], int(a.get("n", 1)), int(a.get("seed", 1)))
 
 
-@jobs.kind("face_gen", reload=("puppet", "puppet_template", "puppet_paint", "puppet_face"))
+@jobs.kind("face_gen")
 def _job_generate(a):   # Face tab: racial hair / faces; `what` = hair / face
     return generate(a["race"], a["what"], a.get("sex", "male"), int(a.get("n", 1)), int(a.get("seed", 1)))

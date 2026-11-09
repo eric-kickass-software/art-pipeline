@@ -27,3 +27,6 @@ Script-style tests: each `test_*.py` is a plain script that asserts and prints `
   `HD_DATA` / `HD_SPECS`, no GPU). `test_mcp.py` runs `hdart op` and the MCP server (`hdart mcp` over stdio, as
   Claude Code starts it) against a throwaway Studio with hand-made candidates; a failed generate stands in for jobs.
 - `test_modules.py` reads `hdart/` (AST): no private cross-module access, no import cycles.
+- `test_supervisor.py` runs `hdart studio` (the supervisor) on a free port with a fake job module from a temp folder
+  (`HD_STUDIO_MODULES`, `--watch`): a change restarts the server, a restart waits for the running job, a syntax error
+  is refused until fixed, `studio.restart` works, a dead server is started again (~30 s).

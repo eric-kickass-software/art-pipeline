@@ -33,7 +33,7 @@ ops.param_docs("items.", {
 
 
 def _iw():
-    """item_workshop as the Studio reloaded it (imported per call so a reload is picked up)."""
+    """item_workshop (imported on first use, so reading the op docs, as `hdart mcp` does, doesn't load the image stack)."""
     from . import item_workshop
     return item_workshop
 

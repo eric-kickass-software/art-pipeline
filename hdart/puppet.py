@@ -955,6 +955,6 @@ def approve(build, on=True):
 
 # ----------------------------------------------------------------------------- Studio job kinds (hdart.jobs)
 
-@jobs.kind("puppet", gpu=False, reload=("puppet",))
+@jobs.kind("puppet", gpu=False)
 def _job_template(a):
     return template(a["build"])
