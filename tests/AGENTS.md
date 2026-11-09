@@ -18,7 +18,7 @@ Script-style tests: each `test_*.py` is a plain script that asserts and prints `
   fixture or on what the code composes from the spec it read. Refresh a fixture file from `specs/` only on purpose.
   The exception is `test_harmonize`, which reads the real crypt set and its approved art (read-only).
 - **Temp data.** Point data paths at a temp folder before working: `HD_DATA` / `HD_PROJECT` env, or the module
-  attributes bound at import (`ak.AI_DIR`, `ws.STATE`, `ws.CAND`, `ws.ARCHIVE`, `pi.SPEC`, `d.SETS`, `d.DUN`,
+  attributes bound at import (`ws.AI_DIR`, `ws.STATE`, `ws.CAND`, `ws.ARCHIVE`, `iw.SPEC`, `d.SETS`, `d.DUN`,
   `L.SPEC`, ...). Never junction or copy Eric's data into the repo.
 - Exports go into a temp game project (`HD_PROJECT`), never the real Hearthdelve checkout.
 - New ops and new rules get a test here. `test_ops.py` covers the registry and the Item Workshop's ops;
@@ -26,3 +26,5 @@ Script-style tests: each `test_*.py` is a plain script that asserts and prints `
   pages call mapped to an op, direct calls on temp data, and a throwaway Studio over HTTP (on a free port, temp
   `HD_DATA` / `HD_SPECS`, no GPU). `test_mcp.py` runs `hdart op` and the MCP server (`hdart mcp` over stdio, as
   Claude Code starts it) against a throwaway Studio with hand-made candidates; a failed generate stands in for jobs.
+- `test_modules.py` reads `hdart/` (AST): no private cross-module access, no import cycles, nothing imports the
+  transition shims.

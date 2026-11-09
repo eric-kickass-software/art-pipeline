@@ -7,17 +7,17 @@ import json, os, shutil, tempfile
 from pathlib import Path
 import numpy as np
 from PIL import Image
-import hdart.ai_kit as ak
 import hdart.workshop as ws
 import hdart.puppet_paint as ppt
-import hdart.puppet_items as pi
+import hdart.puppet_face as pf
+import hdart.item_workshop as iw
 import hdart.item_export as ie
 from hdart import contract
 from hdart.fake_comfy import FakeComfy, info
 
 tmp = Path(tempfile.mkdtemp())
-ak.AI_DIR = tmp / "ai"; ws.CAND = ak.AI_DIR / "candidates"; ws.STATE = ak.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "archive"
-shutil.copy(pi.SPEC, tmp / "items.json"); pi.SPEC = tmp / "items.json"
+ws.AI_DIR = tmp / "ai"; ws.CAND = ws.AI_DIR / "candidates"; ws.STATE = ws.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "archive"
+shutil.copy(iw.SPEC, tmp / "items.json"); iw.SPEC = tmp / "items.json"
 game = tmp / "game"; os.environ["HD_PROJECT"] = str(game)
 
 # the game: a contract (vocabulary, id rule, revision) and one existing item (the sword); the trousers are new
@@ -46,26 +46,26 @@ assert set(contract.game_items()) == {"item.iron_sword"}
 # the Workshop takes the game's art slots and id rule; focus is a held mode
 for bad in ({"slot": "torso"}, {"held_as": "lantern"}, {"item": "item.Iron"}):
     try:
-        pi.save_item("item.iron_sword", bad); raise AssertionError(bad)
+        iw.save_item("item.iron_sword", bad); raise AssertionError(bad)
     except ValueError:
         pass
 try:
-    pi.save_item("item.New-Thing", {"slot": "shirt", "materials": ["cloth"]}); raise AssertionError("bad id accepted")
+    iw.save_item("item.New-Thing", {"slot": "shirt", "materials": ["cloth"]}); raise AssertionError("bad id accepted")
 except ValueError:
     pass
-pi.save_item("item.bone_focus", {"slot": "offhand", "kind": "held", "held_as": "focus", "materials": ["cloth"], "text": "a skull"})
-assert "small object held in one hand" in pi.prompts("human", "human.male", "item.bone_focus")["held"]
+iw.save_item("item.bone_focus", {"slot": "offhand", "kind": "held", "held_as": "focus", "materials": ["cloth"], "text": "a skull"})
+assert "small object held in one hand" in iw.prompts("human", "human.male", "item.bone_focus")["held"]
 
 # game items from pieces: breastplate + pauldrons make item.iron_breastplate; existing vs new
-gids = ie.game_ids()
+gids = iw.game_ids()
 assert gids["item.iron_breastplate"] == ["item.pauldrons", "item.breastplate"] and gids["item.iron_sword"] == ["item.iron_sword"]
-sw, tr = ie.info("item.iron_sword"), ie.info("item.cloth_trousers")
+sw, tr = iw.game_info("item.iron_sword"), iw.game_info("item.cloth_trousers")
 assert sw["exists"] and sw["slot"] == "main" and sw["weaponType"] == "sword" and sw["hands"] == 1 and sw["materials"] == {"leather": "leather.dark", "metal": "metal.steel"}
 assert not tr["exists"] and tr["slot"] == "legs" and tr["kind"] == "armor" and tr["name"] == "Cloth Trousers" and not tr["problems"]
-assert not ie.info("item.kite_shield")["problems"] and ie.info("item.kite_shield")["heldAs"] == "shield"
+assert not iw.game_info("item.kite_shield")["problems"] and iw.game_info("item.kite_shield")["heldAs"] == "shield"
 
 # art: a fake-painted puppet, the trousers (fitted) and the sword (held), approved
-KEY = {m: np.array([int(e["key"][i:i + 2], 16) for i in (1, 3, 5)], float) for m, e in pi.spec()["materials"].items()}
+KEY = {m: np.array([int(e["key"][i:i + 2], 16) for i in (1, 3, 5)], float) for m, e in iw.spec()["materials"].items()}
 paint_key = {"m": None}
 
 
@@ -87,10 +87,10 @@ def respond(nodes, uploads):
 
 
 with FakeComfy(respond):
-    c = ppt.paint("human.male", n=1, seed=1)[0]; ppt.approve("human.male", c)
-    paint_key["m"] = "cloth"; t = pi.generate("human", "item.cloth_trousers", seed=2)
-    paint_key["m"] = None; s = pi.generate("human", "item.iron_sword", seed=3)
-pi.approve("human", "item.cloth_trousers", t); pi.approve("human", "item.iron_sword", s)
+    c = pf.paint("human.male", n=1, seed=1)[0]; ppt.approve("human.male", c)
+    paint_key["m"] = "cloth"; t = iw.generate("human", "item.cloth_trousers", seed=2)
+    paint_key["m"] = None; s = iw.generate("human", "item.iron_sword", seed=3)
+iw.approve("human", "item.cloth_trousers", t); iw.approve("human", "item.iron_sword", s)
 
 r = ie.export(size=256)
 assert set(r["exported"]) == {"item.cloth_trousers", "item.iron_sword"}, r

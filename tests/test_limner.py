@@ -96,7 +96,7 @@ L.approve("statuses", "status.burn", cids[0])
 L.archive("statuses", "status.burn", cids[0])
 assert not (L.entry_dir("statuses", "status.burn") / cids[0]).exists()
 assert (data / "archive" / "limner" / "statuses" / "status.burn" / cids[0] / "master.png").exists()
-assert "status.burn" not in L._state().load()["approved"].get("statuses", {})
+assert "status.burn" not in L.state_store().load()["approved"].get("statuses", {})
 
 # looks: add and remove (each makes two portrait entries)
 ak = next(iter(sp["archetypes"]))
@@ -181,7 +181,7 @@ assert L.move_entries("items", "gear", dry_run=True) == {"would_move": ["item.ir
 r = L.move_entries("items", "gear")
 assert r["moved"] == ["item.iron_helm"] and not helm.exists() and (L.root() / "gear" / "item.iron_helm" / hc[0] / "icon.png").exists()
 assert (data / "archive" / "limner" / "gear" / "item.iron_helm" / "old").exists()
-assert L._state().load()["approved"]["gear"]["item.iron_helm"] == hc[0] and "item.iron_helm" not in L._state().load()["approved"].get("items", {})
+assert L.state_store().load()["approved"]["gear"]["item.iron_helm"] == hc[0] and "item.iron_helm" not in L.state_store().load()["approved"].get("items", {})
 assert L.subject("gear", "item.iron_helm") == "a dented helm" and "items/item.iron_helm" not in L.spec()["entries"]
 assert L.store.read_meta(L.root() / "gear" / "item.iron_helm" / hc[0])["category"] == "gear"
 assert L.move_entries("items", "gear")["moved"] == []   # idempotent; bandage isn't equippable

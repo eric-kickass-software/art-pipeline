@@ -81,11 +81,10 @@ lst = []; store.member(lst, "a"); store.member(lst, "b"); store.member(lst, "a")
 assert lst == ["b"]
 
 # the tools on the store: Paint approve/archive, Item approve/archive (to archive/workshop/items/...)
-import hdart.ai_kit as ak
 import hdart.workshop as ws
 import hdart.puppet_paint as ppt
-import hdart.puppet_items as pi
-ak.AI_DIR = tmp / "ai"; ws.STATE = ak.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "warchive"
+import hdart.item_workshop as iw
+ws.AI_DIR = tmp / "ai"; ws.STATE = ws.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "warchive"
 c1, d1 = store.new(ppt.out_dir("human.male"), 1); store.write_meta(d1, "paint", seed=1, build="human.male")
 c2, d2 = store.new(ppt.out_dir("human.male"), 2); store.write_meta(d2, "paint", seed=2, build="human.male")
 assert ppt.approve("human.male", c1)["approved"] == c1
@@ -98,10 +97,10 @@ ppt.archive("human.male", c2)
 assert (ws.ARCHIVE / "workshop" / "paint" / "human.male" / c2 / "meta.json").exists() and not d2.exists()
 assert ppt.approve("human.male", c1, on=False)["approved"] is None
 
-i1, e1 = store.new(pi.out_dir("human", "item.hat"), 5); store.write_meta(e1, "item", seed=5, on="human.male")
-assert pi.approve("human", "item.hat", i1) == {"item.hat": {"all": i1}}
-assert [c["id"] for c in pi.candidates("human", "item.hat")] == [i1]
-pi.archive("human", "item.hat", i1)
-assert pi.load_state("human")["approved"]["item.hat"] == {} and pi.candidates("human", "item.hat") == []
+i1, e1 = store.new(iw.out_dir("human", "item.hat"), 5); store.write_meta(e1, "item", seed=5, on="human.male")
+assert iw.approve("human", "item.hat", i1) == {"item.hat": {"all": i1}}
+assert [c["id"] for c in iw.candidates("human", "item.hat")] == [i1]
+iw.archive("human", "item.hat", i1)
+assert iw.load_state("human")["approved"]["item.hat"] == {} and iw.candidates("human", "item.hat") == []
 assert (ws.ARCHIVE / "workshop" / "items" / "human" / "item.hat" / i1 / "meta.json").exists()
 print("store ok")

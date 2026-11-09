@@ -26,18 +26,21 @@ PAGE_FILES = {"/workshop": "workshop.html", "/items": "workshop.html", "/editor"
               "/dungeon": "dungeon.html", "/limner": "limner.html"}
 
 # Every module that registers Studio job kinds (hdart.jobs.kind); imported at start so the registry is complete.
-JOB_MODULES = ("dungeon", "library", "workshop", "puppet", "puppet_template", "puppet_paint", "puppet_face", "puppet_items", "limner")
+JOB_MODULES = ("dungeon", "library", "races", "puppet", "puppet_template", "puppet_paint", "puppet_face", "item_workshop",
+               "limner")
 # Every module that declares ops (hdart.ops.op); imported at start too.
 OP_MODULE_NAMES = ("items_api", "character_api", "dungeon_api", "limner_api", "jobs_api")
-BASE_RELOAD = ("comfy", "ai_kit", "workshop", "dungeon")   # reloaded before every job (plus each kind's own list)
+# The character tools' shared modules, reloaded (in order: dependencies first) before their jobs and ops.
+CHARACTER_CORE = ("imageops", "rig", "levels", "palette", "workshop", "races")
+BASE_RELOAD = ("comfy",) + CHARACTER_CORE + ("dungeon",)   # reloaded before every job (plus each kind's own list)
 
 # Ops per tool: the modules to reload (in order) before a call when their files changed, so code edits apply without
 # a restart. "config" is reloaded on every call of that tool (cheap; picks up config.toml edits).
 OP_MODULES = {
-    "items.": ("config", "puppet", "puppet_template", "puppet_paint", "puppet_face", "puppet_items", "contract",
-               "unity_export", "item_export", "items_api"),
-    "character.": ("comfy", "ai_kit", "workshop", "puppet", "puppet_template", "puppet_paint", "puppet_face",
-                   "character_api"),
+    "items.": ("config",) + CHARACTER_CORE + ("puppet", "puppet_template", "puppet_paint", "puppet_face", "contract",
+                                             "item_workshop", "art_pack", "unity_export", "item_export", "items_api"),
+    "character.": ("comfy",) + CHARACTER_CORE + ("puppet", "puppet_template", "puppet_paint", "puppet_face",
+                                                 "character_api"),
     "dungeon.": ("patterns", "library", "dungeon", "dungeon_api"),
     "limner.": ("limner", "limner_api"),
     "jobs.": ("jobs_api",),

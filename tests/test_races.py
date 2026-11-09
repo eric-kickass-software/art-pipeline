@@ -3,12 +3,12 @@ import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; b
 import shutil, tempfile
 from pathlib import Path
 from PIL import Image
-import hdart.ai_kit as ak
 import hdart.workshop as ws
+import hdart.races as races
 
 tmp = Path(tempfile.mkdtemp())
-ak.AI_DIR = tmp / "ai"; ws.CAND = ak.AI_DIR / "candidates"; ws.STATE = ak.AI_DIR / "workshop.json"
-shutil.copy(ws.RACES, tmp / "races.json"); ws.RACES = tmp / "races.json"
+ws.AI_DIR = tmp / "ai"; ws.CAND = ws.AI_DIR / "candidates"; ws.STATE = ws.AI_DIR / "workshop.json"
+shutil.copy(races.RACES, tmp / "races.json"); races.RACES = tmp / "races.json"
 calls = []
 class FakeComfy:
     @staticmethod
@@ -23,7 +23,7 @@ class FakeComfy:
         Image.new("RGB", (1024, 1024), "white").save(p); return [p]
     @staticmethod
     def image(nodes): return Image.new("RGB", (1024, 1024), "white")
-ws.comfy = FakeComfy
+races.comfy = FakeComfy
 
 def err(f, *a):
     try: f(*a)
@@ -31,37 +31,37 @@ def err(f, *a):
     raise SystemExit("no error")
 
 # order is enforced
-assert "painted from the Template" in err(ws.gen_race, "human", "male", "front", 1)   # only the unisex has a mannequin
-assert "approve the human unisex front first" in err(ws.gen_race, "elf", "unisex", "front", 1)
-assert "front first" in err(ws.gen_race, "human", "unisex", "back", 1)
+assert "painted from the Template" in err(races.gen_race, "human", "male", "front", 1)   # only the unisex has a mannequin
+assert "approve the human unisex front first" in err(races.gen_race, "elf", "unisex", "front", 1)
+assert "front first" in err(races.gen_race, "human", "unisex", "back", 1)
 
 # unisex = txt2img with the A-pose and the race traits; result 512 px
-c = ws.gen_race("human", "unisex", "front", 2, seed=1)
+c = races.gen_race("human", "unisex", "front", 2, seed=1)
 assert len(c) == 2 and calls[-1][0] == "txt2img" and "A-pose" in calls[-1][1] and "rounded human ears" in calls[-1][1]
 assert "unclothed" in calls[-1][1] and "Adventurer" not in calls[-1][1] and "shorts" not in calls[-1][1]   # smooth base, no gear
-assert Image.open(ak.AI_DIR / c[0]).size == (ak.BIG, ak.BIG)
-ws.approve_race("human.unisex", "front", c[0])
+assert Image.open(ws.AI_DIR / c[0]).size == (races.BIG, races.BIG)
+races.approve_race("human.unisex", "front", c[0])
 
 # back = edit of the approved front; male and female have no mannequin any more (painted from the Template)
-bk = ws.gen_race("human", "unisex", "back", 1)
+bk = races.gen_race("human", "unisex", "back", 1)
 assert calls[-1][0] == "edit" and calls[-1][1] == Path(c[0]).name and "from behind" in calls[-1][2]
-ws.approve_race("human.unisex", "back", bk[0])
-assert "Only the unisex" in err(ws.approve_race, "human.male", "front", bk[0])
+races.approve_race("human.unisex", "back", bk[0])
+assert "Only the unisex" in err(races.approve_race, "human.male", "front", bk[0])
 
 # elf unisex = edit of the human unisex
-e = ws.gen_race("elf", "unisex", "front", 1)
+e = races.gen_race("elf", "unisex", "front", 1)
 assert calls[-1][0] == "edit" and calls[-1][1] == Path(c[0]).name and "pointed elf ears" in calls[-1][2]
 
 # a new unisex front drops its back; the back made from the old front is stale
-ws.approve_race("human.unisex", "front", c[1])
-st = ws.race_state("human")
+races.approve_race("human.unisex", "front", c[1])
+st = races.race_state("human")
 assert set(st["builds"]) == {"unisex"} and ws.load_state()["builds"]["human.unisex"]["back"].get("approved") is None
 assert st["builds"]["unisex"]["back"]["stale"][bk[0]] is True and st["builds"]["unisex"]["front"]["stale"][c[0]] is False
 
 # spec validation
-doc = ws.races_doc(); doc["races"]["Bad Id"] = {"name": "x", "traits": "x"}
-assert "lowercase" in err(ws.save_races, doc)
-doc = ws.races_doc(); doc["races"]["orc"] = {"name": "Orc", "traits": "orc", "from": "goblin", "from_edit": "x"}
-assert "doesn't exist" in err(ws.save_races, doc)
+doc = races.races_doc(); doc["races"]["Bad Id"] = {"name": "x", "traits": "x"}
+assert "lowercase" in err(races.save_races, doc)
+doc = races.races_doc(); doc["races"]["orc"] = {"name": "Orc", "traits": "orc", "from": "goblin", "from_edit": "x"}
+assert "doesn't exist" in err(races.save_races, doc)
 shutil.rmtree(tmp)
 print("ok")

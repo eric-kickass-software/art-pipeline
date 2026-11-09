@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 LIB = ROOT / "library"
 MATS = LIB / "materials"
 CACHE = LIB / "cache"
-TILE_METERS = 1.5  # one board tile: a hero is ~1.5 units (~1.8 m), 1 unit = iso._KZ tiles -> 1 tile ~ 1.47 m
+TILE_METERS = 1.5  # one board tile: a hero is ~1.5 units (~1.8 m), 1 unit = iso.KZ tiles -> 1 tile ~ 1.47 m
 HOSTS = ("ambientcg.com", "acg-media.struffelproductions.com", "api.polyhaven.com", "dl.polyhaven.org", "cdn.polyhaven.com")
 UA = {"User-Agent": "hearthdelve-art-pipeline (local tool)"}
 

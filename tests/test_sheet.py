@@ -34,13 +34,13 @@ wid = d.matching_wall_family("zs", fid)
 spec = d.load_set("zs"); w = d.piece_of(spec, wid)
 wt = d.family_template(w)
 assert w["method"] == "wall_master" and wt["link"] and wt["pattern"] == "running_bond" and wt["palette"] == sh["palette"]
-assert wt["params"]["across"] == 3 and abs(wt["params"]["course"] - 0.15 * d.iso._KZ) < 1e-3, wt
+assert wt["params"]["across"] == 3 and abs(wt["params"]["course"] - 0.15 * d.iso.KZ) < 1e-3, wt
 
 # changing the sheet rewrites every linked template; an unlinked one keeps its own
 d.upsert_piece("zs", d.link_family(spec, d.piece_of(spec, fid), False))
 spec = d.update_sheet("zs", {"wall_course": 0.2, "wall_brick": 0.25, "joint": 0.02, "words": "black basalt, green moss"})
 wt = d.family_template(d.piece_of(spec, wid)); ft = d.family_template(d.piece_of(spec, fid))
-assert wt["params"]["across"] == 4 and abs(wt["params"]["course"] - 0.2 * d.iso._KZ) < 1e-3 and wt["params"]["mortar"] == 0.02
+assert wt["params"]["across"] == 4 and abs(wt["params"]["course"] - 0.2 * d.iso.KZ) < 1e-3 and wt["params"]["mortar"] == 0.02
 assert "link" not in ft and ft["params"]["mortar"] != 0.02
 assert "black basalt" in d.wall_texture_prompt(d.set_style(spec), "x") and "black basalt" in d.floor_texture_prompt(d.set_style(spec), "x")
 try: d.update_sheet("zs", {"nope": 1}); raise SystemExit("no error")

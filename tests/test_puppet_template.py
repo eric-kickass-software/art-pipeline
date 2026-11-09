@@ -4,6 +4,7 @@ both views. Run: uv run python tests/test_puppet_template.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import numpy as np
 import hdart.puppet_template as pt
+import hdart.rig as rig
 
 spec = pt.load()
 assert spec["schemaVersion"] == 2 and set(spec["views"]) == {"front", "back"}
@@ -21,7 +22,7 @@ for v in ("front", "back"):
         assert not (guides[..., 3] > 0)[~(rgba[..., 3] > 0)].any()   # guides stay on the part
     for name, L in V["limbs"].items():   # the child's round end covers its start joint
         if not name.endswith(".upper"):
-            j = pt._joint(V, L["from"]); a = parts[name][0][..., 3] > 127
+            j = rig.joint(V, L["from"]); a = parts[name][0][..., 3] > 127
             assert a[int(j[1]), int(j[0])], (v, name)
     t = parts["torso"][0][..., 3] > 127
     ys = np.nonzero(t.any(1))[0]

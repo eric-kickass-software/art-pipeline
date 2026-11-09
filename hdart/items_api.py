@@ -1,6 +1,6 @@
 """The Item Workshop's public API: every action the Studio's Items tabs, the Workshop Editor and agents can take.
 
-The Item Workshop makes equipment as overlay layers on a race's painted puppet (hdart/puppet_items.py has the how).
+The Item Workshop makes equipment as overlay layers on a race's painted puppet (hdart/item_workshop.py has the how).
 Each Workshop piece (`item.<words>`, specs/items.json) is either fitted (zones on the Template's parts, one FLUX pass
 on the whole puppet, keyed and split per part) or held (painted alone, put on a hand at its grip). A piece's candidates
 live in sprites/ai/items/<race>/<item>/<candidate>/; approving one (per fit key: "all", or the build for per-sex
@@ -32,10 +32,10 @@ ops.param_docs("items.", {
 })
 
 
-def _pi():
-    """puppet_items as the Studio reloaded it (imported per call so a reload is picked up)."""
-    from . import puppet_items
-    return puppet_items
+def _iw():
+    """item_workshop as the Studio reloaded it (imported per call so a reload is picked up)."""
+    from . import item_workshop
+    return item_workshop
 
 
 # ----------------------------------------------------------------------------- reading
@@ -43,32 +43,32 @@ def _pi():
 @ops.op("items.state", read_only=True)
 def state(race: str = RACE) -> dict:
     """Everything the Items tab shows: the spec (pieces, materials, prompts), candidates, approvals, grips, vocabulary."""
-    return _pi().state(race)
+    return _iw().state(race)
 
 
 @ops.op("items.candidates", read_only=True)
 def candidates(item: str, race: str = RACE) -> dict:
     """One piece's candidates (newest first) with their preview images and which fit keys approve them."""
-    pi = _pi()
-    return {"candidates": pi.candidates(race, item), "approved": pi.load_state(race)["approved"].get(item, {})}
+    iw = _iw()
+    return {"candidates": iw.candidates(race, item), "approved": iw.load_state(race)["approved"].get(item, {})}
 
 
 @ops.op("items.prompts", read_only=True)
 def prompts(item: str, build: str, race: str = RACE) -> dict:
     """The composed prompts a piece is generated with on one build (what Generate would send)."""
-    return _pi().prompts(race, build, item)
+    return _iw().prompts(race, build, item)
 
 
 @ops.op("items.zone", read_only=True)
 def zone(item: str, build: str, view: str, race: str = RACE) -> dict:
     """The zone editor's document: the puppet, the piece's painted zone mask and detail sketch for one view."""
-    return _pi().zone_doc(race, item, build, view)
+    return _iw().zone_doc(race, item, build, view)
 
 
 @ops.op("items.grip_prompts", read_only=True)
 def grip_prompts(build: str) -> dict:
     """The grip-hand prompts (front, back) composed for one build."""
-    return _pi().grip_prompts(build)
+    return _iw().grip_prompts(build)
 
 
 @ops.op("items.held_stage", read_only=True)
@@ -81,19 +81,19 @@ def held_stage(item: str, build: str, candidate: str | None = None, unsaved: dic
         unsaved: piece settings not saved yet (hand, held_as, grip...) applied for this view only
         ramps: {material: ramp name} to colour the item with
     """
-    return _pi().held_stage(race, item, build, candidate, unsaved, ramps)
+    return _iw().held_stage(race, item, build, candidate, unsaved, ramps)
 
 
 @ops.op("items.held_preview", read_only=True)
 def held_preview(item: str, candidate: str, build: str, unsaved: dict | None = None, ramps: dict | None = None) -> dict:
     """A held item in the hand with unsaved settings: rest + two walk frames per view, as PNG data URLs."""
-    return _pi().held_preview(item, candidate, build, unsaved, ramps)
+    return _iw().held_preview(item, candidate, build, unsaved, ramps)
 
 
 @ops.op("items.layers", read_only=True)
 def layers(item: str, candidate: str, race: str = RACE) -> dict:
     """A candidate's per-part layers and band maps, for editing in the Workshop Editor."""
-    return _pi().layer_doc(race, item, candidate)
+    return _iw().layer_doc(race, item, candidate)
 
 
 @ops.op("items.editor_walk", read_only=True)
@@ -108,13 +108,13 @@ def editor_walk(build: str, paint: str, view: str = "front", items: list | None 
         face: {"id", "ramp"} of a face layer
         skin: the skin ramp (default: as painted)
     """
-    return _pi().editor_walk(race, build, paint, view, items or [], hair, face, skin)
+    return _iw().editor_walk(race, build, paint, view, items or [], hair, face, skin)
 
 
 @ops.op("items.ramp_colours", read_only=True)
 def ramp_colours() -> dict:
     """Every ramp of every palettes group as colour lists: {group: {ramp: [[r, g, b], ...]}}."""
-    return _pi().ramp_colours()
+    return _iw().ramp_colours()
 
 
 @ops.op("items.outfit", read_only=True)
@@ -131,7 +131,7 @@ def outfit(build: str, items: list | None = None, ramps: dict | None = None, hai
         walk: also render the walk
         part: "rest" or "walk" for only that half
     """
-    return _pi().outfit(race, build, items or [], ramps, hair, hair_ramp, walk, candidates, part)
+    return _iw().outfit(race, build, items or [], ramps, hair, hair_ramp, walk, candidates, part)
 
 
 # ----------------------------------------------------------------------------- editing pieces and zones
@@ -144,7 +144,7 @@ def save_item(item: str, definition: dict, old_id: str | None = None, race: str 
         definition: the piece's fields (slot, kind, text, materials, depth, bulk, fit, hand, grip...)
         old_id: the piece's current id when renaming it
     """
-    _pi().save_item(item, definition, old_id)
+    _iw().save_item(item, definition, old_id)
     return state(race)
 
 
@@ -155,7 +155,7 @@ def save_prompts(prompts: dict, race: str = RACE) -> dict:
     Args:
         prompts: {name: text}, the whole "prompts" block
     """
-    _pi().save_prompts(prompts)
+    _iw().save_prompts(prompts)
     return state(race)
 
 
@@ -168,13 +168,13 @@ def save_zone(item: str, view: str, png: str, sex: str | None = None, sketch: st
         sex: "male"/"female" for a per-sex fit, else shared
         sketch: the detail sketch (material keys + dark lines) as a PNG data URL
     """
-    return _pi().save_zone(item, view, png, sex, sketch)
+    return _iw().save_zone(item, view, png, sex, sketch)
 
 
 @ops.op("items.reset_zone")
 def reset_zone(item: str, view: str, sex: str | None = None) -> dict:
     """Throw away a piece's painted zone for one view (back to the zones in its definition)."""
-    return _pi().reset_zone(item, view, sex)
+    return _iw().reset_zone(item, view, sex)
 
 
 @ops.op("items.save_grip_spec")
@@ -187,7 +187,7 @@ def save_grip_spec(prompt: str | None = None, prompt_back: str | None = None, wr
         prompt_back: the back grip prompt
         wrist: the wrist angle in degrees
     """
-    _pi().save_grip_spec(prompt, prompt_back, wrist)
+    _iw().save_grip_spec(prompt, prompt_back, wrist)
     return state(race)
 
 
@@ -198,13 +198,13 @@ def save_layers(item: str, candidate: str, view: str, layers: dict, race: str = 
     Args:
         layers: {part: PNG data URL}
     """
-    return _pi().layer_save(race, item, candidate, view, layers)
+    return _iw().layer_save(race, item, candidate, view, layers)
 
 
 @ops.op("items.revert_layers")
 def revert_layers(item: str, candidate: str, race: str = RACE) -> dict:
     """Put a candidate's original (generated) layers back, dropping hand edits."""
-    return _pi().layer_revert(race, item, candidate)
+    return _iw().layer_revert(race, item, candidate)
 
 
 @ops.op("items.save_bands")
@@ -214,13 +214,13 @@ def save_bands(item: str, candidate: str, view: str, bands: dict, race: str = RA
     Args:
         bands: {part: PNG data URL of the band map}
     """
-    return _pi().bands_save(race, item, candidate, view, bands)
+    return _iw().bands_save(race, item, candidate, view, bands)
 
 
 @ops.op("items.reset_bands")
 def reset_bands(item: str, candidate: str, view: str | None = None, part: str | None = None, race: str = RACE) -> dict:
     """Redo a candidate's bands from its paint: one part, one view, or all."""
-    return _pi().bands_reset(race, item, candidate, view, part)
+    return _iw().bands_reset(race, item, candidate, view, part)
 
 
 # ----------------------------------------------------------------------------- review
@@ -232,19 +232,19 @@ def approve(item: str, candidate: str, key: str = "all", on: bool = True, race: 
     Args:
         key: "all" for a shared fit, or the build ("human.male") for a per-sex piece
     """
-    return {"approved": _pi().approve(race, item, candidate, key, on)}
+    return {"approved": _iw().approve(race, item, candidate, key, on)}
 
 
 @ops.op("items.archive")
 def archive(item: str, candidate: str, race: str = RACE) -> dict:
     """Move a candidate to archive/workshop/items/ (nothing is deleted); it stops being approved."""
-    return _pi().archive(race, item, candidate)
+    return _iw().archive(race, item, candidate)
 
 
 @ops.op("items.approve_grip")
 def approve_grip(build: str, candidate: str, on: bool = True, race: str = RACE) -> dict:
     """Approve (or un-approve) a grip-hand candidate for one build."""
-    return {"grips": _pi().approve_grip(race, build, candidate, on)}
+    return {"grips": _iw().approve_grip(race, build, candidate, on)}
 
 
 # ----------------------------------------------------------------------------- generation (queued jobs)
@@ -295,13 +295,13 @@ def regrip(build: str, candidate: str, race: str = RACE) -> dict:
 
 def _batch(intake, sets, race, n, dry_run):
     """Shared by queue_design_batch / queue_gear_sets: add the intake's pieces, plan one job per candidate, queue them."""
-    pi = _pi()
+    iw = _iw()
     out = intake(dry_run=dry_run)
     defs = out.pop("defs", None)
     only = out["added"] if sets else None
     if sets and not only:
         return {**out, "batch": None, "jobs": 0, "items": []}
-    bid, plan = pi.plan_design_batch(race, n, items=only, extra=defs if dry_run else None)
+    bid, plan = iw.plan_design_batch(race, n, items=only, extra=defs if dry_run else None)
     out.update(batch=bid, jobs=len(plan), items=sorted({a["item"] for _, a in plan}))
     if not dry_run:
         from . import limner
@@ -316,13 +316,13 @@ def queue_design_batch(n: int = 2, dry_run: bool = False, race: str = RACE) -> d
     """Make Workshop pieces for every approved Limner gear icon that lacks one, then queue n candidates per piece and
     build (an overnight batch with retries and the watchdog). dry_run only reports what would happen.
     """
-    return _batch(_pi().limner_intake, False, race, n, dry_run)
+    return _batch(_iw().limner_intake, False, race, n, dry_run)
 
 
 @ops.op("items.queue_gear_sets", queues="item")
 def queue_gear_sets(n: int = 2, dry_run: bool = False, race: str = RACE) -> dict:
     """Add the missing cloth/leather/plate set pieces (GEAR_SETS) and queue n candidates of each new one."""
-    return _batch(_pi().gear_set_intake, True, race, n, dry_run)
+    return _batch(_iw().gear_set_intake, True, race, n, dry_run)
 
 
 # ----------------------------------------------------------------------------- export

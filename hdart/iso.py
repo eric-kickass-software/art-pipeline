@@ -51,7 +51,7 @@ def project(W, H_cell, x, y, z):
     return ox + (x - y) * W / 2, oy + (x + y) * W / 4 - z * W / 2
 
 
-_KZ = (math.sqrt(2) / 2) / math.cos(math.radians(30))  # one height unit in world units
+KZ = (math.sqrt(2) / 2) / math.cos(math.radians(30))  # one height unit in world units
 
 
 def render_boxes(boxes, size, W, H_cell, xyz=False):
@@ -91,7 +91,7 @@ def render_boxes(boxes, size, W, H_cell, xyz=False):
                 x = np.full_like(u, x1)
                 y = x - u
                 z = ((x + y) * W / 4 + oy - yy) * 2 / W
-            d = (x + y) * 0.6124 + z * _KZ * 0.5
+            d = (x + y) * 0.6124 + z * KZ * 0.5
             win = m & (d > depth + 1e-4)
             depth[win], face[win], own[win] = d[win], f, owner
             if xyz:

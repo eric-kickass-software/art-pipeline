@@ -19,7 +19,8 @@ import json, shutil, time
 import numpy as np
 from PIL import Image
 
-from . import config, store, workshop as ws, puppet_face as pf, puppet_paint as ppt, puppet_template as pt
+from . import art_pack, config, palette, rig, store, workshop as ws, puppet_face as pf, puppet_paint as ppt, puppet_template as pt
+from .levels import blank_face
 from .palette import ramp_from_base
 
 
@@ -29,23 +30,19 @@ def out_root():
 SEXES = ("male", "female")
 VIEWS = ("front", "back")
 SKIN, HAIR, EYES = 1, 2, 3
-CANVAS = pf.N // ppt.S   # the default export canvas: the rig canvas (576), the same px density as before the headroom
+CANVAS = rig.PX         # the default export canvas: the rig canvas (576), the same px density as before the headroom
 # Which joint a part turns around, and the joint at its far end (both in template.json's joints).
 JOINT = {"upper": ("pivot", "mid"), "lower": ("mid", "end"), "hand": ("end", "tip")}
 
 
-def _hex(c):
-    return "#%02x%02x%02x" % tuple(int(v) for v in c[:3])
-
-
 def ramps(race):
     """The race's ramps per group (skin, hair, eyes): those tagged with the race, else the whole group."""
-    doc = ws.palettes_doc(); size = doc.get("rampSize", 5); out = {}
+    doc = palette.palettes_doc(); size = doc.get("rampSize", 5); out = {}
     for group in ("skin", "hair", "eyes"):
         grp = doc["groups"].get(group, {})
         tagged = {k: e for k, e in grp.items() if race in (e.get("races") or [])}
         out[group] = [{"id": f"{group}.{k}", "name": k,
-                       "colors": [c if isinstance(c, str) else _hex(c) for c in (e.get("colors") or ramp_from_base(e["base"], size))]}
+                       "colors": [c if isinstance(c, str) else art_pack.hex_colour(c) for c in (e.get("colors") or ramp_from_base(e["base"], size))]}
                       for k, e in (tagged or grp).items() if e.get("colors") or e.get("base")]
     return out
 
@@ -55,32 +52,16 @@ def _cands(race, kind):
     d = pf.out_dir(race, kind)
     if not d.exists():
         return []
-    in_set = [d / c for c in pf._sets(ws.load_state(), race)[kind] if (d / c).is_dir()]
+    in_set = [d / c for c in pf.face_sets(ws.load_state(), race)[kind] if (d / c).is_dir()]
     if in_set:
         return in_set
     return sorted((p for p in d.iterdir() if p.is_dir() and not (p / "progress.json").exists() and (p / "layer_front.png").exists()),
                   key=lambda p: p.stat().st_mtime)
 
 
-def _small(a, size, nearest=False):
-    return np.array(Image.fromarray(a).resize((size, size), Image.NEAREST if nearest else Image.LANCZOS))
-
-
-def _crop_save(art, idx, path, min_alpha=8):
-    """Save art + index map cropped to the art's coverage; returns the rect [x, y, w, h], or None when empty."""
-    ys, xs = np.nonzero(art[..., 3] >= min_alpha)
-    if not len(ys):
-        return None
-    x0, x1, y0, y1 = int(xs.min()), int(xs.max()) + 1, int(ys.min()), int(ys.max()) + 1
-    path.parent.mkdir(parents=True, exist_ok=True)
-    Image.fromarray(np.ascontiguousarray(art[y0:y1, x0:x1])).save(path.parent / (path.name + ".png"))   # names have dots (armA.hand)
-    Image.fromarray(np.ascontiguousarray(idx[y0:y1, x0:x1])).save(path.parent / (path.name + ".idx.png"))
-    return [x0, y0, x1 - x0, y1 - y0]
-
-
 def skin_index(art, band, size):
     """Index map of a part from its skin bands (Parts editor, puppet_paint.bake_bands), at the export size."""
-    b = _small(band, size, nearest=True)
+    b = art_pack.small(band, size, nearest=True)
     idx = np.zeros(art.shape, np.uint8); m = (b[..., 3] > 127) & (b[..., 0] != ppt.NOT_SKIN) & (art[..., 3] > 127)
     idx[m, 0] = b[m, 0]; idx[m, 1] = SKIN; idx[m, 3] = 255
     return idx
@@ -88,7 +69,7 @@ def skin_index(art, band, size):
 
 def keyed_index(levels, channel, size):
     """Index map from a Face tab levels map (R = level, 254 = outline, A = mask), at the export size."""
-    lv = _small(levels, size, nearest=True)
+    lv = art_pack.small(levels, size, nearest=True)
     idx = np.zeros(lv.shape, np.uint8); m = lv[..., 3] > 127
     idx[m, 0] = lv[m, 0]; idx[m, 1] = channel; idx[m, 3] = 255
     return idx
@@ -118,7 +99,7 @@ def _body(race, sex, size, has_faces, d):
     k = size / (pf.N / ppt.S)   # rig px (576) -> canvas px
     for v in VIEWS:             # the face comes from the face set, so the painted head goes blank
         if has_faces and v == "front":
-            parts[v]["head"] = pf.blank_face(parts[v]["head"], pf.face_ellipse(sp, 1.2) & pf.inner_head(parts[v]["head"]))
+            parts[v]["head"] = blank_face(parts[v]["head"], rig.face_ellipse(sp, 1.2) & rig.inner_head(parts[v]["head"]))
     # Skin levels = the parts' bands (made from the paint, maybe edited by hand), the key measured on both views.
     cent = ppt.ensure_bands(f"{race}.{sex}", cid); bands = ppt.out_dir(f"{race}.{sex}") / cid / "bands"
     entry = {"paint": cid, "skinKey": cent, "views": {}}
@@ -134,9 +115,9 @@ def _body(race, sex, size, has_faces, d):
                 joints[limb] = [round(j[0] * k, 2), round(j[1] * k, 2)]
         out_parts = []
         for n in V["order"]:
-            art = _small(parts[v][n], size)
+            art = art_pack.small(parts[v][n], size)
             band = np.asarray(Image.open(bands / v / f"{n}.png").convert("RGBA"))
-            rect = _crop_save(art, skin_index(art, band, size), d / sex / v / n)
+            rect = art_pack.crop_save(art, skin_index(art, band, size), d / sex / v / n)
             if rect is None:
                 continue
             if n == "torso":
@@ -161,12 +142,12 @@ def _layers(race, kind, size, d):
             lf, lv = c / f"layer_{v}.png", c / f"levels_{v}.png"
             if not lf.exists():
                 continue
-            art = _small(np.asarray(Image.open(lf).convert("RGBA")), size)
+            art = art_pack.small(np.asarray(Image.open(lf).convert("RGBA")), size)
             idx = keyed_index(np.asarray(Image.open(lv).convert("RGBA")), HAIR if kind == "hair" else EYES, size) \
                 if lv.exists() else np.zeros(art.shape, np.uint8)
             if kind == "hair":   # hair pixels the key missed at the LANCZOS edge still read as hair (no green fringe)
                 art[..., 3] = np.where(idx[..., 3] > 0, 255, np.where(art[..., 3] > 127, art[..., 3], 0))
-            rect = _crop_save(art, idx, d / kind / c.name / v)
+            rect = art_pack.crop_save(art, idx, d / kind / c.name / v)
             if rect:
                 e["views"][v] = {"file": f"{kind}/{c.name}/{v}.png", "rect": rect}
         if e["views"]:
@@ -183,7 +164,7 @@ def export(race="human", size=None):
     d.mkdir(parents=True)
     faces = _layers(race, "face", size, d)
     doc = {"_doc": __doc__.strip().split("\n\n")[1], "schemaVersion": 1, "race": race, "made": int(time.time()),
-           "canvas": size, "rampSize": ws.palettes_doc().get("rampSize", 5),
+           "canvas": size, "rampSize": palette.palettes_doc().get("rampSize", 5),
            "hairOutline": "#28201e", "sexes": {}, "hair": _layers(race, "hair", size, d), "faces": faces,
            "ramps": ramps(race)}
     for sex in SEXES:
@@ -193,6 +174,5 @@ def export(race="human", size=None):
     if not doc["sexes"]:
         raise ValueError(f"{race} has no painted puppet yet (Workshop → Race → Paint).")
     (d / "puppet.json").write_text(json.dumps(doc, indent=1), encoding="utf-8")
-    from . import item_export
-    item_export.write_shared(); item_export.write_index()
+    art_pack.write_shared(); art_pack.write_index()
     return d

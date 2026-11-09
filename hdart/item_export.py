@@ -21,19 +21,10 @@ import json, shutil, time
 import numpy as np
 from PIL import Image
 
-from . import config, contract, store, workshop as ws, puppet_face as pf, puppet_items as pi, unity_export as ue
-from .palette import ramp_from_base
+from . import art_pack, config, contract, store, puppet_face as pf, item_workshop as iw, unity_export as ue
+from .art_pack import KINDS, OUTLINE, art_root, write_index, write_shared
 
 SCHEMA = 1
-CHANNELS = {"1": "skin", "2": "hair", "3": "eyes", "4": "cloth", "5": "leather", "6": "metal", "7": "accent"}
-OUTLINE = 254
-# pack kind -> (folder under Art/, manifest, key prefix); the same table as the game's ArtCatalog.Kinds
-KINDS = {"item": ("Items", "item.json", ""), "puppet": ("Puppets", "puppet.json", "race."),
-         "dungeonSet": ("Dungeon", "set.json", "dungeonset.")}
-
-
-def art_root():
-    return config.project().export("art")
 
 
 def items_root():
@@ -44,86 +35,25 @@ def intake_dir():
     return config.project().contract / "intake" / "items"
 
 
-# ----------------------------------------------------------------------------- game items
-
-def game_ids(doc=None):
-    """{game id: [piece ids]} in spec order."""
-    doc = doc or pi.spec(); out = {}
-    for p, it in doc["items"].items():
-        out.setdefault(pi.game_id(p, it), []).append(p)
-    return out
-
-
-def _ramp_ids():
-    doc = ws.palettes_doc()
-    return {f"{g}.{n}" for g, grp in doc["groups"].items() for n in grp}
-
-
-def info(gid, doc=None, v=None, game=None):
-    """What the game knows (or will be told) about a game item: name, kind, slot, weaponType, hands, heldAs, text,
-    materials (material -> ramp id), exists (the game has it: art only, no intake), problems (block an export)."""
-    doc = doc or pi.spec(); v = v or contract.vocab(); game = contract.game_items() if game is None else game
-    pieces = game_ids(doc).get(gid, []); its = [doc["items"][p] for p in pieces]
-    held = [it for it in its if it.get("kind") == "held"]; problems = []
-    mats = list(dict.fromkeys(m for it in its for m in it.get("materials", [])))
-    row = game.get(gid)
-    if row:
-        e = {"name": row.get("name"), "kind": row.get("kind"), "slot": row.get("slot"), "weaponType": row.get("weaponType"),
-             "text": row.get("text"), "ramps": ((row.get("visual") or {}).get("ramps") or {})}
-    else:
-        e = dict(doc.get("game_items", {}).get(gid, {})); e["ramps"] = e.pop("materials", {})
-        lead = (held or its or [{}])[0]
-        e.setdefault("name", " ".join(w.capitalize() for w in gid[5:].split("_")))
-        e.setdefault("kind", "weapon" if held else "armor")
-        e.setdefault("slot", contract.slot_of(lead.get("slot"), v))
-        if held and lead.get("held_as") in ("shield", "focus"):
-            e.setdefault("weaponType", lead["held_as"])
-        e.setdefault("text", lead.get("text", ""))
-        bad = contract.id_problem(gid, v)
-        if bad:
-            problems.append(bad)
-        if e["kind"] not in v["itemKinds"]:
-            problems.append(f"kind {e['kind']!r} isn't one of the game's: {', '.join(v['itemKinds'])}")
-        if e["slot"] not in [s["key"] for s in v["slots"]]:
-            problems.append(f"slot {e['slot']!r} isn't a game slot")
-        if held and not e.get("weaponType"):
-            problems.append("a new held item needs a weaponType (specs/items.json → game_items)")
-    wt = contract.weapon_type(e.get("weaponType"), v) if e.get("weaponType") else None
-    if e.get("weaponType") and v["weaponTypes"] and not wt:
-        problems.append(f"weaponType {e['weaponType']!r} isn't one of the game's")
-    known = _ramp_ids(); ramps = {}
-    for m in mats:
-        r = e["ramps"].get(m) or f"{doc['materials'][m]['group']}.{next(iter(ws.palettes_doc()['groups'].get(doc['materials'][m]['group'], {'?': 0})))}"
-        if r not in known:
-            problems.append(f"ramp {r!r} ({m}) isn't in specs/palettes.json")
-        ramps[m] = r
-    if not pieces:
-        problems.append("no Workshop piece makes this item")
-    return {"pieces": pieces, "name": e.get("name"), "kind": e.get("kind"), "slot": e.get("slot"),
-            "weaponType": e.get("weaponType"), "hands": (wt or {}).get("hands"), "heldAs": (wt or {}).get("heldAs") or
-            (held[0].get("held_as", "weapon") if held else None), "text": e.get("text") or "", "materials": ramps,
-            "exists": bool(row), "wanted": gid in v["wanted"], "problems": problems}
-
-
 # ----------------------------------------------------------------------------- one pack
 
 def _idx(lev, size):
     """A levels map (rest-pose canvas) as the pack's index map at `size`: R level / 254, G channel, A mask."""
-    lv = ue._small(np.ascontiguousarray(lev), size, nearest=True).copy()
+    lv = art_pack.small(np.ascontiguousarray(lev), size, nearest=True).copy()
     m = lv[..., 3] > 127; lv[..., 2] = 0; lv[..., 3] = np.where(m, 255, 0); lv[~m] = 0
     return lv
 
 
 def _layer(d, rel, lev, size, ramps, doc):
     """Save one layer (coloured art + index map) cropped; returns its rect or None."""
-    art = ue._small(pi.colour(lev, ramps, doc), size)
+    art = art_pack.small(iw.colour(lev, ramps, doc), size)
     idx = _idx(lev, size); art[..., 3] = np.where(idx[..., 3] > 0, art[..., 3].clip(200), 0)   # the index map's mask is the shape
-    return ue._crop_save(art, idx, d / rel, min_alpha=1)
+    return art_pack.crop_save(art, idx, d / rel, min_alpha=1)
 
 
 def _held_upright(d, rel, cd, ramps, doc):
     img = np.asarray(Image.open(cd / "held_levels.png").convert("RGBA"))
-    art = pi.colour(img, ramps, doc); idx = img.copy(); idx[..., 2] = 0
+    art = iw.colour(img, ramps, doc); idx = img.copy(); idx[..., 2] = 0
     (d / rel).parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(art).save(d / f"{rel}.png"); Image.fromarray(idx).save(d / f"{rel}.idx.png")
     return [int(art.shape[1]), int(art.shape[0])]
@@ -132,14 +62,14 @@ def _held_upright(d, rel, cd, ramps, doc):
 def export_item(gid, race="human", size=None, doc=None, v=None, game=None, st=None):
     """Write one game item's pack (and its intake file when the game doesn't have it). Returns a report dict; raises
     ValueError when nothing can be exported."""
-    doc = doc or pi.spec(); v = v or contract.vocab(); st = st or pi.load_state(race); size = size or ue.CANVAS
-    inf = info(gid, doc, v, game)
+    doc = doc or iw.spec(); v = v or contract.vocab(); st = st or iw.load_state(race); size = size or ue.CANVAS
+    inf = iw.game_info(gid, doc, v, game)
     if inf["problems"]:
         raise ValueError(f"{gid}: " + "; ".join(inf["problems"]))
     pieces = sorted(inf["pieces"], key=lambda p: doc["items"][p].get("depth", 0)); warn = []
     builds = {}
-    for b in pi._builds(race):
-        cids = {p: pi.resolve(race, p, b, st, doc) for p in pieces}
+    for b in iw.builds(race):
+        cids = {p: iw.resolve(race, p, b, st, doc) for p in pieces}
         if all(cids.values()):
             builds[b] = cids
         else:
@@ -153,18 +83,18 @@ def export_item(gid, race="human", size=None, doc=None, v=None, game=None, st=No
     ramps = inf["materials"]; fits = {}; held = []; saved = {}; uprights = set(); used = {}
     for b, cids in builds.items():
         _, sp, parts = pf.base(b); fit = fits.setdefault(b, {})
-        for view in pi.VIEWS:
+        for view in iw.VIEWS:
             lays = fit.setdefault(view, [])
             for p in pieces:
-                it = doc["items"][p]; cid = cids[p]; cd = pi.out_dir(race, p) / cid; short = p[5:]
+                it = doc["items"][p]; cid = cids[p]; cd = iw.out_dir(race, p) / cid; short = p[5:]
                 used.setdefault(p, {})[b] = cid
                 extra = {"depth": it.get("depth", 0), "clips": it.get("clips", [])}
                 if it.get("kind") == "held":   # placed on this build's hand (its grip hand, else the Template's)
                     img = np.asarray(Image.open(cd / "held.png").convert("RGBA")); lev = np.asarray(Image.open(cd / "held_levels.png").convert("RGBA"))
                     if view == "back":
                         img, lev = img[:, ::-1].copy(), lev[:, ::-1].copy()
-                    grip = pi.grip_assets(race, b, view).get(pi.held_arm(it, view))
-                    hand, _, lv = pi.held_layer(doc, it, sp, view, parts[view], img, lev, grip)
+                    grip = iw.grip_assets(race, b, view).get(iw.held_arm(it, view))
+                    hand, _, lv = iw.held_layer(doc, it, sp, view, parts[view], img, lev, grip)
                     rel = f"{short}/{cid}/{b.split('.')[1]}/{view}/held"
                     rect = _layer(d, rel, lv, size, ramps, doc)
                     if rect:
@@ -208,44 +138,12 @@ def export_item(gid, race="human", size=None, doc=None, v=None, game=None, st=No
     return {"pack": str(d), "builds": list(builds), "intake": str(intake) if intake else None, "warnings": warn}
 
 
-# ----------------------------------------------------------------------------- shared files
-
-def write_shared():
-    """Art/ramps.json and Art/channels.json: every ramp group (ids <group>.<name>) and the channel numbers."""
-    pal = ws.palettes_doc(); size = pal.get("rampSize", 5); root = art_root()
-    groups = {g: [{"id": f"{g}.{n}", "name": n, "colors": [c if isinstance(c, str) else ue._hex(c) for c in (e.get("colors") or ramp_from_base(e["base"], size))]}
-                  for n, e in grp.items() if e.get("colors") or e.get("base")] for g, grp in pal["groups"].items()}
-    store.write_json(root / "ramps.json", {"schemaVersion": 1, "rampSize": size, "outline": pal.get("outline"), "groups": groups})
-    mats = {m: {"channel": e["channel"], "group": e["group"]} for m, e in pi.spec()["materials"].items()}
-    store.write_json(root / "channels.json", {"schemaVersion": 1, "channels": CHANNELS, "levels": size, "outline": OUTLINE,
-                                              "materials": mats,
-                                              "_doc": "Index maps: R = cel level 0..levels-1 (254 = outline), G = channel, A = mask. "
-                                                      "Channel 0 keeps the painted colour."})
-
-
-def write_index():
-    """Art/index.json: every pack on disk, sorted by key (the game's ArtCatalog reads it)."""
-    root = art_root(); packs = {}
-    for kind, (folder, manifest, prefix) in KINDS.items():
-        for d in sorted((root / folder).glob("*/")) if (root / folder).exists() else []:
-            f = d / manifest
-            if not f.exists():
-                continue
-            try:
-                m = json.loads(f.read_text(encoding="utf-8"))
-            except ValueError:
-                continue
-            packs[prefix + d.name] = {"kind": kind, "path": f"{folder}/{d.name}", "schemaVersion": m.get("schemaVersion") or m.get("format") or 1}
-    store.write_json(root / "index.json", {"schemaVersion": 1, "packs": dict(sorted(packs.items()))})
-    return len(packs)
-
-
 def export(ids=None, race="human", size=None):
     """Export game items (default: every game item with approved art). Returns {exported: {id: report}, skipped:
     {id: reason}, index: pack count}."""
-    doc = pi.spec(); v = contract.vocab(); game = contract.game_items(); st = pi.load_state(race)
+    doc = iw.spec(); v = contract.vocab(); game = contract.game_items(); st = iw.load_state(race)
     out = {"exported": {}, "skipped": {}}
-    for gid in ids or list(game_ids(doc)):
+    for gid in ids or list(iw.game_ids(doc)):
         try:
             out["exported"][gid] = export_item(gid, race, size, doc, v, game, st)
         except (ValueError, KeyError, FileNotFoundError) as e:
@@ -281,7 +179,7 @@ def _check_file(root, d, rel, rect, channels, problems, where):
 def check():
     """Every manifest parses, every file it names exists, index maps only use registered channels, index.json lists
     exactly the packs on disk, intake files follow requirements.json. Returns a list of problems (empty = fine)."""
-    root = art_root(); problems = []; v = contract.vocab(); ramp_ids = _ramp_ids()
+    root = art_root(); problems = []; v = contract.vocab(); ramp_ids = iw.ramp_ids()
     on_disk = {}
     for kind, (folder, manifest, prefix) in KINDS.items():
         for d in sorted((root / folder).glob("*/")) if (root / folder).exists() else []:

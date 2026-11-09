@@ -4,7 +4,6 @@ back. Run: uv run python tests/test_puppet.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import json, shutil, tempfile
 from pathlib import Path
-import hdart.ai_kit as ak
 import hdart.workshop as ws
 
 REAL = Path(__file__).resolve().parents[1] / "sprites" / "ai"
@@ -17,7 +16,7 @@ if not (src["front"] and src["back"]):
     raise SystemExit(0)
 
 tmp = Path(tempfile.mkdtemp())
-ak.AI_DIR = tmp / "ai"; ws.CAND = ak.AI_DIR / "candidates"; ws.STATE = ak.AI_DIR / "workshop.json"
+ws.AI_DIR = tmp / "ai"; ws.CAND = ws.AI_DIR / "candidates"; ws.STATE = ws.AI_DIR / "workshop.json"
 import hdart.puppet as pp
 
 (ws.CAND / "test" / "male").mkdir(parents=True)
@@ -31,7 +30,7 @@ except ValueError as e:
     assert "Approve both" in str(e)
 s = ws.load_state(); s["builds"]["test.male"]["back"]["approved"] = "candidates/test/male/back.png"; ws.save_state(s)
 pp.template("test.male", frames=4)
-out = ak.AI_DIR / "puppet" / "test.male"
+out = ws.AI_DIR / "puppet" / "test.male"
 for name in ("template.json", "skeleton_front.png", "pieces_back.png", "walk_front.gif", "walk_4dir_64.gif"):
     assert (out / name).exists(), name
 meta = json.loads((out / "template.json").read_text())

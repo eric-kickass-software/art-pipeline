@@ -86,7 +86,7 @@ for name in studio.JOB_MODULES:
 want = {"dun", "dun_trial", "dun_edit", "dun_rescale", "dun_finalize", "dun_build", "dun_capture", "lib_import",
         "puppet", "paint", "paint_preview", "paint_fix", "face_gen", "item", "tpl", "tpl_measure", "race"}
 assert want <= set(jobs.KINDS), want - set(jobs.KINDS)
-assert jobs.KINDS["item"].reload[-1] == "puppet_items" and not jobs.KINDS["dun_capture"].gpu and jobs.KINDS["dun"].gpu
+assert jobs.KINDS["item"].reload[-1] == "item_workshop" and not jobs.KINDS["dun_capture"].gpu and jobs.KINDS["dun"].gpu
 # a reload re-registers the fresh function
 import hdart.dungeon as dg
 old = jobs.KINDS["dun"].fn

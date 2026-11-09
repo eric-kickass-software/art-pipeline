@@ -1,6 +1,6 @@
 """Procedural layout templates for floor and wall materials: brick bonds, ashlar, flagstones, cobbles, tiles, planks.
 
-Everything is laid out in tile units (1 tile = one board cell; heights in iso units convert with iso._KZ) and repeats
+Everything is laid out in tile units (1 tile = one board cell; heights in iso units convert with iso.KZ) and repeats
 exactly once per tile across (and per tile down, for floors), so a template is seamless and at a known scale by
 construction. Dungeon Forge uses a template three ways: as the starting image for a family's master (img2img keeps
 the layout, FLUX paints the surface), as the blockout in the room preview before anything is generated, and for its

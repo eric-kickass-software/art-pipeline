@@ -69,7 +69,6 @@ ops.OPS.pop("t.paint")
 
 # ----------------------------------------------------------------------------- the Item Workshop's ops
 
-import hdart.ai_kit as ak
 from hdart import items_api
 
 items = ops.describe("items.")
@@ -85,10 +84,10 @@ assert used and used <= set(items_api.LEGACY), sorted(used - set(items_api.LEGAC
 assert all(e[0] in ops.OPS for e in items_api.LEGACY.values())
 
 # approve / un-approve / archive through the page's route, on a temp data folder
-tmp = Path(tempfile.mkdtemp()); ak.AI_DIR = tmp / "ai"
-from hdart import puppet_items as pi, workshop as ws
+from hdart import item_workshop as iw, workshop as ws
+tmp = Path(tempfile.mkdtemp()); ws.AI_DIR = tmp / "ai"
 ws.ARCHIVE = tmp / "archive"
-cand = pi.out_dir("human", "item.test_helm") / "s1_100"; cand.mkdir(parents=True)
+cand = iw.out_dir("human", "item.test_helm") / "s1_100"; cand.mkdir(parents=True)
 (cand / "meta.json").write_text('{"seed": 1}', encoding="utf-8")
 r = items_api.legacy_call("approve", {"race": "human", "item": "item.test_helm", "id": "s1_100", "key": "all", "on": True})
 assert r == {"approved": {"item.test_helm": {"all": "s1_100"}}}, r
@@ -97,7 +96,7 @@ items_api.legacy_call("archive", {"race": "human", "item": "item.test_helm", "id
 assert not cand.exists() and (ws.ARCHIVE / "workshop" / "items" / "human" / "item.test_helm" / "s1_100").exists()
 assert ops.call("items.candidates", {"item": "item.test_helm"}) == {"candidates": [], "approved": {}}
 
-# generation is queued as a job of kind "item" with the args the job handler (puppet_items.job) reads
+# generation is queued as a job of kind "item" with the args the job handler (item_workshop.job) reads
 try:
     ops.call("items.generate", {"item": "item.test_helm"})
     raise AssertionError("queued without a Studio")

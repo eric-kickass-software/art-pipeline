@@ -9,7 +9,7 @@ for name in P.PATTERNS:
     assert np.abs(a[:, :96] - a[:, 96:]).max() == 0, f"{name}: not periodic across"
     assert np.abs(a[:96] - a[96:]).max() == 0, f"{name}: not periodic down"
     assert 0.6 < two["region"].mean() < 1.0, f"{name}: odd stone/joint ratio {two['region'].mean():.2f}"
-    w = P.render(name, None, None, 2, 3 * iso._KZ, 96, 3, False)
+    w = P.render(name, None, None, 2, 3 * iso.KZ, 96, 3, False)
     b = np.asarray(w["rgb"]).astype(int)
     assert np.abs(b[:, :96] - b[:, 96:]).max() == 0, f"{name}: wall not periodic across"
 # scale: running bond with 4 across has exactly 4 bricks per tile per course (count joint crossings along a row)

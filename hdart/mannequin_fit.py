@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import numpy as np
 from PIL import Image, ImageFilter
 
-from . import puppet_template as pt
+from . import imageops, rig
 
 FLAG = 0.8        # a part under this score is called out
 RING = 14         # canvas px around a part, where the template says background, checked for art that shouldn't be there
@@ -55,11 +55,6 @@ def _points(mask):
     return xs * STEP + 1j * ys * STEP
 
 
-def _grow(a, n):
-    from .puppet_paint import _grow as g
-    return g(a, n)
-
-
 def _score(fit, inside, ring, fg):
     """How well a fitted part sits on the art: its inside on art, and the background beside it free of art."""
     def on(p):
@@ -91,8 +86,8 @@ def fit(V, parts, img):
     masks = {n: parts[n][0][..., 3] > 127 for n in V["order"]}
     figure = np.any(list(masks.values()), 0)
     pts = {n: _points(m) for n, m in masks.items()}
-    ring = {n: _points(_grow(m, RING) & ~figure) for n, m in masks.items()}
-    joint = lambda name: complex(*(np.array(pt._joint(V, name), float) * S))
+    ring = {n: _points(imageops.grow(m, RING) & ~figure) for n, m in masks.items()}
+    joint = lambda name: complex(*(np.array(rig.joint(V, name), float) * S))
     # the whole figure gives the starting scale and place
     ty, tx = np.nonzero(figure); my, mx = np.nonzero(fg)
     s0 = (my.max() - my.min()) / (ty.max() - ty.min())
@@ -121,8 +116,7 @@ def _canvas_scale(parts, V):
 
 
 def _rig_px():
-    from . import puppet
-    return puppet.PX
+    return rig.PX
 
 
 def labels(V, parts, fits, fg):
@@ -156,8 +150,7 @@ def cut(V, parts, img, fits, fg):
     """Each part's art on the template's bones, as RGBA: its own pixels, plus any art under the template shape (so the
     joint ends overlap). Where the template has no art under it stays transparent, for the caller to fill."""
     a = np.asarray(img.convert("RGB")).astype(float); lab = labels(V, parts, fits, fg)
-    from .puppet_paint import _erode
-    core = _erode(fg, EDGE)
+    core = imageops.erode_cross(fg, EDGE)
     N = parts[V["order"][0]][0].shape[0]; yy, xx = np.mgrid[:N, :N]; c = xx + 1j * yy
     out = {}
     for i, n in enumerate(V["order"]):
@@ -167,7 +160,7 @@ def cut(V, parts, img, fits, fg):
         tmpl = parts[n][0][..., 3] > 127
         own = ok & core[cy, cx] & (lab[cy, cx] == i); under = ok & core[cy, cx] & tmpl
         if n != "head":
-            own &= _grow(tmpl, CLIP)
+            own &= imageops.grow(tmpl, CLIP)
         keep = np.asarray(Image.fromarray(np.where(own | under, 255, 0).astype(np.uint8)).filter(ImageFilter.GaussianBlur(2.5))) > 127
         rgba = np.zeros((N, N, 4), np.uint8)
         rgba[..., :3] = np.clip(_bilinear(a, m.real, m.imag), 0, 255).astype(np.uint8); rgba[..., 3] = np.where(keep, 255, 0)

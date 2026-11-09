@@ -37,11 +37,11 @@ def cmd_item_export(a):
 
 
 def cmd_export(a):
-    from . import item_export as ie, unity_export
+    from . import art_pack, item_export as ie, unity_export
     if not a.check:   # everything: the race's puppet, then every game item with approved art
         print(unity_export.export(a.race)); cmd_item_export(argparse.Namespace(items=None, race=a.race, size=None))
     problems = ie.check()
-    for line in problems or [f"check: ok ({ie.art_root()})"]:
+    for line in problems or [f"check: ok ({art_pack.art_root()})"]:
         print(line)
     if problems:
         raise SystemExit(1)

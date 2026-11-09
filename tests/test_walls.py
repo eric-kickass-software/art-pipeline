@@ -21,16 +21,16 @@ door = {"id": "d", "kind": "tile", "shape": "run", "opening": "door", "length": 
 img, m = d.project_elevation(door, 64, elev.crop((0, 0, w, h)), 1)
 assert m.any()
 # wall variation mask keeps the edges, cap and base; a door rect sits on the floor, 2 of 3 units tall
-mask = d.elev_keep_mask(1024, h, 512, d.iso._KZ * 512)
+mask = d.elev_keep_mask(1024, h, 512, d.iso.KZ * 512)
 assert mask[:, :30].max() == 0 and mask[:, -30:].max() == 0 and mask[:40].max() == 0 and mask[-30:].max() == 0 and mask[h // 2, 512] == 1
 fam = {"door_width": 0.5, "door_height": 2.0}
-x0, x1, y0, y1 = d.door_rect(fam, 512, d.iso._KZ * 512, h)
+x0, x1, y0, y1 = d.door_rect(fam, 512, d.iso.KZ * 512, h)
 assert x0 == 128 and x1 == 384 and y1 == h and abs((h - y0) / h - 2 / 3) < 0.01
 # course measurement (wall rescale): exact on templates, whatever the brick tones
 for across, course in [(5, 0.11), (3, 0.2), (4, 0.08), (6, 0.1), (2, 0.15)]:
     im = d.template_render({"pattern": "running_bond", "params": {"across": across, "course": course, "mortar": 0.012, "bevel": 0.012}}, "wall", 512)["rgb"].resize((w, h))
     m = d.measure_elevation(im)
-    rows = (d.WALL_UNITS - d.KEEP_TOP - d.KEEP_BOTTOM) * d.iso._KZ / course
+    rows = (d.WALL_UNITS - d.KEEP_TOP - d.KEEP_BOTTOM) * d.iso.KZ / course
     assert m["across"] == across and abs(m["rows"] - rows) < 0.6, (across, course, m, rows)
 assert d.measure_elevation(Image.new("RGB", (w, h), (120, 120, 120)))["rows"] is None
 # keep-band guides: joints of the whole wall, and a suggested cap / base where the regular courses stop

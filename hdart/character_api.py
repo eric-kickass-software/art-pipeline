@@ -3,11 +3,12 @@ Workshop Editor's puppet, hair and face layers, for the Studio pages and agents.
 
 The Character Workshop makes each race's puppet (the modules have the how):
   - Template (hdart/puppet_template.py): the rig every puppet is painted on (parts, joints, draw order).
-  - Races (hdart/workshop.py): races.json, and per race a unisex mannequin (front, then back) that sets the look.
+  - Races (hdart/races.py): races.json, and per race a unisex mannequin (front, then back) that sets the look.
   - Paint (hdart/puppet_paint.py): FLUX paints the template per build ("<race>.<sex>") into per-part layers with
     cel bands; the approved paint is what puppet-export ships to the game.
   - Face (hdart/puppet_face.py): racial hair and faces, painted on the approved puppet and kept as sets per race.
-  - Ramps (hdart/workshop.py, specs/palettes.json): the colour ramps of skin, hair and items.
+  - Ramps (hdart/palette.py, specs/palettes.json; skin keying in hdart/levels.py): the colour ramps of skin, hair
+    and items.
 Candidates: Paint in sprites/ai/paint/<build>/<id>/, hair and faces in sprites/ai/face/<race>/<kind>/<id>/,
 mannequins as PNGs in sprites/ai/candidates/<build>/_base/ (named by `file`, their path under sprites/ai/).
 
@@ -41,6 +42,16 @@ ops.param_docs("character.", {
 def _ws():
     from . import workshop
     return workshop
+
+
+def _races():
+    from . import races
+    return races
+
+
+def _palette():
+    from . import palette
+    return palette
 
 
 def _ppt():
@@ -102,13 +113,13 @@ def measure_template(build: str = "human.unisex") -> dict:
 def race(race: str) -> dict:
     """The Race tab: races.json (spec.races) and the race's unisex mannequin per facing (candidates, approval,
     stale flags)."""
-    return _ws().race_state(race)
+    return _races().race_state(race)
 
 
 @ops.op("character.save_races")
 def save_races(spec: dict) -> dict:
-    """Save races.json (every race's words, ramps, flags). Returns what workshop.save_races returns (the saved doc)."""
-    return _ws().save_races(spec)
+    """Save races.json (every race's words, ramps, flags). Returns what races.save_races returns (the saved doc)."""
+    return _races().save_races(spec)
 
 
 @ops.op("character.generate_mannequin", queues="race")
@@ -133,7 +144,7 @@ def approve_mannequin(build: str, facing: str, file: str, auto_back: bool = True
         auto_back: after a front, queue the matching back right away
         n: how many backs to queue
     """
-    out = _ws().approve_race(build, facing, file)
+    out = _races().approve_race(build, facing, file)
     if facing == "front" and auto_back:
         race, sex = _sex(build)
         job = jobs.enqueue("race", {"race": race, "sex": sex, "facing": "back", "n": n, "seed": 11},
@@ -149,7 +160,7 @@ def archive_mannequin(build: str, facing: str, file: str | None = None) -> dict:
     Args:
         file: the candidate's path under sprites/ai/
     """
-    return {"archived": _ws().archive_base(build, facing, file)}
+    return {"archived": _races().archive_base(build, facing, file)}
 
 
 # ----------------------------------------------------------------------------- paint
@@ -360,13 +371,13 @@ def face_preview(race: str, kind: str, candidate: str, ramp: str | None = None) 
 def palettes() -> dict:
     """The palettes document (specs/palettes.json): every ramp group (skin, hair, items...) with its ramps (colors darkest first, base, tune,
     races)."""
-    return _ws().palettes_doc()
+    return _palette().palettes_doc()
 
 
 @ops.op("character.ramp_preview", read_only=True)
 def ramp_preview(build: str) -> dict:
     """A build's approved paint shown in the race's skin ramps (data URLs)."""
-    return _ws().ramp_preview(build)
+    return _races().ramp_preview(build)
 
 
 @ops.op("character.save_ramp")
@@ -382,13 +393,13 @@ def save_ramp(group: str, name: str, base: str | None = None, tune: dict | None 
         races: the races it's offered to ([] = all)
         old_name: its current name when renaming it
     """
-    return _ws().save_ramp(group, name, base, tune, colors, races, old_name)
+    return _palette().save_ramp(group, name, base, tune, colors, races, old_name)
 
 
 @ops.op("character.delete_ramp")
 def delete_ramp(group: str, name: str) -> dict:
     """Delete a ramp. Returns the palettes document."""
-    return _ws().delete_ramp(group, name)
+    return _palette().delete_ramp(group, name)
 
 
 # ----------------------------------------------------------------------------- images

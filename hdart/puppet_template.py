@@ -22,10 +22,10 @@ import json, math, time
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-from . import ai_kit, config, jobs, workshop as ws, puppet as pp
+from . import config, imageops, jobs, rig, workshop as ws, puppet as pp
 
 SPEC = config.specs_dir() / "puppet_template.json"
-PX = pp.PX
+PX = rig.PX
 LIMBS = ("armA", "armB", "legA", "legB")
 SEGS = (("upper", "pivot", "mid"), ("lower", "mid", "end"), ("hand", "end", "tip"))
 NW = 7                                    # samples per segment when measuring the joint caps
@@ -37,7 +37,7 @@ GUIDE_BONE, GUIDE_SEAM, GUIDE_FACE = (40, 150, 230, 255), (225, 40, 150, 255), (
 
 
 def out_dir():
-    return ai_kit.AI_DIR / "puppet_template"
+    return ws.AI_DIR / "puppet_template"
 
 
 # ----------------------------------------------------------------------------- measuring (from an approved build)
@@ -208,7 +208,7 @@ def _from_widths(Lin, name, V, disk):
 
 def limb_world(V, L):
     """A limb outline's points in rig space (from its bone's frame)."""
-    a, b = _joint(V, L["from"]), _joint(V, L["to"])
+    a, b = rig.joint(V, L["from"]), rig.joint(V, L["to"])
     d = b - a; n = np.array([-d[1], d[0]]) / (np.linalg.norm(d) or 1.0)
     return [tuple(a + d * t + n * q) for t, q in L["points"]]
 
@@ -304,7 +304,7 @@ def _rig(build):
     hip, views = {}, {}
     for v in ("back", "front"):
         ovr = (b.get("puppet") or {}).get("joints", {}).get(v)
-        views[v] = pp._build(Image.open(ai_kit.AI_DIR / src[v]), v, hip, ovr); views[v]["view"] = v
+        views[v] = pp.build_view(Image.open(ws.AI_DIR / src[v]), v, hip, ovr); views[v]["view"] = v
     return views, src
 
 
@@ -389,7 +389,7 @@ def state():
     """What the Workshop template editor needs: the spec, the art it was measured from, the preview files."""
     spec = load(); out = out_dir()
     frm = spec.get("from") or {}
-    art = {v: frm.get(v) for v in ("front", "back") if frm.get(v) and (ai_kit.AI_DIR / frm[v]).exists()}
+    art = {v: frm.get(v) for v in ("front", "back") if frm.get(v) and (ws.AI_DIR / frm[v]).exists()}
     files = sorted(p.name for p in out.glob("*.*")) if out.exists() else []
     made = int(max((p.stat().st_mtime for p in out.glob("*.*")), default=0)) if out.exists() else 0
     return {"spec": spec, "art": art, "dir": ws.rel(out), "files": files, "preview_made": made}
@@ -407,15 +407,6 @@ def rig_from_spec(spec, view):
 
 
 # ----------------------------------------------------------------------------- rendering (from the spec only)
-
-def _joint(V, name):
-    if "." in name:
-        k, j = name.split(".")
-        return np.array(V["joints"][k][j], float)
-    return np.array(V["joints"][name], float)
-
-
-
 
 def _poly_cov(N, s, poly, soft=1.5):
     big = Image.new("L", (2 * N, 2 * N), 0)
@@ -443,22 +434,12 @@ def _outline(rgb, cov, w):
     return rgb * (1 - rim) + np.array(LINE, float)[None, None] * rim
 
 
-def _waist(V, s, torso_cov):
-    """The waistband as a bowed line across the torso's width at the seam height."""
-    sm = V["seams"]["waist"]; y = sm["y"]
-    row = np.nonzero(torso_cov[int(y * s)] > 0.5)[0]
-    if not len(row):
-        return []
-    x0, x1 = row.min() / s, row.max() / s; cx, hw = (x0 + x1) / 2, (x1 - x0) / 2
-    return [(cx + hw * u, y + sm["bow"] * hw * (1 - u * u)) for u in np.linspace(-1, 1, 25)]
-
-
 def render(spec, view, s=2):
     """Every part as its own whole image on the rig canvas (PX*s px): (rgba, guides rgba, pivot in rig px)."""
     V = spec["views"][view]; N = PX * s
     covs, thick, bones = {}, {}, {}
     for name, L in V["limbs"].items():
-        p0, p1 = _joint(V, L["from"]), _joint(V, L["to"])
+        p0, p1 = rig.joint(V, L["from"]), rig.joint(V, L["to"])
         covs[name] = _poly_cov(N, s, _catmull(limb_world(V, L)), soft=0.6)
         thick[name] = float(np.mean([abs(q) for _, q in L["points"]])) * s
         bones[name] = (p0, p1)
@@ -466,8 +447,8 @@ def render(spec, view, s=2):
         sh = V["shapes"][name]
         covs[name] = _poly_cov(N, s, _catmull(sh["points"]) if "points" in sh else sh["poly"])
         thick[name] = math.sqrt(covs[name].sum() / math.pi) * 0.75
-    piv = {n: _joint(V, L["from"]) for n, L in V["limbs"].items()}
-    piv["torso"], piv["head"] = _joint(V, "pelvis"), _joint(V, "neck")
+    piv = {n: rig.joint(V, L["from"]) for n, L in V["limbs"].items()}
+    piv["torso"], piv["head"] = rig.joint(V, "pelvis"), rig.joint(V, "neck")
     out = {}
     for name, cov in covs.items():
         rgb = _outline(_shade(cov, thick[name]), cov, 1.6 * s)
@@ -479,9 +460,9 @@ def render(spec, view, s=2):
             for q in (a, b):
                 d.ellipse([q[0] - 3 * s, q[1] - 3 * s, q[0] + 3 * s, q[1] + 3 * s], outline=GUIDE_BONE, width=max(1, s))
         if name == "torso":
-            nk, pv = _joint(V, "neck") * s, _joint(V, "pelvis") * s
+            nk, pv = rig.joint(V, "neck") * s, rig.joint(V, "pelvis") * s
             d.line([tuple(nk), tuple(pv)], fill=GUIDE_BONE, width=max(1, s))
-            w = _waist(V, s, cov)
+            w = rig.waist(V, s, cov)
             if w:
                 d.line([(x * s, y * s) for x, y in w], fill=GUIDE_SEAM, width=2 * s)
         fc = V["shapes"]["head"].get("face") if name == "head" else None
@@ -497,7 +478,7 @@ def render(spec, view, s=2):
         if name.startswith("leg") and name.endswith(".upper"):
             # leg hole: the torso's lower edge where it crosses this thigh (shared with the torso's own edge)
             tc = covs["torso"] > 0.5; edge = tc & ~np.roll(tc, -1, 0)
-            ys, xs = np.nonzero(edge & (cov > 0.5) & (np.arange(N)[:, None] > _joint(V, "neck")[1] * s + 0.5 * (_joint(V, "crotch")[1] - _joint(V, "neck")[1]) * s))
+            ys, xs = np.nonzero(edge & (cov > 0.5) & (np.arange(N)[:, None] > rig.joint(V, "neck")[1] * s + 0.5 * (rig.joint(V, "crotch")[1] - rig.joint(V, "neck")[1]) * s))
             for x, y in zip(xs, ys):
                 d.ellipse([x - s, y - s, x + s, y + s], fill=GUIDE_SEAM)
         ga = np.asarray(g).copy(); ga[..., 3] = (ga[..., 3] * (cov > 0.02)).astype(np.uint8)
@@ -506,27 +487,6 @@ def render(spec, view, s=2):
 
 
 # ----------------------------------------------------------------------------- previews (rest pose, parts, walk)
-
-def _save(im, path, **kw):
-    """Save, retrying briefly: a viewer or virus scan can hold a fresh preview file for a moment (Errno 22 on Windows)."""
-    for i in range(10):
-        try:
-            return im.save(path, **kw)
-        except OSError:
-            if i == 9:
-                raise
-            time.sleep(0.4)
-
-
-def _compose(parts, order, guides=False):
-    N = next(iter(parts.values()))[0].shape[0]
-    cv = Image.new("RGBA", (N, N))
-    for n in order:
-        cv.alpha_composite(Image.fromarray(parts[n][0]))
-        if guides:
-            cv.alpha_composite(Image.fromarray(parts[n][1]))
-    return cv
-
 
 def _exploded(parts, order, guides=True):
     tiles = []
@@ -571,14 +531,14 @@ def preview(spec=None, s=2, frames=8):
         V = spec["views"][v]; parts = render(spec, v, s); order = V["order"]
         (out / v).mkdir(exist_ok=True)
         for n, (rgba, g, _) in parts.items():
-            _save(Image.fromarray(rgba), out / v / f"{n}.png"); _save(Image.fromarray(g), out / v / f"{n}.guides.png")
-        _save(_exploded(parts, order), out / f"parts_{v}.png")
-        rest = _compose(parts, order); rest_g = _compose(parts, order, guides=True)
+            imageops.save(Image.fromarray(rgba), out / v / f"{n}.png"); imageops.save(Image.fromarray(g), out / v / f"{n}.guides.png")
+        imageops.save(_exploded(parts, order), out / f"parts_{v}.png")
+        rest = rig.compose(parts, order); rest_g = rig.compose(parts, order, guides=True)
         B2, pieces = rig_from(rig_from_spec(spec, v), parts)
         B2["rigid"] = (pieces, order)
         imgs = [pp.on_bg(pp.render(B2, v, i / frames)) for i in range(frames)]
-        _save(imgs[0], out / f"walk_{v}.gif", save_all=True, append_images=imgs[1:], duration=120, loop=0)
-        art_p = ai_kit.AI_DIR / frm[v] if frm.get(v) else None
+        imageops.save(imgs[0], out / f"walk_{v}.gif", save_all=True, append_images=imgs[1:], duration=120, loop=0)
+        art_p = ws.AI_DIR / frm[v] if frm.get(v) else None
         art = pp.framed(Image.open(art_p).convert("RGB")) if art_p and art_p.exists() else Image.new("RGB", (PX, PX), pp.BG)
         res[v] = {"rest": rest, "guides": rest_g, "walk": imgs[2], "art": art}
     T = 400; f = ImageFont.load_default(size=18)
@@ -590,7 +550,7 @@ def preview(spec=None, s=2, frames=8):
             im = res[v][key]
             im = pp.on_bg(np.asarray(im.convert("RGBA").resize((PX, PX), Image.LANCZOS))) if key in ("rest", "guides") else im.convert("RGB")
             sheet.paste(im.resize((T, T), Image.LANCZOS), (c * T, 34 + r * T))
-    _save(sheet, out / "template_sheet.png")
+    imageops.save(sheet, out / "template_sheet.png")
     return {"dir": ws.rel(out), "files": sorted(p.name for p in out.glob("*.*"))}
 
 

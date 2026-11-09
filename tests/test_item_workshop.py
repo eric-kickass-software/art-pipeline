@@ -1,27 +1,26 @@
-"""Item Workshop backend (hdart.puppet_items) on the fake ComfyUI: a fitted item (cloth trousers) and a held one (iron sword) are
+"""Item Workshop backend (hdart.item_workshop) on the fake ComfyUI: a fitted item (cloth trousers) and a held one (iron sword) are
 generated on a fake-painted puppet, keyed into cel levels per material, split into per-part layers, approved, worn
 and re-keyed. The fake paints every masked area in the item material's key colour (shaded top to bottom, so there are
 several cel levels) and returns the txt2img sword as a leather grip + metal blade cut-out.
-Run: uv run python tests/test_puppet_items.py"""
+Run: uv run python tests/test_item_workshop.py"""
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import json, shutil, tempfile
 from pathlib import Path
 import numpy as np
 from PIL import Image
-import hdart.ai_kit as ak
 import hdart.config as config
 import hdart.workshop as ws
 import hdart.puppet_paint as ppt
 import hdart.puppet_face as pf
-import hdart.puppet_items as pi
+import hdart.item_workshop as iw
 import hdart.limner as lim
 from hdart.fake_comfy import FakeComfy, info
 
 tmp = Path(tempfile.mkdtemp())
-ak.AI_DIR = tmp / "ai"; ws.CAND = ak.AI_DIR / "candidates"; ws.STATE = ak.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "archive"
-shutil.copy(pi.SPEC, tmp / "items.json"); pi.SPEC = tmp / "items.json"
+ws.AI_DIR = tmp / "ai"; ws.CAND = ws.AI_DIR / "candidates"; ws.STATE = ws.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "archive"
+shutil.copy(iw.SPEC, tmp / "items.json"); iw.SPEC = tmp / "items.json"
 lim.root = lambda: tmp / "limner"   # design references: no approved Limner art until the design section below
-doc = pi.spec()
+doc = iw.spec()
 KEY = {m: np.array([int(e["key"][i:i + 2], 16) for i in (1, 3, 5)], float) for m, e in doc["materials"].items()}
 calls, paint_key = [], {"m": None}
 
@@ -45,18 +44,18 @@ def respond(nodes, uploads):
 
 
 fake = FakeComfy(respond).start()
-c = ppt.paint("human.male", n=1, seed=1)[0]; ppt.approve("human.male", c)
+c = pf.paint("human.male", n=1, seed=1)[0]; ppt.approve("human.male", c)
 
 # fitted: zones from the spec's rules, both views keyed, split per body part, levels in 0..4 on the cloth channel
 paint_key["m"] = "cloth"
-t = pi.generate("human", "item.cloth_trousers", seed=2)
-d = pi.out_dir("human", "item.cloth_trousers") / t; meta = json.loads((d / "meta.json").read_text())
+t = iw.generate("human", "item.cloth_trousers", seed=2)
+d = iw.out_dir("human", "item.cloth_trousers") / t; meta = json.loads((d / "meta.json").read_text())
 assert meta["on"] == "human.male" and meta["paint"] == c and meta["keyed"]["front"] > 2000 and meta["keyed"]["back"] > 2000
 assert any("from behind" in (p or "") for p in calls)   # the back is guided by an edit of the painted front (AB2)
 for v in ("front", "back"):
     lev = np.asarray(Image.open(d / f"levels_{v}.png")); on = lev[..., 3] > 0
     assert set(np.unique(lev[..., 1][on])) <= {4}, v                                         # cloth = channel 4
-    assert set(np.unique(lev[..., 0][on])) <= set(range(pi.LEVELS)) | {254} and len(np.unique(lev[..., 0][on])) >= 3, v
+    assert set(np.unique(lev[..., 0][on])) <= set(range(iw.LEVELS)) | {254} and len(np.unique(lev[..., 0][on])) >= 3, v
     parts = {f.stem for f in (d / "parts" / v).glob("*.png")}
     assert "torso" in parts and any(p.startswith("leg") for p in parts) and not any(p.startswith("arm") for p in parts), (v, parts)
     assert {f.stem for f in (d / "plevels" / v).glob("*.png")} == parts
@@ -65,79 +64,79 @@ assert (d / "prev_male_front.png").exists()
 # details sketch: saved with the zone (snapped to the palette, hard alpha; material strokes are zone in the UI), stamped on
 # the guide FLUX starts from; an empty sketch removes the file, reset removes both
 import base64, io
-pi.ZONES = tmp / "zones"
+iw.ZONES = tmp / "zones"
 _, sp, parts = pf.base("human.male")
-_, Z = pi.zones_for(sp, "front", parts["front"], "item.cloth_trousers", doc["items"]["item.cloth_trousers"])
+_, Z = iw.zones_for(sp, "front", parts["front"], "item.cloth_trousers", doc["items"]["item.cloth_trousers"])
 ys, xs = np.nonzero(Z); y0, xc = ys.min(), int(xs.mean())
-sk = np.zeros((pi.N, pi.N, 4), np.uint8)
+sk = np.zeros((iw.N, iw.N, 4), np.uint8)
 sk[y0 + 4:y0 + 24, xc - 40:xc + 40] = (*KEY["leather"].astype(np.uint8), 255)     # a leather belt
 sk[y0 + 24:y0 + 26, xc - 40:xc + 40] = (40, 30, 30, 200)                         # a line, slightly off the line colour
 sk[y0 + 40, xc] = (0, 255, 0, 60)                                                # faint: dropped
 u = lambda a: "data:image/png;base64," + base64.b64encode((lambda b: (Image.fromarray(a).save(b, "PNG"), b.getvalue())[1])(io.BytesIO())).decode()
-r = pi.save_zone("item.cloth_trousers", "front", u(np.dstack([np.where(Z, 255, 0).astype(np.uint8)] * 3)), sketch=u(sk))
-saved = np.asarray(Image.open(pi.sketch_path("item.cloth_trousers", "front")))
+r = iw.save_zone("item.cloth_trousers", "front", u(np.dstack([np.where(Z, 255, 0).astype(np.uint8)] * 3)), sketch=u(sk))
+saved = np.asarray(Image.open(iw.sketch_path("item.cloth_trousers", "front")))
 assert r["sketch_px"] == 80 * 22 and set(np.unique(saved[..., 3])) == {0, 255}
-assert tuple(saved[y0 + 25, xc, :3]) == pi._rgb(pi.LINE) and saved[y0 + 40, xc, 3] == 0
-t2 = pi.generate("human", "item.cloth_trousers", seed=5)
-d2 = pi.out_dir("human", "item.cloth_trousers") / t2; meta2 = json.loads((d2 / "meta.json").read_text())
+assert tuple(saved[y0 + 25, xc, :3]) == iw._rgb(iw.LINE) and saved[y0 + 40, xc, 3] == 0
+t2 = iw.generate("human", "item.cloth_trousers", seed=5)
+d2 = iw.out_dir("human", "item.cloth_trousers") / t2; meta2 = json.loads((d2 / "meta.json").read_text())
 assert meta2["sketch"] == ["front"], meta2.get("sketch")
 g = np.asarray(Image.open(d2 / "guide_front.png").convert("RGB")).astype(int)
 belt = g[y0 + 8:y0 + 20, xc - 30:xc + 30].reshape(-1, 3).mean(0)
 assert belt[2] > belt[1] + 60, belt                                               # blue (leather), not the green zone tint
 assert g[y0 + 25, xc].sum() < 150                                                 # the dark line
-pi.save_zone("item.cloth_trousers", "front", u(np.dstack([np.where(Z, 255, 0).astype(np.uint8)] * 3)), sketch=u(np.zeros_like(sk)))
-assert not pi.sketch_path("item.cloth_trousers", "front").exists() and pi.mask_path("item.cloth_trousers", "front").exists()
-pi.reset_zone("item.cloth_trousers", "front"); assert not pi.mask_path("item.cloth_trousers", "front").exists()
-pi.archive("human", "item.cloth_trousers", t2); pi.ZONES = config.specs_dir() / "item_zones"
+iw.save_zone("item.cloth_trousers", "front", u(np.dstack([np.where(Z, 255, 0).astype(np.uint8)] * 3)), sketch=u(np.zeros_like(sk)))
+assert not iw.sketch_path("item.cloth_trousers", "front").exists() and iw.mask_path("item.cloth_trousers", "front").exists()
+iw.reset_zone("item.cloth_trousers", "front"); assert not iw.mask_path("item.cloth_trousers", "front").exists()
+iw.archive("human", "item.cloth_trousers", t2); iw.ZONES = config.specs_dir() / "item_zones"
 
 # held: the cut-out keyed per material (leather grip, metal blade) and framed
 paint_key["m"] = None
-s = pi.generate("human", "item.iron_sword", seed=3)
-sd = pi.out_dir("human", "item.iron_sword") / s
+s = iw.generate("human", "item.iron_sword", seed=3)
+sd = iw.out_dir("human", "item.iron_sword") / s
 hl = np.asarray(Image.open(sd / "held_levels.png")); on = hl[..., 3] > 0
 assert {5, 6} <= set(np.unique(hl[..., 1][on])) and Image.open(sd / "held.png").size == hl.shape[1::-1]
 
 # approve, resolve, wear: the dressed build has the item over the paint; candidates listing
-pi.approve("human", "item.cloth_trousers", t); pi.approve("human", "item.iron_sword", s)
-assert pi.resolve("human", "item.cloth_trousers", "human.male") == t and pi.resolve("human", "item.cloth_trousers", "human.female") == t
-r = pi.render("human.male", [("item.cloth_trousers", t, {}), ("item.iron_sword", s, {})], frames=0)
-bare = pi.render("human.male", [], frames=0)
+iw.approve("human", "item.cloth_trousers", t); iw.approve("human", "item.iron_sword", s)
+assert iw.resolve("human", "item.cloth_trousers", "human.male") == t and iw.resolve("human", "item.cloth_trousers", "human.female") == t
+r = iw.render("human.male", [("item.cloth_trousers", t, {}), ("item.iron_sword", s, {})], frames=0)
+bare = iw.render("human.male", [], frames=0)
 assert np.any(np.asarray(r["front"][0]) != np.asarray(bare["front"][0]))
-assert [x["id"] for x in pi.candidates("human", "item.cloth_trousers")] == [t]
+assert [x["id"] for x in iw.candidates("human", "item.cloth_trousers")] == [t]
 
 # re-key from the saved paints (no GPU): same result
 before = (d / "levels_front.png").read_bytes()
 n_calls = len(calls)
-k = pi.rekey("human", "item.cloth_trousers", t)
+k = iw.rekey("human", "item.cloth_trousers", t)
 assert len(calls) == n_calls and k["front"] == meta["keyed"]["front"] and (d / "levels_front.png").read_bytes() == before
 
 # the queue entry point (job kind "item") and archive
-new = pi.job({"action": "generate", "race": "human", "item": "item.cloth_trousers", "n": 1, "seed": 4})
+new = iw.job({"action": "generate", "race": "human", "item": "item.cloth_trousers", "n": 1, "seed": 4})
 assert len(new) == 1 and new[0] != t
-pi.archive("human", "item.cloth_trousers", new[0])
-assert not (pi.out_dir("human", "item.cloth_trousers") / new[0]).exists() and pi.resolve("human", "item.cloth_trousers", "human.male") == t
+iw.archive("human", "item.cloth_trousers", new[0])
+assert not (iw.out_dir("human", "item.cloth_trousers") / new[0]).exists() and iw.resolve("human", "item.cloth_trousers", "human.male") == t
 
 # item bands (Workshop Editor): the doc lists each covered part's levels; hand edits change only band pixels, survive a
 # repaint of the part, and are redone on request; revert brings back the originals
-ld = pi.layer_doc("human", "item.cloth_trousers", t); lvs = ld["views"]["front"]["levels"]
+ld = iw.layer_doc("human", "item.cloth_trousers", t); lvs = ld["views"]["front"]["levels"]
 assert lvs and ld["slot"] == "legs" and ld["bandsEdited"] == []
-lk = sorted(lvs)[0]; part = lk[:-len(pi.LAYER_SEP)]; fl = d / "plevels" / "front" / f"{part}.png"
+lk = sorted(lvs)[0]; part = lk[:-len(iw.LAYER_SEP)]; fl = d / "plevels" / "front" / f"{part}.png"
 lv0 = np.asarray(Image.open(fl)).copy(); band = (lv0[..., 3] > 127) & (lv0[..., 0] < 254); assert band.any()
 p4 = np.zeros_like(lv0); p4[..., 0] = 4; p4[..., 3] = 255
-ld = pi.bands_save("human", "item.cloth_trousers", t, "front", {lk: u(p4)})
+ld = iw.bands_save("human", "item.cloth_trousers", t, "front", {lk: u(p4)})
 lv1 = np.asarray(Image.open(fl))
 assert (lv1[..., 0][band] == 4).all() and np.array_equal(lv1[..., 1], lv0[..., 1]) and np.array_equal(lv1[..., 0][~band], lv0[..., 0][~band])
 assert ld["bandsEdited"] == [f"front/{lk}"] and (d / "plevels_orig").exists()
-pi.layer_save("human", "item.cloth_trousers", t, "front", {lk: u(np.asarray(Image.open(d / "parts" / "front" / f"{part}.png")))})
+iw.layer_save("human", "item.cloth_trousers", t, "front", {lk: u(np.asarray(Image.open(d / "parts" / "front" / f"{part}.png")))})
 lv2 = np.asarray(Image.open(fl)); kept = band & (lv2[..., 3] > 127) & (lv2[..., 0] < 254) & (lv2[..., 1] == lv0[..., 1])
 assert kept.sum() > 0.9 * band.sum() and (lv2[..., 0][kept] == 4).all()
-ld = pi.bands_reset("human", "item.cloth_trousers", t, "front", lk); assert ld["bandsEdited"] == []
+ld = iw.bands_reset("human", "item.cloth_trousers", t, "front", lk); assert ld["bandsEdited"] == []
 assert not (np.asarray(Image.open(fl))[..., 0][band] == 4).all()
-pi.layer_revert("human", "item.cloth_trousers", t)
+iw.layer_revert("human", "item.cloth_trousers", t)
 assert np.array_equal(np.asarray(Image.open(fl)), lv0) and "bands_edited" not in json.loads((d / "meta.json").read_text())
 # the Workshop Editor's walk: a paint candidate wearing items as painted (ramps None) or in a ramp, with a skin ramp
 pc = pf.base_cid("human.male")
-strip = lambda **kw: np.asarray(Image.open(io.BytesIO(base64.b64decode(pi.editor_walk("human", "human.male", pc, "front", **kw)["strip"].split(",", 1)[1]))))
+strip = lambda **kw: np.asarray(Image.open(io.BytesIO(base64.b64decode(iw.editor_walk("human", "human.male", pc, "front", **kw)["strip"].split(",", 1)[1]))))
 plain = strip(items=[]); assert plain.shape == (256, 256 * 8, 3)
 painted = strip(items=[["item.cloth_trousers", t, None]]); ramped = strip(items=[["item.cloth_trousers", t, {"cloth": "red"}]])
 assert np.any(painted != plain) and np.any(ramped != painted)
@@ -147,43 +146,43 @@ for eid, cid in (("slot.legs.cloth", "c1"), ("item.iron_sword", "c2")):
     (tmp / "limner" / "gear" / eid / cid).mkdir(parents=True)
     Image.new("RGBA", (64, 64), (90, 60, 40, 255)).save(tmp / "limner" / "gear" / eid / cid / "master.png")
 (tmp / "limner" / "state.json").write_text(json.dumps({"approved": {"gear": {"slot.legs.cloth": "c1", "item.iron_sword": "c2"}}}))
-its = pi.spec()["items"]
-assert pi.design_auto("item.cloth_trousers", its["item.cloth_trousers"]) == ("slot.legs.cloth", "slot fallback")
-assert pi.design_auto("item.iron_sword", its["item.iron_sword"]) == ("item.iron_sword", "item")
-assert pi.design_ref("item.iron_helm", its["item.iron_helm"]) is None   # nothing approved for a head
-assert pi.design_ref("item.cloth_trousers", {**its["item.cloth_trousers"], "design": "none"}) is None
-st = pi.state("human"); assert st["design"]["item.cloth_trousers"]["entry"] == "slot.legs.cloth" and "item.iron_sword" in st["designChoices"]
+its = iw.spec()["items"]
+assert iw.design_auto("item.cloth_trousers", its["item.cloth_trousers"]) == ("slot.legs.cloth", "slot fallback")
+assert iw.design_auto("item.iron_sword", its["item.iron_sword"]) == ("item.iron_sword", "item")
+assert iw.design_ref("item.iron_helm", its["item.iron_helm"]) is None   # nothing approved for a head
+assert iw.design_ref("item.cloth_trousers", {**its["item.cloth_trousers"], "design": "none"}) is None
+st = iw.state("human"); assert st["design"]["item.cloth_trousers"]["entry"] == "slot.legs.cloth" and "item.iron_sword" in st["designChoices"]
 calls.clear(); paint_key["m"] = "cloth"
-t2 = pi.generate("human", "item.cloth_trousers", seed=4); d2 = pi.out_dir("human", "item.cloth_trousers") / t2
+t2 = iw.generate("human", "item.cloth_trousers", seed=4); d2 = iw.out_dir("human", "item.cloth_trousers") / t2
 assert json.loads((d2 / "meta.json").read_text())["design"] == {"entry": "slot.legs.cloth", "cid": "c1", "why": "slot fallback"}
 assert (d2 / "design_ref.png").exists() and sum("copies the design" in (c or "") for c in calls) == 1   # the front pass only
-calls.clear(); s2 = pi.generate("human", "item.iron_sword", seed=5); sd2 = pi.out_dir("human", "item.iron_sword") / s2
+calls.clear(); s2 = iw.generate("human", "item.iron_sword", seed=5); sd2 = iw.out_dir("human", "item.iron_sword") / s2
 assert calls[0].startswith("The same object as in image 1") and "(a tome" not in calls[0]
 hl = np.asarray(Image.open(sd2 / "held_levels.png")); assert {5, 6} <= set(np.unique(hl[..., 1][hl[..., 3] > 0]))
-bid, plan = pi.plan_design_batch(n=2)   # the overnight batch: one retryable job per candidate, per-sex pieces on both builds
+bid, plan = iw.plan_design_batch(n=2)   # the overnight batch: one retryable job per candidate, per-sex pieces on both builds
 assert sorted({a["item"] for _, a in plan}) == ["item.cloth_trousers", "item.iron_sword"] and len(plan) == 4
 assert all(a["n"] == 1 and a["retries"] == 2 and a["kind"] == "item" for _, a in plan)
-assert isinstance(pi.limner_intake(dry_run=True)["added"], list)
+assert isinstance(iw.limner_intake(dry_run=True)["added"], list)
 try:
-    pi.save_item("item.cloth_trousers", {"design": "slot.head.plate"}); raise AssertionError("unapproved design saved")
+    iw.save_item("item.cloth_trousers", {"design": "slot.head.plate"}); raise AssertionError("unapproved design saved")
 except ValueError:
     pass
-pi.save_item("item.cloth_trousers", {"design": "none"}); assert pi.spec()["items"]["item.cloth_trousers"]["design"] == "none"
+iw.save_item("item.cloth_trousers", {"design": "none"}); assert iw.spec()["items"]["item.cloth_trousers"]["design"] == "none"
 
 # gear sets: a "cut" zone takes its area out (the hood's face opening); every set piece has a unique zone
 _, gsp, gparts = pf.base("human.male")
-hood = pi.GEAR_SETS["cloth"]["head"][1]["zones"]
-whole = pi.zone_masks(gsp, "front", gparts["front"], [z for z in hood if not z.get("cut")])["head"]
-cut = pi.zone_masks(gsp, "front", gparts["front"], hood)["head"]
+hood = iw.GEAR_SETS["cloth"]["head"][1]["zones"]
+whole = iw.zone_masks(gsp, "front", gparts["front"], [z for z in hood if not z.get("cut")])["head"]
+cut = iw.zone_masks(gsp, "front", gparts["front"], hood)["head"]
 assert cut.sum() < whole.sum() * 0.8 and not (cut & ~whole).any()
 seen = set()
-for pid, (mat, slot) in pi.gear_set_pieces().items():
-    d = pi.GEAR_SETS[mat][slot][1]
+for pid, (mat, slot) in iw.gear_set_pieces().items():
+    d = iw.GEAR_SETS[mat][slot][1]
     if "zones_from" in d:
         continue
-    z = np.any(list(pi.zone_masks(gsp, "front", gparts["front"], d["zones"]).values()), 0)
+    z = np.any(list(iw.zone_masks(gsp, "front", gparts["front"], d["zones"]).values()), 0)
     assert z.any() and z.tobytes() not in seen, pid; seen.add(z.tobytes())
-out = pi.gear_set_intake(dry_run=True)   # nothing is approved in this temp Limner: every set piece the spec lacks is skipped
-assert not out["added"] and set(out["skipped"]) == {p for p in pi.gear_set_pieces() if p not in pi.spec()["items"]}, out
+out = iw.gear_set_intake(dry_run=True)   # nothing is approved in this temp Limner: every set piece the spec lacks is skipped
+assert not out["added"] and set(out["skipped"]) == {p for p in iw.gear_set_pieces() if p not in iw.spec()["items"]}, out
 fake.stop(); shutil.rmtree(tmp)
 print("ok")

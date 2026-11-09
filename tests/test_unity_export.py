@@ -5,19 +5,19 @@ import json, os, shutil, tempfile
 from pathlib import Path
 import numpy as np
 from PIL import Image
-import hdart.ai_kit as ak
 import hdart.workshop as ws
 import hdart.puppet_paint as ppt
+import hdart.puppet_face as pf
 import hdart.unity_export as ue
 from hdart import config
 from hdart.fake_comfy import FakeComfy
 
 tmp = Path(tempfile.mkdtemp())
-ak.AI_DIR = tmp / "ai"; ws.CAND = ak.AI_DIR / "candidates"; ws.STATE = ak.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "archive"
+ws.AI_DIR = tmp / "ai"; ws.CAND = ws.AI_DIR / "candidates"; ws.STATE = ws.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "archive"
 os.environ["HD_PROJECT"] = str(tmp / "game")   # the export lands in this fake project, not the real game
 
 with FakeComfy():
-    c = ppt.paint("human.male", n=1, seed=1)[0]; ppt.approve("human.male", c)
+    c = pf.paint("human.male", n=1, seed=1)[0]; ppt.approve("human.male", c)
 
 assert ue.out_root() == tmp / "game" / "Assets/StreamingAssets/Art/Puppets" == config.project().export("puppets")
 d = Path(ue.export("human", size=256))

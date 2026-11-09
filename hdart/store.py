@@ -227,6 +227,13 @@ def save_meta(d, meta):
     write_json(Path(d) / "meta.json", meta)
 
 
+def progress(d: Path, step: int, of: int, stage: str, seed: int | None, error: str | None = None) -> None:
+    """Write progress.json in a candidate folder being made (the pages show it); the tool removes it when the candidate
+    is done."""
+    (Path(d) / "progress.json").write_text(json.dumps({"step": step, "of": of, "stage": stage, "seed": seed, "error": error,
+                                                      "at": int(time.time())}), encoding="utf-8")
+
+
 def folders(root, finished=False):
     """A root's candidate folders, sorted by name (ids sort by seed, then time). finished=True: only those with a
     meta.json (done being made)."""

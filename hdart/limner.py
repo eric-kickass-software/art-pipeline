@@ -39,7 +39,8 @@ def root():
     return config.data_dir() / "sprites" / "limner"
 
 
-def _state():
+def state_store() -> store.State:
+    """The Limner's state file (approvals per category and entry) as a store.State."""
     return store.State(root() / "state.json", {"approved": {}})
 
 
@@ -330,7 +331,7 @@ def _remove_bg(img):
         rgba = g.add("JoinImageWithAlpha", image=load[0], alpha=inv[0])
         g.add("SaveImage", images=rgba[0], filename_prefix="hdart/limner_bg")
         return g.nodes
-    return comfy._pass({"img": img.convert("RGB")}, build, mode="RGBA")
+    return comfy.run_images({"img": img.convert("RGB")}, build, mode="RGBA")
 
 
 def _save(cat, eid, img, seed, p, style, kind, sp, **extra):
@@ -442,7 +443,7 @@ def ensure_watchdog():
 
 def mark_reviewed(cat):
     import time
-    with _state().edit() as s:
+    with state_store().edit() as s:
         s.setdefault("reviewed", {})[cat] = int(time.time())
     return {"ok": True}
 
@@ -450,7 +451,7 @@ def mark_reviewed(cat):
 # ----------------------------------------------------------------------------- state, edits, page data
 
 def approve(cat, eid, cid, on=True):
-    with _state().edit() as s:
+    with state_store().edit() as s:
         store.pick(s, ("approved", cat, eid), cid, on)
     return {"ok": True}
 
@@ -613,7 +614,7 @@ def move_entries(src, dst, ids=None, dry_run=False):
     have = {p.name for p in (root() / src).iterdir() if p.is_dir()} if (root() / src).exists() else set()
     sp = spec()
     have |= {k.split("/", 1)[1] for k in sp.get("entries", {}) if k.startswith(f"{src}/")}
-    have |= set(_state().load().get("approved", {}).get(src, {}))
+    have |= set(state_store().load().get("approved", {}).get(src, {}))
     ids = sorted(i for i in (ids or have) if i in listed and i in have)
     clash = [i for i in ids if (root() / dst / i).exists() and (root() / src / i).exists()]
     ids = [i for i in ids if i not in clash]
@@ -629,7 +630,7 @@ def move_entries(src, dst, ids=None, dry_run=False):
             m = store.read_meta(c)
             if m.get("category") == src:
                 store.write_json(c / "meta.json", {**m, "category": dst, "moved_from": src})
-    with _state().edit() as s:
+    with state_store().edit() as s:
         ap = s.setdefault("approved", {})
         for i in ids:
             if i in ap.get(src, {}):
@@ -649,7 +650,7 @@ def move_entries(src, dst, ids=None, dry_run=False):
 def doc():
     """Everything the page shows."""
     sp = spec()
-    stt = _state().load()
+    stt = state_store().load()
     approved, reviewed = stt.get("approved", {}), stt.get("reviewed", {})
     cats = {}
     for cat, es in entries(sp).items():
@@ -706,7 +707,7 @@ def export(cats=None):
     art = _export_root()
     if art is None:
         raise ValueError("the project has no 'art' export path")
-    approved, sp, done = _state().load().get("approved", {}), spec(), {}
+    approved, sp, done = state_store().load().get("approved", {}), spec(), {}
     es_all = entries(sp)
     listed = {c: {e["id"] for e in es} for c, es in es_all.items()}
 

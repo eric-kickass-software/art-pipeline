@@ -296,7 +296,7 @@ def _mask_image(mask):
     return Image.fromarray(m.astype(np.uint8))
 
 
-def _pass(images, build, mode="RGB"):
+def run_images(images: dict, build, mode: str = "RGB"):
     """Upload `images` ({key: PIL image}), call build(names) -> nodes, run it, return the first output (PIL, `mode`)."""
     with tempfile.TemporaryDirectory(prefix="hdart_") as d:
         d, tag = Path(d), uuid.uuid4().hex[:12]
@@ -319,13 +319,13 @@ def img2img(init, prompt, *, seed, denoise, lora=0.0, steps=8, refs=(), mask=Non
     images.update({f"ref{k}": r for k, r in enumerate(refs)})
     if mask is not None:
         images["mask"] = _mask_image(mask)
-    return _pass(images, lambda n: build_img2img(n["init"], prompt, denoise=denoise, seed=seed, steps=steps,
+    return run_images(images, lambda n: build_img2img(n["init"], prompt, denoise=denoise, seed=seed, steps=steps,
                                                  lora_strength=lora, prefix=prefix, mask_name=n.get("mask"),
                                                  ref_images=[n[f"ref{k}"] for k in range(len(refs))]))
 
 
 def repaint(img, mask, prompt, *, seed, denoise=1.0, lora=0.0, steps=8, reference=True, prefix="hdart/repaint"):
     """FLUX masked repaint of a PIL image (build_repaint); `mask` as in img2img. Returns the output at ComfyUI's size."""
-    return _pass({"img": img, "mask": _mask_image(mask)},
+    return run_images({"img": img, "mask": _mask_image(mask)},
                  lambda n: build_repaint(n["img"], n["mask"], prompt, denoise=denoise, seed=seed, steps=steps,
                                          lora_strength=lora, prefix=prefix, reference=reference))

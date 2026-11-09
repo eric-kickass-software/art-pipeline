@@ -14,9 +14,9 @@ import heapq
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from . import ai_kit, jobs, workshop as ws
+from . import imageops, jobs, rig, workshop as ws
 
-PX = 576                  # the rig canvas (rest pose); was 512 until 2026-10-31
+PX = rig.PX               # the rig canvas (rest pose)
 PAD = (32, 64)            # where the old 512 frame (and the 512 px mannequins) sits in it: headroom for hair and helmets
 BG = (196, 198, 204)
 yy, xx = np.mgrid[:PX, :PX]
@@ -84,7 +84,7 @@ def at_frac(path, f):
 
 
 def skeleton(img):
-    m = ai_kit.clean(ws.figure_mask(img))
+    m = imageops.clean(imageops.figure_mask(img))
     th = thickness(m)
     ys, xs = np.nonzero(m); y0, y1 = ys.min(), ys.max(); H = y1 - y0
     widths = m.sum(1)
@@ -281,8 +281,8 @@ def framed(img):
     return out
 
 
-def _build(img, view, hip_frac, overrides=None):
-    """Test 3: rounded joints with pivots inside them, torso complete underneath, chest never on an arm,
+def build_view(img, view, hip_frac, overrides=None):
+    """One view of the detection puppet from mannequin art (the Template measures its rig from it). Test 3: rounded joints with pivots inside them, torso complete underneath, chest never on an arm,
     shorts stay on the torso (legs start inside them, drawn under the torso)."""
     img = framed(img.convert("RGB"))
     a = np.asarray(img); ai = a.astype(int)
@@ -295,7 +295,7 @@ def _build(img, view, hip_frac, overrides=None):
     core = grey.copy()
     for _ in range(3):  # drop the thin anti-aliased edges of limbs, which are grey-ish too
         core &= np.roll(core, 1, 0) & np.roll(core, -1, 0) & np.roll(core, 1, 1) & np.roll(core, -1, 1)
-    core = ai_kit.clean(grow(core, 3) & grey, min_area=300)
+    core = imageops.clean(grow(core, 3) & grey, min_area=300)
     skin = m & (ai[..., 0] > ai[..., 2] + 25) & ((mx - mn) > 0.2 * np.maximum(mx, 1))
     cloth = core | (grow(core, 3) & m & ~skin)  # the garment, with its own dark outline (the hem keeps its line)
     disc = lambda p, r: ((xx - p[0]) ** 2 + (yy - p[1]) ** 2) <= r * r
@@ -878,7 +878,7 @@ def render(B, view, phase, clip="walk"):
 
 
 def out_dir(build):
-    return ai_kit.AI_DIR / "puppet" / build
+    return ws.AI_DIR / "puppet" / build
 
 
 def template(build, frames=8):
@@ -892,7 +892,7 @@ def template(build, frames=8):
     hip_frac, views = {}, {}
     for v in ("back", "front"):  # the back first: the front takes its hip height from the back view's buttocks
         ovr = (b.get("puppet") or {}).get("joints", {}).get(v)
-        views[v] = _build(Image.open(ai_kit.AI_DIR / src[v]), v, hip_frac, ovr)
+        views[v] = build_view(Image.open(ws.AI_DIR / src[v]), v, hip_frac, ovr)
     meta = {"build": build, "from": src, "made": int(time.time()), "views": {}}
     for v in ("front", "back"):
         B = views[v]

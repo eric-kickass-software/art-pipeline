@@ -1,9 +1,14 @@
-"""Palette ramps: 5 colours per ramp, darkest first, hue-shifted from a base colour."""
+"""Palette ramps: 5 colours per ramp, darkest first, hue-shifted from a base colour; and the palettes spec
+(specs/palettes.json: skin / hair / eye / material ramp groups; palettes_doc(), save_ramp(), delete_ramp())."""
 import colorsys
 import json
 from pathlib import Path
 
 import numpy as np
+
+from . import config
+
+PALETTES = config.specs_dir() / "palettes.json"
 
 
 def hex_rgb(h):
@@ -77,3 +82,49 @@ class Palettes:
                 d.rectangle([x * scale, y * scale, (x + 1) * scale - 1, (y + 1) * scale - 1], fill=tuple(int(v) for v in c))
             d.text((self.size * scale + 6, y * scale), n, fill=(220, 220, 220))
         img.save(path)
+
+
+# ----------------------------------------------------------------------------- the palettes spec
+
+def palettes_doc() -> dict:
+    """specs/palettes.json: {"rampSize", "outline", "groups": {group: {name: ramp}}}."""
+    return json.loads(PALETTES.read_text(encoding="utf-8"))
+
+
+def save_ramp(group: str, name: str, base: str | None = None, tune: dict | None = None, colors: list | None = None,
+              races: list | None = None, old_name: str | None = None) -> dict:
+    """Create or update one ramp in specs/palettes.json. `colors` (resolved hex, darkest first) is what the game uses;
+    `base` and `tune` are kept so the ramp editor can reopen it."""
+    if not name or not all(ch.isalnum() or ch in "_-" for ch in name):
+        raise ValueError("Ramp names are letters, digits, _ and - only.")
+    doc = palettes_doc()
+    grp = doc["groups"].setdefault(group, {})
+    if old_name and old_name != name:
+        if name in grp:
+            raise ValueError(f"{group}.{name} already exists.")
+        grp = {(name if k == old_name else k): v for k, v in grp.items()}
+        doc["groups"][group] = grp
+    e = grp.setdefault(name, {})
+    if base:
+        e["base"] = base
+    if tune:
+        e["tune"] = tune
+    if colors:
+        if len(colors) != doc.get("rampSize", 5):
+            raise ValueError(f"A ramp has {doc.get('rampSize', 5)} colours.")
+        e["colors"] = colors
+    if races is not None:
+        if races:
+            e["races"] = races
+        else:
+            e.pop("races", None)
+    PALETTES.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
+    return doc
+
+
+def delete_ramp(group: str, name: str) -> dict:
+    """Remove one ramp from specs/palettes.json; returns the new document."""
+    doc = palettes_doc()
+    doc["groups"].get(group, {}).pop(name, None)
+    PALETTES.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
+    return doc

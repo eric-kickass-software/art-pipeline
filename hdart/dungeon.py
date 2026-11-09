@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
-from . import ai_kit, comfy, config, iso, jobs, patterns, store
+from . import imageops, comfy, config, iso, jobs, patterns, store
 from .locks import CELLS as _CELL_CACHE, DUNGEON as LOCK, HARMONY as _REF_CACHE
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -188,7 +188,7 @@ def gen_tile(piece, tile=64, seed=1, denoise=0.72, lora=0.0, st=None):
     init = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.5))
     prompt = f"{style_text(st)}, {piece['prompt']}"
     out = _i2i(init, prompt, seed, denoise, lora)
-    from .workshop import enforce_silhouette  # fill anything left white inside the outline, clear outside
+    from .imageops import enforce_silhouette  # fill anything left white inside the outline, clear outside
     return enforce_silhouette(out, mask), mask
 
 
@@ -416,9 +416,9 @@ def template_render(tpl, kind, per=MASTER_PX, height_units=WALL_UNITS if "WALL_U
     """A template as a floor square or a wall elevation: {"rgb", "height", "region"} (library image templates too)."""
     if tpl["pattern"] == "image":
         from . import library
-        return library.image_template(tpl, kind, per, height_units * iso._KZ)
+        return library.image_template(tpl, kind, per, height_units * iso.KZ)
     if kind == "wall":
-        return patterns.wall_template(tpl, height_units * iso._KZ, per)
+        return patterns.wall_template(tpl, height_units * iso.KZ, per)
     return patterns.floor_template(tpl, per)
 
 
@@ -584,16 +584,10 @@ def gen_prop(piece, seed=1, lora=0.0, st=None, size=512):
     p = comfy.run(comfy.build_txt2img(prompt, size, size, seed=seed, lora_strength=lora, remove_bg=True,
                                       prefix="hdart/dun_prop"), DUN / "tmp")[0]
     rgba = np.asarray(Image.open(p).convert("RGBA"))
-    mask = ai_kit.clean(rgba[..., 3] > 127, min_area=300)
+    mask = imageops.clean(rgba[..., 3] > 127, min_area=300)
     rgb = rgba[..., :3].copy()
     rgb[~mask] = 255
     return Image.fromarray(rgb), mask
-
-
-def cut_white(img, thresh=40):
-    """Prop silhouette: non-white pixels, largest connected blob(s), small holes filled."""
-    fg = ai_kit.foreground(img)
-    return ai_kit.clean(fg, min_area=400)
 
 
 # ----------------------------------------------------------------------------- downsample
@@ -781,7 +775,7 @@ def gen_on_base(piece, base, seed, denoise, lora, st):
     """wall_decor: img2img over an approved base wall so stone, colour and outline match the plain wall."""
     img, mask = base
     out = _i2i(img, f"{style_text(st)}, {piece['prompt']}", seed, denoise, lora)
-    from .workshop import enforce_silhouette
+    from .imageops import enforce_silhouette
     out = np.asarray(enforce_silhouette(out, mask)).copy()
     white = mask & (out.min(-1) > 225)  # img2img bleeds the white backdrop in at the outline: use the base there
     out[white] = np.asarray(img)[white]
@@ -1143,8 +1137,8 @@ def export(name, tiles=(32, 64)):
             entry["variants"].append(var)
     root.mkdir(parents=True, exist_ok=True)
     (root / "set.json").write_text(json.dumps(meta, indent=1) + "\n", encoding="utf-8")
-    from . import item_export
-    item_export.write_index()
+    from . import art_pack
+    art_pack.write_index()
     return root
 
 
@@ -1587,13 +1581,13 @@ def edit_candidate(name, pid, rel, prompt, denoise=0.5, seed=1):
     if method in ELEV_METHODS:
         if method == "door_repaint":
             fam = wall_family_settings(piece_of(spec, piece["from"]))
-            x0, x1, y0, _ = door_rect(fam, per, iso._KZ * per, img.height)
+            x0, x1, y0, _ = door_rect(fam, per, iso.KZ * per, img.height)
             xx, yy = np.arange(img.width) + 0.5, np.arange(img.height) + 0.5
             weight = (np.clip(np.minimum(xx - x0, x1 - xx) / (0.04 * per), 0, 1)[None, :]
                       * np.clip((yy - y0) / (0.04 * per), 0, 1)[:, None])
             full = door_texture_prompt(set_style(spec), material_prompt(name, piece_of(spec, piece["from"])), text)
         else:
-            weight = elev_keep_mask(img.width, img.height, per, iso._KZ * per, top=0.0 if method == "wall_master" else 0.15,
+            weight = elev_keep_mask(img.width, img.height, per, iso.KZ * per, top=0.0 if method == "wall_master" else 0.15,
                                     bottom=0.0 if method == "wall_master" else 0.08)
             full = wall_texture_prompt(set_style(spec), text)
         out = repaint(img, weight, full, seed, denoise=float(denoise), reference=False)
@@ -1667,8 +1661,8 @@ ELEV_METHODS = ("wall_master", "wall_repaint", "door_repaint")
 
 
 def elev_size(h=WALL_UNITS, tiles=ELEV_PERIOD, per=MASTER_PX):
-    """(w, h) px of an elevation: `per` px per tile along the wall, true proportions up it (1 unit = iso._KZ tiles)."""
-    return tiles * per, int(round(h * iso._KZ * per / 16)) * 16
+    """(w, h) px of an elevation: `per` px per tile along the wall, true proportions up it (1 unit = iso.KZ tiles)."""
+    return tiles * per, int(round(h * iso.KZ * per / 16)) * 16
 
 
 def project_elevation(piece, tile, elev, period=ELEV_PERIOD, h=None):
@@ -2104,7 +2098,7 @@ def gen_wall_variant(name, spec, piece, seed=1, denoise=None, lora=0.0):
     m = m.resize((per, int(round(m.height * per / m.width))), Image.LANCZOS)
     base = Image.fromarray(np.tile(np.asarray(m), (1, N, 1)))
     w, h = base.size
-    mask = elev_keep_mask(w, h, per, iso._KZ * per)
+    mask = elev_keep_mask(w, h, per, iso.KZ * per)
     prompt = wall_texture_prompt(set_style(spec), piece["prompt"])
     if N > 1 and fam.get("span", "once") == "once":
         # the run is one piece: its feature should happen once across it, not once per cell (FLUX copies the
@@ -2131,7 +2125,7 @@ def gen_door(name, spec, piece, seed=1, denoise=None, lora=0.0):
     fam = wall_family_settings(master)
     base, _ = wall_master_image(name, spec, master_id)
     per, H = base.width, base.height
-    x0, x1, y0, _ = door_rect(fam, per, iso._KZ * per, H)
+    x0, x1, y0, _ = door_rect(fam, per, iso.KZ * per, H)
     X0, X1, Y0 = per + int(round(x0)), per + int(round(x1)), int(round(y0))
     frame, ramp = 0.06 * per, 0.04 * per
     left, right = max(per, X0 - frame), min(2 * per, X1 + frame)
@@ -2406,13 +2400,6 @@ def trial(name, master_id, rel, variation, seed=1):
     return trel
 
 
-def fresh_approved(name, master_id, pid):
-    """Approved variants of a family piece that were made from the active master (others are stale: their edges
-    are the old master's, or unknown for variants made before this was recorded)."""
-    active, ps = master_rel(name, master_id), state(name)["pieces"].get(pid, {})
-    return [r for r in ps.get("approved", []) if ps.get("meta", {}).get(r, {}).get("master") == active]
-
-
 def variant_jobs(name, master_id, var_ids=None, sizes=None, n=1, doors=False):
     """Generation jobs for the chosen variations (default all) at the chosen sizes (default the family's enabled
     sizes), n candidates each: prompt = the active master's prompt + the variation text, tagged with its id.
@@ -2505,7 +2492,7 @@ def family_palette(name, master_id):
         for rel in ps.get("candidates", []):
             with Image.open(set_dir(name) / rel) as im:
                 size = im.size
-            weight = (elev_keep_mask(size[0], size[1], size[0] // N, iso._KZ * size[0] // N)
+            weight = (elev_keep_mask(size[0], size[1], size[0] // N, iso.KZ * size[0] // N)
                       if p.get("method") == "wall_repaint" else family_weight(p, size[0]))
             mean = image_lab_stats(name, rel, weight)[0]
             meta = ps.get("meta", {}).get(rel, {})
@@ -2567,7 +2554,7 @@ def blockout_include(name, floor_id=None, wall_id=None):
                 if not door:
                     return e
                 a = np.asarray(e).copy()
-                x0, x1, y0, _ = door_rect(fam, e.width, iso._KZ * e.width, e.height)
+                x0, x1, y0, _ = door_rect(fam, e.width, iso.KZ * e.width, e.height)
                 a[int(y0):, int(x0):int(x1)] = (88, 58, 38)  # a flat door fill
                 return Image.fromarray(a)
             key = _json.dumps(tpl, sort_keys=True) + str((fam["height"], fam["door_width"], fam["door_height"]))
@@ -2631,7 +2618,7 @@ def sheet_template(tpl, kind, sh):
     if kind == "wall":
         p["across"] = max(1, int(round(1 / max(sh["wall_brick"], 0.04))))
         if defs.get("course", 0):
-            p["course"] = round(sh["wall_course"] * iso._KZ, 4)
+            p["course"] = round(sh["wall_course"] * iso.KZ, 4)
     else:
         p["across"] = max(1, int(round(1 / max(sh["floor_stone"], 0.04))))
         if defs.get("course", 0):

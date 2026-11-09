@@ -3,13 +3,13 @@ a big extra ear and one hand missing. Run: uv run python tests/test_mannequin_fi
 import fixture_specs  # noqa: F401  (HD_SPECS: a copy of tests/fixtures/specs; before any hdart import)
 import numpy as np
 from PIL import Image
-from hdart import mannequin_fit as mf, puppet_paint as ppt, puppet_template as pt
+from hdart import imageops, mannequin_fit as mf, puppet_paint as ppt, puppet_template as pt, rig
 
 spec = pt.load(); V = spec["views"]["front"]; parts = pt.render(spec, "front", ppt.S); order = V["order"]
 N = parts["head"][0].shape[0]; SZ = 512; k = SZ / N
 pose = {"armA.hand": None}   # left out of the art
 swing = {"armB.upper", "armB.lower", "armB.hand"}
-piv = complex(*(np.array(pt._joint(V, V["limbs"]["armB.upper"]["from"]), float) * ppt.S)); rot = np.exp(1j * np.radians(18))
+piv = complex(*(np.array(rig.joint(V, V["limbs"]["armB.upper"]["from"]), float) * ppt.S)); rot = np.exp(1j * np.radians(18))
 
 art = np.full((SZ, SZ, 3), 255, np.uint8); yy, xx = np.mgrid[:SZ, :SZ]; c = (xx + 1j * yy) / k
 for i, n in enumerate(order):
@@ -31,7 +31,7 @@ assert abs(np.degrees(np.angle(fits["armB.upper"].z / fits["torso"].z)) - 18) < 
 assert "armA.hand" in dict(mf.report(fits)), "a part with no art under it is called out"
 
 # the template's joints never move: a part's joint on the art comes back to the same canvas point
-t = complex(*(np.array(pt._joint(V, "neck"), float) * ppt.S)); f = fits["head"]
+t = complex(*(np.array(rig.joint(V, "neck"), float) * ppt.S)); f = fits["head"]
 assert abs(f.to_canvas(f.to_art(t)) - t) < 1e-6
 
 cut = mf.cut(V, parts, img, fits, fg)
@@ -40,6 +40,6 @@ assert set(cut) == set(order) and all(a.shape == (N, N) for a in A.values())
 assert (A["head"] & ~head).sum() > 300, "the head keeps art beyond the template (the ear)"
 for n in order:   # body art stays near its template part; a stray piece can't fly off
     if n != "head":
-        far = A[n] & ~ppt._grow(parts[n][0][..., 3] > 127, mf.CLIP + 4)
+        far = A[n] & ~imageops.grow(parts[n][0][..., 3] > 127, mf.CLIP + 4)
         assert not far.any(), n
 print("ok")

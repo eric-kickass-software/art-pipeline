@@ -4,19 +4,20 @@ import json, shutil, subprocess, tempfile
 from pathlib import Path
 import numpy as np
 from PIL import Image
-import hdart.workshop as ws
+import hdart.levels as levels
+import hdart.palette as palette
 from hdart.palette import Palettes, ramp_from_base, rgb_hex
 
 ROOT = Path(__file__).resolve().parent.parent
 tmp = Path(tempfile.mkdtemp())
-shutil.copy(ws.PALETTES, tmp / "palettes.json"); ws.PALETTES = tmp / "palettes.json"
+shutil.copy(palette.PALETTES, tmp / "palettes.json"); palette.PALETTES = tmp / "palettes.json"
 
 # skin levels: a figure with 3 skin shades + grey cloth + dark outline on white
 a = np.full((64, 64, 3), 255, np.uint8)
 a[10:50, 20:44] = (40, 32, 30)                                   # outline
 a[12:48, 22:42] = (230, 170, 140); a[12:24, 22:42] = (250, 200, 170); a[36:48, 22:42] = (170, 100, 80)
 a[26:34, 22:42] = (110, 110, 112)                                # grey cloth band
-lev, cent = ws.skin_levels(Image.fromarray(a), size=3)
+lev, cent = levels.skin_levels(Image.fromarray(a), size=3)
 assert lev[15, 30] == 2 and lev[30, 30] == -1 and lev[40, 30] == 0 and lev[11, 21] == -1, (lev[15, 30], lev[40, 30])
 assert cent[0][0] < cent[1][0] < cent[2][0], cent
 
@@ -24,21 +25,21 @@ assert cent[0][0] < cent[1][0] < cent[2][0], cent
 rng = np.random.default_rng(0); g = np.full((128, 128, 3), 255, np.uint8)
 ramp = np.linspace(0, 1, 100)[None, :, None] * np.array([90, 80, 70]) + np.array([150, 95, 75])
 g[14:114, 14:114] = np.clip(ramp + rng.normal(0, 9, (100, 100, 3)), 0, 255).astype(np.uint8)
-lev, _ = ws.skin_levels(Image.fromarray(g), size=5)
+lev, _ = levels.skin_levels(Image.fromarray(g), size=5)
 row = lev[60, 20:108]
 assert (row >= 0).all() and (np.diff(row) >= 0).all(), row
 
 # save / rename / delete keep the rest of the file
-doc = ws.save_ramp("skin", "test_tone", base="#825c43", tune={"saturation": 1.4}, colors=["#111111", "#222222", "#333333", "#444444", "#555555"], races=["human"])
+doc = palette.save_ramp("skin", "test_tone", base="#825c43", tune={"saturation": 1.4}, colors=["#111111", "#222222", "#333333", "#444444", "#555555"], races=["human"])
 e = doc["groups"]["skin"]["test_tone"]
 assert e["colors"][2] == "#333333" and e["tune"]["saturation"] == 1.4 and e["races"] == ["human"]
 assert "fair" in doc["groups"]["skin"] and "hair" in doc["groups"]
-assert Palettes(ws.PALETTES).ramps["skin.test_tone"].tolist()[0] == [17, 17, 17]   # the game export uses `colors`
-doc = ws.save_ramp("skin", "test_tone2", old_name="test_tone")
+assert Palettes(palette.PALETTES).ramps["skin.test_tone"].tolist()[0] == [17, 17, 17]   # the game export uses `colors`
+doc = palette.save_ramp("skin", "test_tone2", old_name="test_tone")
 assert "test_tone" not in doc["groups"]["skin"] and doc["groups"]["skin"]["test_tone2"]["colors"][0] == "#111111"
-try: ws.save_ramp("skin", "bad name"); raise SystemExit("no error")
+try: palette.save_ramp("skin", "bad name"); raise SystemExit("no error")
 except ValueError: pass
-doc = ws.delete_ramp("skin", "test_tone2"); assert "test_tone2" not in doc["groups"]["skin"]
+doc = palette.delete_ramp("skin", "test_tone2"); assert "test_tone2" not in doc["groups"]["skin"]
 
 # the editor's JS ramp formula = hdart.palette.ramp_from_base at the default tune (needs node)
 node = shutil.which("node")

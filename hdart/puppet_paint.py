@@ -14,14 +14,15 @@ The back view uses the painted front figure as its reference image.
                                  rest_<view>.png, walk_<view>.gif, meta.json)
     approve / archive / state / save_parts (Workshop Parts editor) / preview
 """
-import json, shutil, time
+import json, shutil
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-from . import ai_kit, config, comfy, jobs, store, workshop as ws, puppet as pp, puppet_template as pt
+from . import config, comfy, imageops, jobs, palette, races, rig, store, workshop as ws, puppet as pp, puppet_template as pt
+from .levels import blank_face, skin_cut, skin_key, skin_mask
 
-S, SHEET, GAP, MARGIN = 2, 1024, 14, 24
+S, SHEET, GAP, MARGIN = rig.S, 1024, 14, 24
 D_FIGURE, D_COMPLETE = 0.8, 0.9
 D_ART, D_ART_SEX, D_BLANK, FACE_INSET = 0.6, 0.75, 0.6, 14   # figure pass over mannequin art (unisex, gendered); face removal
 OUTLINE_W, OUTLINE_BAND = 4, 7
@@ -33,7 +34,7 @@ SPEC = config.specs_dir() / "paint.json"   # the paint prompts (edited in the Wo
 
 
 def out_dir(build):
-    return ai_kit.AI_DIR / "paint" / build
+    return ws.AI_DIR / "paint" / build
 
 
 # ----------------------------------------------------------------------------- prompts and colours
@@ -71,7 +72,7 @@ def prompts(build, doc=None):
     """(body text, clothes) for a race build: race traits + description + the gender body (specs/races.json) +
     the paint extra and clothes of its sex (specs/paint.json)."""
     race, sex = build.split(".", 1)
-    rd = ws.races_doc(); r = rd["races"][race]; e = (doc or spec())["sexes"].get(sex, {})
+    rd = races.races_doc(); r = rd["races"][race]; e = (doc or spec())["sexes"].get(sex, {})
     body = ", ".join(x.strip() for x in (r.get("traits", ""), r.get("description", ""), rd["sexes"].get(sex, ""), e.get("extra", ""))
                      if x and x.strip())
     return body, e.get("clothes", "").strip() or "bald head, barefoot"
@@ -86,7 +87,7 @@ def composed(build, doc=None):
     """The full prompts the Paint step will send for a build, per view: figure pass and completion pass."""
     doc = doc or spec(); body, clothes = prompts(build, doc); style = style_text(doc)
     fill = lambda t: t.replace("{body}", body).replace("{clothes}", clothes)
-    r = ws.races_doc()["races"][build.split(".", 1)[0]]
+    r = races.races_doc()["races"][build.split(".", 1)[0]]
     race_text = ", ".join(x.strip() for x in (r.get("traits", ""), r.get("description", "")) if x and x.strip())
     out = {}
     for v in VIEWS:
@@ -104,12 +105,12 @@ def composed(build, doc=None):
 def mannequin(race, view="front"):
     """The approved unisex image a race paints from (`paint_from_mannequin` in specs/races.json), else None. Its art is
     what gets painted: the template cuts it up and gives it the rig's bones (from_mannequin)."""
-    if not ws.races_doc()["races"].get(race, {}).get("paint_from_mannequin"):
+    if not races.races_doc()["races"].get(race, {}).get("paint_from_mannequin"):
         return None
-    f = ws._approved(ws.load_state(), ws.race_build(race, "unisex"), view)
+    f = races.approved(ws.load_state(), races.race_build(race, "unisex"), view)
     if not f and view == "back" and mannequin(race):
         raise ValueError(f"{race} paints from its mannequin: approve the unisex back too.")
-    return ai_kit.AI_DIR / f if f else None
+    return ws.AI_DIR / f if f else None
 
 
 def mannequin_tint(path):
@@ -127,7 +128,7 @@ def skin_ramp(race):
     if man:
         return mannequin_tint(man)
     try:
-        grp = ws.palettes_doc()["groups"].get("skin", {})
+        grp = palette.palettes_doc()["groups"].get("skin", {})
         for e in grp.values():
             if race in (e.get("races") or []) and e.get("colors"):
                 c = [tuple(int(h.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)) for h in e["colors"]]
@@ -153,7 +154,7 @@ def tinted(rgba, ramp, mask_brief=None):
 
 def briefs_zone(V, cov):
     """Torso pixels below the waistband guide (its lower edge is the leg holes)."""
-    w = pt._waist(V, S, cov)
+    w = rig.waist(V, S, cov)
     if not w:
         return np.zeros(cov.shape, bool)
     xs = np.array([p[0] for p in w]) * S; ys = np.array([p[1] for p in w]) * S
@@ -245,7 +246,9 @@ def layout(parts, order, V):
     return {n: (crops[n], (ox + (place[n][0] - X0) * k, oy + (place[n][1] - Y0) * k), k) for n in order}
 
 
-def _placed(lay, n):
+def placed(lay: dict, n: str) -> tuple:
+    """Where part n sits on the exploded sheet `lay` (layout()): (its crop box on the canvas, x, y, width, height on
+    the sheet)."""
     (x0, y0, x1, y1), (px, py), k = lay[n]
     return (x0, y0, x1, y1), round(px), round(py), max(1, round((x1 - x0) * k)), max(1, round((y1 - y0) * k))
 
@@ -253,7 +256,7 @@ def _placed(lay, n):
 def build_sheet(order, lay, imgs):
     sheet = Image.new("RGB", (SHEET, SHEET), (255, 255, 255)); mask = np.zeros((SHEET, SHEET), bool)
     for n in order:
-        (x0, y0, x1, y1), px, py, w, h = _placed(lay, n)
+        (x0, y0, x1, y1), px, py, w, h = placed(lay, n)
         im = Image.fromarray(imgs[n][y0:y1, x0:x1]).resize((w, h), Image.LANCZOS)
         sheet.paste(im.convert("RGB"), (px, py), im)
         mask[py:py + h, px:px + w] |= np.asarray(im)[..., 3] > 100
@@ -261,7 +264,7 @@ def build_sheet(order, lay, imgs):
 
 
 def unsheet_one(painted, base, lay, n):
-    (x0, y0, x1, y1), px, py, w, h = _placed(lay, n)
+    (x0, y0, x1, y1), px, py, w, h = placed(lay, n)
     crop = painted.crop((px, py, px + w, py + h)).resize((x1 - x0, y1 - y0), Image.LANCZOS)
     new = base.copy(); new[y0:y1, x0:x1, :3] = np.asarray(crop)
     return new
@@ -269,8 +272,9 @@ def unsheet_one(painted, base, lay, n):
 
 # ----------------------------------------------------------------------------- ComfyUI passes
 
-def _run(init, mask, prompt, seed, denoise, tag, refs=()):
-    """One masked img2img pass (`tag` names it in logs only); `refs` are image paths."""
+def run_pass(init: Image.Image, mask, prompt: str, seed: int, denoise: float, tag: str, refs=()) -> Image.Image:
+    """One masked img2img pass at the init's size (`tag` names it in logs only); `refs` are image paths. A float
+    mask is per-pixel weights (Differential Diffusion), a bool one redraw / keep."""
     m = np.asarray(mask)   # float = per-pixel weights (Differential Diffusion), else redraw / keep
     out = comfy.img2img(init, prompt, seed=seed, denoise=denoise, refs=[Image.open(r).convert("RGB") for r in refs],
                         mask=m if m.dtype.kind == "f" else m.astype(bool), prefix="hdart/paint")
@@ -297,7 +301,7 @@ def figure_pass(order, inits, prompt, seed, tag, refs=(), denoise=None):
     bg = Image.new("RGBA", (N, N), (255, 255, 255, 255)); bg.alpha_composite(comp)
     init = bg.convert("RGB").crop(box).resize((SHEET, SHEET), Image.LANCZOS)
     m = Image.fromarray(np.where(a, 255, 0).astype(np.uint8)).crop(box).resize((SHEET, SHEET), Image.NEAREST)
-    painted = _run(init, np.asarray(m.filter(ImageFilter.MaxFilter(5))) > 0, prompt, seed, denoise or D_FIGURE, tag, refs)
+    painted = run_pass(init, np.asarray(m.filter(ImageFilter.MaxFilter(5))) > 0, prompt, seed, denoise or D_FIGURE, tag, refs)
     back = Image.new("RGB", (N, N), (255, 255, 255)); back.paste(painted.resize((side, side), Image.LANCZOS), box[:2])
     return painted, np.asarray(back)
 
@@ -308,7 +312,7 @@ def _head_run(px, box, weights, prompt, seed, denoise, tag, refs=()):
     init = crop(px).resize((SHEET, SHEET), Image.LANCZOS)
     w = np.asarray(crop((weights * 255).astype(np.uint8)).resize((SHEET, SHEET), Image.BILINEAR), np.float32) / 255
     out = np.asarray(px).copy()
-    out[box[1]:box[3], box[0]:box[2]] = np.asarray(_run(init, w, prompt, seed, denoise, tag, refs).resize((side, side), Image.LANCZOS))
+    out[box[1]:box[3], box[0]:box[2]] = np.asarray(run_pass(init, w, prompt, seed, denoise, tag, refs).resize((side, side), Image.LANCZOS))
     return out
 
 
@@ -336,10 +340,9 @@ def from_mannequin(spec_, view, parts, ramp, race, guide):
 def blank_head(parts, spec_, fig_px, prompt, seed, tag):
     """Takes the face off: the head's inside filled from its own skin shading (dark lines, teeth and eyes left out of the
     average), then a light pass redraws it, so nothing is left for FLUX to keep. The ears lie outside and stay."""
-    from . import puppet_face as pf
     head = parts["head"][0]
     tpl = pt.render(spec_, "front", S)["head"][0][..., 3] > 127   # the head as painted, without the ears beyond the template
-    inside = _erode(head[..., 3] > 127, FACE_INSET) & _grow(tpl, FACE_INSET); box, _ = pf._head_box({"head": head})
+    inside = imageops.erode_cross(head[..., 3] > 127, FACE_INSET) & imageops.grow(tpl, FACE_INSET); box, _ = rig.head_box({"head": head})
     px = fig_px.astype(float); med = np.median(px[inside], 0); w = inside & (np.abs(px - med).sum(-1) < 110)
     blur = lambda a: np.asarray(Image.fromarray(a.astype(np.uint8)).filter(ImageFilter.GaussianBlur(36)), float)
     wt = blur(w * 255)[..., None]; fill = np.dstack([blur(px[..., i] * w) for i in range(3)]) * 255 / np.maximum(wt, 1)
@@ -357,11 +360,11 @@ def complete_pass(order, lay, inits, fig_px, vis, prompt, seed, tag, refs=()):
     sheet, _ = build_sheet(order, lay, filled)
     hm = np.zeros((SHEET, SHEET), bool)
     for n in order:
-        (x0, y0, x1, y1), px, py, w, h = _placed(lay, n)
+        (x0, y0, x1, y1), px, py, w, h = placed(lay, n)
         hid = np.where((inits[n][..., 3] > 127) & ~vis[n], 255, 0).astype(np.uint8)
         hm[py:py + h, px:px + w] |= np.asarray(Image.fromarray(hid[y0:y1, x0:x1]).resize((w, h), Image.NEAREST)) > 0
     hm = np.asarray(Image.fromarray(np.where(hm, 255, 0).astype(np.uint8)).filter(ImageFilter.MaxFilter(7))) > 0
-    painted = _run(sheet, hm, prompt, seed, D_COMPLETE, tag, refs)
+    painted = run_pass(sheet, hm, prompt, seed, D_COMPLETE, tag, refs)
     out = {}
     for n in order:   # visible pixels stay exactly the figure's; the hidden ones come from the completion
         done = unsheet_one(painted, filled[n], lay, n)
@@ -371,17 +374,6 @@ def complete_pass(order, lay, inits, fig_px, vis, prompt, seed, tag, refs=()):
 
 
 # ----------------------------------------------------------------------------- cleanup + outline
-
-def _erode(a, n):
-    a = a.copy()
-    for _ in range(n):
-        a &= np.roll(a, 1, 0) & np.roll(a, -1, 0) & np.roll(a, 1, 1) & np.roll(a, -1, 1)
-    return a
-
-
-def _grow(a, n):
-    return np.asarray(Image.fromarray(np.where(a, 255, 0).astype(np.uint8)).filter(ImageFilter.MaxFilter(2 * n + 1))) > 0
-
 
 def clear_white(rgba):
     """Leftover background inside a part (FLUX drew it a little smaller than its template shape): near-white pixels
@@ -395,7 +387,7 @@ def clear_white(rgba):
             break
         reach = new
     out = rgba.copy(); gone = reach & (rgba[..., 3] > 127)
-    out[gone | (_grow(gone, 1) & (rgba[..., 3] > 127)), 3] = 0
+    out[gone | (imageops.grow(gone, 1) & (rgba[..., 3] > 127)), 3] = 0
     return out
 
 
@@ -424,9 +416,9 @@ def outline(rgba, skip=None, w=OUTLINE_W, band=OUTLINE_BAND):
         return rgba
     ys, xs = np.nonzero(a); y0, y1, x0, x1 = max(0, ys.min() - 4), ys.max() + 5, max(0, xs.min() - 4), xs.max() + 5
     sub = rgba[y0:y1, x0:x1].copy(); A = sub[..., 3] > 127
-    core = _erode(A, band)
+    core = imageops.erode_cross(A, band)
     if core.sum() < 20:
-        core = _erode(A, max(1, band // 2))
+        core = imageops.erode_cross(A, max(1, band // 2))
     col = sub[..., :3].astype(float); known = core.copy()
     for _ in range(band + 3):   # colours flow outward from the interior over the old line band
         todo = A & ~known
@@ -456,23 +448,23 @@ def joint_zones(V, parts):
     whole figure's outer silhouette."""
     tm = {n: parts[n][..., 3] > 127 for n in V["order"]}
     N = tm["torso"].shape[0]; yy, xx = np.mgrid[:N, :N] / S
-    figure = np.any(list(tm.values()), 0); sil = figure & ~_erode(figure, 6)
+    figure = np.any(list(tm.values()), 0); sil = figure & ~imageops.erode_cross(figure, 6)
     near = lambda j, r: ((xx - j[0]) ** 2 + (yy - j[1]) ** 2) <= r * r
     out = {}
     for n in V["order"]:
         if n == "torso":
             z = np.zeros((N, N), bool)
         elif n == "head":
-            z = near(pt._joint(V, "neck"), 30) & _erode(tm["torso"], 6)
+            z = near(rig.joint(V, "neck"), 30) & imageops.erode_cross(tm["torso"], 6)
         else:
             k, seg = n.split("."); L = V["limbs"][n]
             hw = lambda t0: max([abs(p[1]) for p in L["points"] if abs(p[0] - t0) < 0.3] or [10.0])
             z = np.zeros((N, N), bool)
             if seg != "hand":
                 child = f"{k}.lower" if seg == "upper" else f"{k}.hand"
-                z |= near(pt._joint(V, L["to"]), 1.4 * hw(1.0)) & _erode(tm[child], 6)
+                z |= near(rig.joint(V, L["to"]), 1.4 * hw(1.0)) & imageops.erode_cross(tm[child], 6)
             if seg == "upper":
-                z |= near(pt._joint(V, L["from"]), 1.4 * hw(0.0)) & _erode(tm["torso"], 6)
+                z |= near(rig.joint(V, L["from"]), 1.4 * hw(0.0)) & imageops.erode_cross(tm["torso"], 6)
         out[n] = z & ~sil
     return out
 
@@ -486,39 +478,27 @@ def finish(V, raw):
 
 # ----------------------------------------------------------------------------- candidates
 
-def _parts_tuple(spec, view, imgs):
-    """{name: (rgba N, guides (unused), pivot in rig px)} as the template renderer returns it, for the rig previews."""
-    V = spec["views"][view]
-    piv = {n: pt._joint(V, L["from"]) for n, L in V["limbs"].items()}
-    piv["torso"], piv["head"] = pt._joint(V, "pelvis"), pt._joint(V, "neck")
-    return {n: (imgs[n], None, piv[n]) for n in V["order"]}
-
-
 def render_previews(d, spec, frames=8):
     """rest_<view>.png and walk_<view>.gif of a candidate folder, from its saved parts."""
     for v in VIEWS:
         order = spec["views"][v]["order"]
         imgs = {n: np.asarray(Image.open(d / "parts" / v / f"{n}.png").convert("RGBA")) for n in order}
-        parts = _parts_tuple(spec, v, imgs)
+        parts = rig.pivots(spec, v, imgs)
         B2, pieces = pt.rig_from(pt.rig_from_spec(spec, v), parts); B2["rigid"] = (pieces, order)
         walk = [pp.on_bg(pp.render(B2, v, i / frames)) for i in range(frames)]
-        pt._save(walk[0], d / f"walk_{v}.gif", save_all=True, append_images=walk[1:], duration=120, loop=0)
+        imageops.save(walk[0], d / f"walk_{v}.gif", save_all=True, append_images=walk[1:], duration=120, loop=0)
         strip = Image.new("RGB", (pp.PX * frames, pp.PX))   # the Parts editor's pose scrubber
         for i, w in enumerate(walk):
             strip.paste(w, (i * pp.PX, 0))
-        pt._save(strip, d / f"walkstrip_{v}.png")
-        rest = pp.on_bg(np.asarray(pt._compose(parts, order).resize((pp.PX, pp.PX), Image.LANCZOS)))
-        pt._save(rest, d / f"rest_{v}.png")
+        imageops.save(strip, d / f"walkstrip_{v}.png")
+        rest = pp.on_bg(np.asarray(rig.compose(parts, order).resize((pp.PX, pp.PX), Image.LANCZOS)))
+        imageops.save(rest, d / f"rest_{v}.png")
 
 
-def _progress(d, step, of, stage, seed, error=None):
-    """progress.json of a candidate being made (the Workshop shows it); removed when the candidate is done."""
-    (d / "progress.json").write_text(json.dumps({"step": step, "of": of, "stage": stage, "seed": seed, "error": error,
-                                                 "at": int(time.time())}), encoding="utf-8")
-
-
-def paint(build, n=1, seed=1):
-    """Queue job: n paint candidates for a race build (each = front + back)."""
+def paint(build: str, n: int = 1, seed: int = 1, face_harvest=None) -> list:
+    """n paint candidates for a race build (each = front + back); returns their ids. `face_harvest(cid)` is called for
+    each finished candidate whose face guide paints a face ("keyed", "marks"): the paint job passes
+    puppet_face.face_from_paint, so the painted face becomes a face candidate of the race (puppet_face.paint)."""
     race, sex = build.split(".", 1)
     spec = pt.load()
     if not spec["views"]["front"]["shapes"]["head"].get("face"):
@@ -532,12 +512,11 @@ def paint(build, n=1, seed=1):
         try:
             _paint_one(build, d, cid, sd, spec, rendered, lays, ramp, P, guide)
         except Exception as e:
-            _progress(d, 0, 5, "failed", sd, str(e)); raise
+            store.progress(d, 0, 5, "failed", sd, str(e)); raise
         (d / "progress.json").unlink(missing_ok=True)
-        if guide in ("keyed", "marks"):   # the painted face becomes a face candidate of the race (Face tab)
+        if face_harvest and guide in ("keyed", "marks"):
             try:
-                from . import puppet_face
-                puppet_face.face_from_paint(build.split(".", 1)[0], build, cid)
+                face_harvest(cid)
             except Exception as e:
                 print(f"face harvest of {build} {cid} failed: {e}")
         made.append(cid)
@@ -554,13 +533,13 @@ def _paint_one(build, d, cid, sd, spec, rendered, lays, ramp, P, guide):
         for v in VIEWS:
             V = spec["views"][v]; order = V["order"]; parts = rendered[v]
             if man:
-                _progress(d, step, 5, f"fitting the mannequin ({v})", sd)
+                store.progress(d, step, 5, f"fitting the mannequin ({v})", sd)
                 parts, inits, fit[v] = from_mannequin(spec, v, parts, ramp, race, guide)
                 rendered[v] = parts; lays[v] = layout(parts, order, V)
             else:
                 inits = inits_for(spec, v, parts, ramp, guide)
             fprompt = P[v]["figure"]
-            step += 1; _progress(d, step, 5, f"figure pass ({v})", sd)
+            step += 1; store.progress(d, step, 5, f"figure pass ({v})", sd)
             fpaint, fig_px = figure_pass(order, inits, fprompt, sd, f"{build}_{cid}_{v}_fig",
                                          [mannequin(race, v)] if man else [ref] if ref else [],
                                          denoise=(D_ART if sex == "unisex" else D_ART_SEX) if man else None)
@@ -571,7 +550,7 @@ def _paint_one(build, d, cid, sd, spec, rendered, lays, ramp, P, guide):
             if v == "front":
                 ref = d / "figure_front.png"
             cprompt = P[v]["complete"]
-            step += 1; _progress(d, step, 5, f"hidden ends + cleanup + outline ({v})", sd)
+            step += 1; store.progress(d, step, 5, f"hidden ends + cleanup + outline ({v})", sd)
             csheet, raw = complete_pass(order, lays[v], inits, fig_px, owners(parts, order), cprompt, sd,
                                         f"{build}_{cid}_{v}_cmp", [ref])
             csheet.save(d / f"sheet_{v}.png")
@@ -587,12 +566,12 @@ def _paint_one(build, d, cid, sd, spec, rendered, lays, ramp, P, guide):
             (d / "template" / v).mkdir(parents=True, exist_ok=True)
             for name, (rgba, _, _) in rendered[v].items():
                 Image.fromarray(rgba).save(d / "template" / v / f"{name}.png")
-        _progress(d, 5, 5, "walk previews + skin bands", sd)
+        store.progress(d, 5, 5, "walk previews + skin bands", sd)
         render_previews(d, spec)
         bake_bands(build, cid)
 
 
-def _spec_for(d):
+def template_for(d) -> dict:
     """The template a candidate was painted on (pivots/joints match its parts); the current one if not stored."""
     f = d / "template.json"
     if not f.exists():
@@ -640,7 +619,7 @@ def ramp_preview(build):
     out = {"build": build, "id": cid, "approved": bool(st["approved"]), "facings": {}}
     if not cid:
         return out
-    d = out_dir(build) / cid; spec = _spec_for(d); key = ensure_bands(build, cid)
+    d = out_dir(build) / cid; spec = template_for(d); key = ensure_bands(build, cid)
     url = lambda im: "data:image/png;base64," + base64.b64encode((lambda b: (im.save(b, "PNG"), b.getvalue())[1])(io.BytesIO())).decode()
     for v in VIEWS:
         cv = Image.new("RGBA", (pp.PX * S, pp.PX * S))
@@ -672,7 +651,7 @@ def _band_key(d, spec, meta):
         for n in spec["views"][v]["order"]:
             cv.alpha_composite(Image.open(d / "parts" / v / f"{n}.png").convert("RGBA"))
         cv = cv.resize((pp.PX, pp.PX), Image.LANCZOS); both.paste(cv, (i * pp.PX, 0), cv)
-    key = ws.skin_key(both, ws.palettes_doc().get("rampSize", 5))
+    key = skin_key(both, palette.palettes_doc().get("rampSize", 5))
     store.update_meta(d, skin_key=key)
     return key
 
@@ -681,20 +660,19 @@ def part_band(spec, view, name, im, key):
     """A part's band image from its paint (RGBA array). The front head is measured with its painted face removed, as
     the export draws it under a face layer."""
     if name == "head" and view == "front":
-        from . import puppet_face as pf
-        im = pf.blank_face(im, pf.face_ellipse(spec, 1.2) & pf.inner_head(im))
+        im = blank_face(im, rig.face_ellipse(spec, 1.2) & rig.inner_head(im))
     a = im[..., 3] > 127
     rgb = np.full(im.shape[:2] + (3,), 255, np.uint8); rgb[a] = im[a, :3]
-    m = ws.skin_mask(rgb) & a
+    m = skin_mask(rgb) & a
     out = np.zeros(im.shape[:2] + (4,), np.uint8)
-    out[..., 0] = np.where(m, ws.skin_cut(rgb, m, key).clip(0, 254), NOT_SKIN); out[..., 3] = np.where(a, 255, 0)
+    out[..., 0] = np.where(m, skin_cut(rgb, m, key).clip(0, 254), NOT_SKIN); out[..., 3] = np.where(a, 255, 0)
     return out
 
 
 def bake_bands(build, cid, view=None, names=None, force=False):
     """(Re)make the bands of a candidate's parts (one view / some parts, else all) from their paint; hand-edited ones
     are kept unless force (which also forgets they were edited; all of them = a new skin key too)."""
-    d = out_dir(build) / cid; spec = _spec_for(d); meta = store.read_meta(d)
+    d = out_dir(build) / cid; spec = template_for(d); meta = store.read_meta(d)
     if force and view is None and names is None:
         meta.pop("skin_key", None); store.update_meta(d, skin_key=None)
     key = _band_key(d, spec, meta); edited = set(meta.get("bands_edited", [])); done = []
@@ -728,7 +706,7 @@ def keep_hand_bands(old, new):
 
 def ensure_bands(build, cid):
     """The skin key, after making any band that's missing (candidates painted before bands existed)."""
-    d = out_dir(build) / cid; spec = _spec_for(d)
+    d = out_dir(build) / cid; spec = template_for(d)
     for v in VIEWS:
         miss = [n for n in spec["views"][v]["order"] if not (d / "bands" / v / f"{n}.png").exists()]
         if miss:
@@ -749,7 +727,7 @@ def save_bands(build, cid, view, pngs):
     """Hand-edited bands from the Parts editor (part name -> PNG data URL, R = level, A = coverage): only the levels of
     the part's skin pixels change, its coverage and non-skin pixels stay."""
     import base64, io
-    d = out_dir(build) / cid; order = set(_spec_for(d)["views"][view]["order"]); meta = store.read_meta(d)
+    d = out_dir(build) / cid; order = set(template_for(d)["views"][view]["order"]); meta = store.read_meta(d)
     for name, data in pngs.items():
         if name not in order:
             raise ValueError(f"Unknown part {name}.")
@@ -810,7 +788,7 @@ def parts_doc(build, cid):
     if not d.exists():
         raise ValueError(f"No paint candidate {cid} for {build}.")
     key = ensure_bands(build, cid); meta = store.read_meta(d)
-    spec = _spec_for(d); tdir = d / "template" if (d / "template").exists() else pt.out_dir()
+    spec = template_for(d); tdir = d / "template" if (d / "template").exists() else pt.out_dir()
     views = {}
     for v in VIEWS:
         order = spec["views"][v]["order"]
@@ -829,7 +807,7 @@ def save_parts(build, cid, view, pngs):
     d = out_dir(build) / cid
     if view not in VIEWS or not d.exists():
         raise ValueError("Unknown candidate or view.")
-    order = set(_spec_for(d)["views"][view]["order"])
+    order = set(template_for(d)["views"][view]["order"])
     if not (d / "parts_orig").exists():
         shutil.copytree(d / "parts", d / "parts_orig")
     for name, data in pngs.items():
@@ -850,13 +828,13 @@ def revert_parts(build, cid):
     if (d / "parts_orig").exists():
         shutil.rmtree(d / "parts"); shutil.move(str(d / "parts_orig"), str(d / "parts"))
     bake_bands(build, cid, force=True)   # band edits go too
-    render_previews(d, _spec_for(d))
+    render_previews(d, template_for(d))
     return parts_doc(build, cid)
 
 
 def preview(build, cid):
     d = out_dir(build) / cid
-    render_previews(d, _spec_for(d))
+    render_previews(d, template_for(d))
     return parts_doc(build, cid)
 
 
@@ -865,7 +843,7 @@ def fix_region(build, cid, view, part, mask, prompt="", seed=3, denoise=0.75):
     assembled figure (so its hidden ends show), the mask (PNG data URL or bytes, part canvas = rest pose, white = fix)
     is clamped to the part's template shape, and only those pixels change (feathered)."""
     import base64, io
-    d = out_dir(build) / cid; spec = _spec_for(d); V = spec["views"][view]
+    d = out_dir(build) / cid; spec = template_for(d); V = spec["views"][view]
     if part not in V["order"]:
         raise ValueError(f"Unknown part {part}.")
     imgs = {n: np.asarray(Image.open(d / "parts" / view / f"{n}.png").convert("RGBA")) for n in V["order"]}
@@ -892,7 +870,7 @@ def fix_region(build, cid, view, part, mask, prompt="", seed=3, denoise=0.75):
     init = comp.convert("RGB").crop(box).resize((SHEET, SHEET), Image.LANCZOS)
     mk = Image.fromarray(np.where(m, 255, 0).astype(np.uint8)).crop(box).resize((SHEET, SHEET), Image.NEAREST)
     text = f"{composed(build)['fix']} {prompt}".strip()
-    out = _run(init, np.asarray(mk.filter(ImageFilter.MaxFilter(3))) > 0, text, seed, denoise, f"{build}_{cid}_{view}_{part}_fix")
+    out = run_pass(init, np.asarray(mk.filter(ImageFilter.MaxFilter(3))) > 0, text, seed, denoise, f"{build}_{cid}_{view}_{part}_fix")
     patch = np.asarray(out.resize((side, side), Image.LANCZOS)).astype(float)
     if not (d / "parts_orig").exists():
         shutil.copytree(d / "parts", d / "parts_orig")
@@ -909,11 +887,6 @@ def fix_region(build, cid, view, part, mask, prompt="", seed=3, denoise=0.75):
 
 
 # ----------------------------------------------------------------------------- Studio job kinds (hdart.jobs)
-
-@jobs.kind("paint", reload=("puppet", "puppet_template", "puppet_paint"))   # puppet Paint step
-def _job_paint(a):
-    return paint(a["build"], int(a.get("n", 1)), int(a.get("seed", 1)))
-
 
 @jobs.kind("paint_preview", gpu=False, reload=("puppet", "puppet_template", "puppet_paint"))   # walk re-render
 def _job_preview(a):

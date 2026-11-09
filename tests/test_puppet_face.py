@@ -5,13 +5,12 @@ import json, shutil, tempfile
 from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
-import hdart.ai_kit as ak
 import hdart.workshop as ws
 import hdart.puppet_paint as ppt
 import hdart.puppet_face as pf
 
 tmp = Path(tempfile.mkdtemp())
-ak.AI_DIR = tmp / "ai"; ws.CAND = ak.AI_DIR / "candidates"; ws.STATE = ak.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "archive"
+ws.AI_DIR = tmp / "ai"; ws.CAND = ws.AI_DIR / "candidates"; ws.STATE = ws.AI_DIR / "workshop.json"; ws.ARCHIVE = tmp / "archive"
 shutil.copy(pf.SPEC, tmp / "face.json"); pf.SPEC = tmp / "face.json"
 from hdart.fake_comfy import FakeComfy, info
 calls = []
@@ -35,7 +34,7 @@ def respond(nodes, uploads):
 
 fake = FakeComfy(respond).start()
 for sex in ("male", "female"):
-    c = ppt.paint(f"human.{sex}", n=1, seed=1); ppt.approve(f"human.{sex}", c[0])
+    c = pf.paint(f"human.{sex}", n=1, seed=1); ppt.approve(f"human.{sex}", c[0])
 
 # prompts: the race's text in the shared wording; the hair prompt asks for the key colour
 cp = pf.composed("human", "male")
