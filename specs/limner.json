@@ -67,6 +67,12 @@
    "lora": 0.0,
    "prefix": "dark fantasy chibi game monster, cute but menacing, super deformed, oversized heads, ",
    "suffix": ", a shapeless mass with no legs and no body of its own, chunky simplified shapes, clean dark outlines, two-tone cel shading, hard edges, stylized, hand painted, no base, plain white background, game asset"
+  },
+  "painted_scene": {
+   "name": "Painted scene (key art)",
+   "prefix": "hand-painted dark fantasy RPG key art, full-bleed painted illustration filling the whole frame edge to edge, ",
+   "suffix": ", same warm hand-painted look as the game icons, rich colours, dramatic rim light, cinematic wide composition, atmospheric background everywhere, no white background, no border, no text",
+   "lora": 0.0
   }
  },
  "categories": {
@@ -730,6 +736,28 @@
   },
   "skills/placeholder.physical.active": {
    "subject": "a steel hammer"
+  },
+  "ui/ui.chest.closed": {
+   "subject": "a big chunky ornate treasure chest, closed lid, three-quarter view from slightly above, dark wood planks with heavy iron bands and rivets, polished gold trim and corner caps, a glowing golden keyhole, inset red and blue gems on the lock plate, warm golden rim light",
+   "finish": {
+    "size": 512,
+    "margin": 8
+   }
+  },
+  "ui/ui.chest.open": {
+   "subject": "a big chunky ornate treasure chest with the lid thrown wide open, three-quarter view from slightly above, dark wood planks with heavy iron bands and rivets, polished gold trim and corner caps, gems on the lock plate, overflowing with gold coins and jewels, bright golden light beaming up out of it, gold coins spilling over the front edge",
+   "finish": {
+    "size": 512,
+    "margin": 8
+   }
+  },
+  "ui/ui.splash.keyart": {
+   "subject": "wide cinematic scene in a dark stone dungeon hall, a treasure chest in the lower middle bursting open with gold coins and blinding golden light, coins flying, small silhouettes of three adventurers with sword, staff and shield at the edges looking at it, deep shadows, warm gold against cold blue darkness, the upper third is empty dark vaulted ceiling, no text, no letters",
+   "finish": {
+    "size": 1536,
+    "margin": 0
+   },
+   "style": "painted_scene"
   }
  },
  "_house_style": "Portraits: 'semireal' (Eric, 2026-11-01: 'that top row is gold'). Reference: specs/limner_refs/semireal.jpg (seed 11, 832x1024, 4 steps, no LoRA). Change the house style only on purpose.",
@@ -738,6 +766,20 @@
    "item.medium_potion": {
     "name": "Medium Potion",
     "sub": "consumable"
+   }
+  },
+  "ui": {
+   "ui.chest.closed": {
+    "name": "Chest (closed)",
+    "sub": "chest"
+   },
+   "ui.chest.open": {
+    "name": "Chest (open)",
+    "sub": "chest"
+   },
+   "ui.splash.keyart": {
+    "name": "Splash key art",
+    "sub": "splash"
    }
   }
  },

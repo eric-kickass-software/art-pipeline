@@ -549,7 +549,29 @@
     },
     "hair": {
       "black": {
-        "base": "#2c2630"
+        "base": "#2c2630",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#130f16",
+          "#1f1a23",
+          "#2c2630",
+          "#6d5f73",
+          "#b19cb6"
+        ],
+        "races": [
+          "halforc"
+        ]
       },
       "chestnut": {
         "base": "#7a4a2b"
@@ -564,16 +586,82 @@
         "base": "#e6e0cf"
       },
       "grey": {
-        "base": "#8e8a90"
+        "base": "#8e8a90",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#3e3a41",
+          "#666168",
+          "#8e8a90",
+          "#b7b2b9",
+          "#e0dbe1"
+        ],
+        "races": [
+          "halforc"
+        ]
       },
       "ginger": {
         "base": "#cf6a2e"
       },
       "teal": {
-        "base": "#3f8f8a"
+        "base": "#3f8f8a",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#103b40",
+          "#246668",
+          "#3f8f8a",
+          "#61b8ab",
+          "#89e1cd"
+        ],
+        "races": [
+          "halforc"
+        ]
       },
       "violet": {
-        "base": "#7a4fa3"
+        "base": "#7a4fa3",
+        "tune": {
+          "hueOffset": 0,
+          "saturation": 1,
+          "shadowHue": 0.72,
+          "shadowShift": 0.12,
+          "shadowSat": 0.25,
+          "shadowDark": 0.55,
+          "lightHue": 0.15,
+          "lightShift": 0.08,
+          "lightDesat": 0.3,
+          "lightLift": 0.55
+        },
+        "colors": [
+          "#2f1649",
+          "#522f76",
+          "#7a4fa3",
+          "#a470c7",
+          "#d196ea"
+        ],
+        "races": [
+          "halforc"
+        ]
       }
     },
     "eyes": {
