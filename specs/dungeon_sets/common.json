@@ -1,0 +1,235 @@
+{
+  "_doc": "A dungeon part set (biome). kind: tile (template-guided, exact iso geometry), wall_decor (a wall tile with something mounted on it), prop (free object, cut out and fitted to `footprint` tiles wide). shape: floor | wall | pillar. height in tile units (1 = tile/2 px). ids match content definitions where they exist (tile.*, feature kinds); prop.* are visual decor. Prompts are added after the dungeon style descriptors.",
+  "id": "common",
+  "name": "Common props",
+  "tile": 128,
+  "biome": "stylized fantasy dungeon, neutral weathered stone, wood and iron",
+  "pieces": [
+    {
+      "id": "monster.ritual_totem",
+      "kind": "prop",
+      "prompt": "a ritual totem post of bones and black iron, skulls lashed to it, purple runes glowing, a tall standing post",
+      "footprint": 0.5,
+      "board": "monster.ritual_totem"
+    },
+    {
+      "id": "monster.totem_grove",
+      "kind": "prop",
+      "prompt": "a grove totem, a carved wooden totem post with a friendly face, covered in green moss, leaves and small flowers",
+      "footprint": 0.5,
+      "board": "monster.totem_grove"
+    },
+    {
+      "id": "prop.pillar_round",
+      "kind": "prop",
+      "prompt": "a round grey stone pillar",
+      "footprint": 0.45,
+      "board": "prop.pillar_round"
+    },
+    {
+      "id": "prop.pillar_square",
+      "kind": "prop",
+      "prompt": "a square grey stone pillar with a plain capital",
+      "footprint": 0.45,
+      "board": "prop.pillar_square"
+    },
+    {
+      "id": "prop.pillar_broken",
+      "kind": "prop",
+      "prompt": "a broken grey stone pillar stump with rubble around it",
+      "footprint": 0.5,
+      "board": "prop.pillar_broken"
+    },
+    {
+      "id": "prop.rubble_small",
+      "kind": "prop",
+      "prompt": "a small pile of grey stone rubble",
+      "footprint": 0.45,
+      "board": "prop.rubble_small"
+    },
+    {
+      "id": "prop.rubble_large",
+      "kind": "prop",
+      "prompt": "a large heap of broken stone blocks and rubble",
+      "footprint": 0.8,
+      "board": "prop.rubble_large"
+    },
+    {
+      "id": "prop.collapsed_beam",
+      "kind": "prop",
+      "prompt": "a collapsed wooden ceiling beam lying across rubble",
+      "footprint": 1.0,
+      "board": "prop.collapsed_beam"
+    },
+    {
+      "id": "prop.standing_torch",
+      "kind": "prop",
+      "prompt": "a standing iron torch on a tall stand, burning",
+      "footprint": 0.3,
+      "board": "prop.standing_torch"
+    },
+    {
+      "id": "prop.brazier",
+      "kind": "prop",
+      "prompt": "an iron brazier on three legs with burning coals and flames",
+      "footprint": 0.45,
+      "board": "prop.brazier"
+    },
+    {
+      "id": "prop.candle_cluster",
+      "kind": "prop",
+      "prompt": "a cluster of lit candles of different heights",
+      "footprint": 0.35,
+      "board": "prop.candle_cluster"
+    },
+    {
+      "id": "prop.lantern_post",
+      "kind": "prop",
+      "prompt": "an iron lantern post with a glowing lantern",
+      "footprint": 0.35,
+      "board": "prop.lantern_post"
+    },
+    {
+      "id": "prop.barrel",
+      "kind": "prop",
+      "prompt": "an old wooden barrel with iron bands",
+      "footprint": 0.5,
+      "board": "prop.barrel"
+    },
+    {
+      "id": "prop.crate",
+      "kind": "prop",
+      "prompt": "a battered wooden storage crate",
+      "footprint": 0.55,
+      "board": "prop.crate"
+    },
+    {
+      "id": "prop.broken_crate",
+      "kind": "prop",
+      "prompt": "a smashed wooden crate with planks spilling out",
+      "footprint": 0.6,
+      "board": "prop.broken_crate"
+    },
+    {
+      "id": "prop.sacks",
+      "kind": "prop",
+      "prompt": "a heap of tied burlap sacks",
+      "footprint": 0.55,
+      "board": "prop.sacks"
+    },
+    {
+      "id": "prop.bucket",
+      "kind": "prop",
+      "prompt": "a wooden bucket with iron bands",
+      "footprint": 0.3,
+      "board": "prop.bucket"
+    },
+    {
+      "id": "prop.table",
+      "kind": "prop",
+      "prompt": "a rough wooden table",
+      "footprint": 0.85,
+      "board": "prop.table"
+    },
+    {
+      "id": "prop.chair",
+      "kind": "prop",
+      "prompt": "a simple wooden chair",
+      "footprint": 0.4,
+      "board": "prop.chair"
+    },
+    {
+      "id": "prop.stool",
+      "kind": "prop",
+      "prompt": "a small three-legged wooden stool",
+      "footprint": 0.3,
+      "board": "prop.stool"
+    },
+    {
+      "id": "prop.weapon_rack",
+      "kind": "prop",
+      "prompt": "a wooden weapon rack with spears and swords",
+      "footprint": 0.7,
+      "board": "prop.weapon_rack"
+    },
+    {
+      "id": "prop.bedroll",
+      "kind": "prop",
+      "prompt": "a rolled-out bedroll on the ground",
+      "footprint": 0.9,
+      "board": "prop.bedroll"
+    },
+    {
+      "id": "prop.cracks",
+      "kind": "prop",
+      "prompt": "cracks in a stone floor",
+      "footprint": 0.9,
+      "board": "prop.cracks",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height",
+      "biome": false
+    },
+    {
+      "id": "prop.stains",
+      "kind": "prop",
+      "prompt": "a dark old stain splattered on the ground",
+      "footprint": 0.8,
+      "board": "prop.stains",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height",
+      "biome": false
+    },
+    {
+      "id": "prop.puddle",
+      "kind": "prop",
+      "prompt": "a small puddle of water",
+      "footprint": 0.7,
+      "board": "prop.puddle",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height",
+      "biome": false
+    },
+    {
+      "id": "prop.scattered_bones",
+      "kind": "prop",
+      "prompt": "a few old bones scattered on the ground",
+      "footprint": 0.8,
+      "board": "prop.scattered_bones",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height",
+      "biome": false
+    },
+    {
+      "id": "zone.briars",
+      "kind": "prop",
+      "prompt": "a ring of thorny green briar vines on the ground",
+      "footprint": 1.0,
+      "board": "zone.briars",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height",
+      "biome": false
+    },
+    {
+      "id": "zone.consecration",
+      "kind": "prop",
+      "prompt": "a circle of holy glowing golden light on the ground with runes",
+      "footprint": 1.0,
+      "board": "zone.consecration",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height",
+      "biome": false
+    },
+    {
+      "id": "zone.dread_ward",
+      "kind": "prop",
+      "prompt": "a glowing purple rune circle on the ground",
+      "footprint": 1.0,
+      "board": "zone.dread_ward",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height",
+      "biome": false
+    },
+    {
+      "id": "zone.catornado",
+      "kind": "prop",
+      "prompt": "a swirling whirl of orange fur, claws and dust on the ground",
+      "footprint": 1.0,
+      "board": "zone.catornado",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height",
+      "biome": false
+    }
+  ]
+}

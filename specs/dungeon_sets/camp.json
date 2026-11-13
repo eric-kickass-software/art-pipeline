@@ -1,0 +1,291 @@
+{
+  "_doc": "A dungeon part set (biome). kind: tile (template-guided, exact iso geometry), wall_decor (a wall tile with something mounted on it), prop (free object, cut out and fitted to `footprint` tiles wide). shape: floor | wall | pillar. height in tile units (1 = tile/2 px). ids match content definitions where they exist (tile.*, feature kinds); prop.* are visual decor. Prompts are added after the dungeon style descriptors.",
+  "id": "camp",
+  "name": "Home Camp",
+  "tile": 128,
+  "biome": "stylized fantasy, whimsical, cozy, hand-crafted wood, canvas and rope",
+  "pieces": [
+    {
+      "id": "feature.campfire",
+      "kind": "prop",
+      "prompt": "a lit campfire, a ring of round grey stones around crackling split logs, bright orange flames and glowing embers",
+      "footprint": 0.8,
+      "board": "feature.campfire"
+    },
+    {
+      "id": "tile.camp_tent",
+      "kind": "prop",
+      "prompt": "a canvas camping tent, an a-frame ridge tent of patched cream canvas on wooden poles, guy ropes and pegs, the front flap tied open, warm glow inside",
+      "footprint": 1.9,
+      "board": "tile.camp_tent"
+    },
+    {
+      "id": "tile.camp_seat",
+      "kind": "prop",
+      "prompt": "a log seat, a thick fallen tree log lying on its side, cut flat along the top to sit on, rough bark, a little moss, just the log",
+      "footprint": 0.9,
+      "board": "tile.camp_seat"
+    },
+    {
+      "id": "tile.camp_hedge",
+      "kind": "prop",
+      "prompt": "a low trimmed green hedge, a short straight row of round leafy bushes about knee high, a few small white flowers, just the hedge and nothing else",
+      "footprint": 1.0,
+      "board": "tile.camp_hedge"
+    },
+    {
+      "id": "prop.merchant_stall",
+      "kind": "prop",
+      "prompt": "a small travelling merchant's market stall, a wooden counter under a striped red and cream canvas awning, crates, jars, potions and goods on display",
+      "footprint": 1.6,
+      "board": "prop.merchant_stall"
+    },
+    {
+      "id": "feature.trophy_plinth",
+      "kind": "prop",
+      "prompt": "an empty trophy plinth, a short carved grey stone pedestal with a dark wooden top and brass trim, nothing on it",
+      "footprint": 0.6,
+      "board": "feature.trophy_plinth"
+    },
+    {
+      "id": "decor.bedroll",
+      "kind": "prop",
+      "prompt": "a rolled-out bedroll, a padded brown wool sleeping mat with a rolled red blanket and a small pillow, lying on the ground, its long side running from bottom left to top right",
+      "footprint": 1.9,
+      "board": "decor.bedroll"
+    },
+    {
+      "id": "decor.bedroll.turned",
+      "kind": "prop",
+      "prompt": "a rolled-out bedroll, a padded brown wool sleeping mat with a rolled red blanket and a small pillow, lying on the ground, its long side running from top left to bottom right",
+      "footprint": 1.9,
+      "board": "decor.bedroll.turned"
+    },
+    {
+      "id": "decor.trophy_rack",
+      "kind": "prop",
+      "prompt": "a sturdy wooden trophy rack, a wide frame of dark timber with pegs, hooks and two empty shelves, iron brackets, its long side running from bottom left to top right",
+      "footprint": 1.9,
+      "board": "decor.trophy_rack"
+    },
+    {
+      "id": "decor.trophy_rack.turned",
+      "kind": "prop",
+      "prompt": "a sturdy wooden trophy rack, a wide frame of dark timber with pegs, hooks and two empty shelves, iron brackets, its long side running from top left to bottom right",
+      "footprint": 1.9,
+      "board": "decor.trophy_rack.turned"
+    },
+    {
+      "id": "decor.weapon_rack",
+      "kind": "prop",
+      "prompt": "a wooden weapon rack holding two swords, a spear and a battle axe, its long side running from bottom left to top right",
+      "footprint": 1.9,
+      "board": "decor.weapon_rack"
+    },
+    {
+      "id": "decor.weapon_rack.turned",
+      "kind": "prop",
+      "prompt": "a wooden weapon rack holding two swords, a spear and a battle axe, its long side running from top left to bottom right",
+      "footprint": 1.9,
+      "board": "decor.weapon_rack.turned"
+    },
+    {
+      "id": "decor.banner_stand",
+      "kind": "prop",
+      "prompt": "a banner stand, a tall wooden pole on a cross-shaped foot flying a long red cloth banner with gold trim and a sun emblem",
+      "footprint": 0.6,
+      "board": "decor.banner_stand"
+    },
+    {
+      "id": "decor.cook_pot",
+      "kind": "prop",
+      "prompt": "a black iron cook pot hanging from a wooden tripod over a small fire, bubbling stew, a ladle",
+      "footprint": 0.7,
+      "board": "decor.cook_pot"
+    },
+    {
+      "id": "decor.lantern_post",
+      "kind": "prop",
+      "prompt": "a wooden lantern post, a tall post with an iron arm holding a glowing brass lantern, warm yellow light",
+      "footprint": 0.5,
+      "board": "decor.lantern_post"
+    },
+    {
+      "id": "trophy.lich_skull",
+      "kind": "prop",
+      "prompt": "a hunting keepsake, not a cup, a cracked crowned lich skull pieced back together with gold seams, sitting on a small black stone plinth, faint purple glow in the eye sockets",
+      "footprint": 0.55,
+      "board": "trophy.lich_skull"
+    },
+    {
+      "id": "trophy.grizzlegut_tusks",
+      "kind": "prop",
+      "prompt": "a hunting keepsake, not a cup, two huge yellowed goblin tusks crossed and mounted on a wooden board with leather straps",
+      "footprint": 0.55,
+      "board": "trophy.grizzlegut_tusks"
+    },
+    {
+      "id": "trophy.varrik_helm",
+      "kind": "prop",
+      "prompt": "a hunting keepsake, not a cup, an ornate bone-white skeletal knight helm with a tall crest, set on a wooden post",
+      "footprint": 0.5,
+      "board": "trophy.varrik_helm"
+    },
+    {
+      "id": "trophy.brood_mother_fang",
+      "kind": "prop",
+      "prompt": "a hunting keepsake, not a cup, two long curved black spider fangs dripping green venom inside a small glass display case with a brass frame",
+      "footprint": 0.5,
+      "board": "trophy.brood_mother_fang"
+    },
+    {
+      "id": "trophy.foreman_badges",
+      "kind": "prop",
+      "prompt": "a hunting keepsake, not a cup, crude goblin foreman badges of brass and iron pinned to a small wooden board",
+      "footprint": 0.5,
+      "board": "trophy.foreman_badges"
+    },
+    {
+      "id": "trophy.overseer_eye",
+      "kind": "prop",
+      "prompt": "a hunting keepsake, not a cup, a glowing amber crystal golem eye held in a brass claw stand",
+      "footprint": 0.45,
+      "board": "trophy.overseer_eye"
+    },
+    {
+      "id": "trophy.wraith_veil",
+      "kind": "prop",
+      "prompt": "a hunting keepsake, not a cup, a pale ghostly blue-white tattered veil hung on a small wooden frame, drifting as if in wind",
+      "footprint": 0.55,
+      "board": "trophy.wraith_veil"
+    },
+    {
+      "id": "trophy.colossus_fist",
+      "kind": "prop",
+      "prompt": "a hunting keepsake, not a cup, a huge cracked sandstone statue fist set on a square stone block",
+      "footprint": 0.6,
+      "board": "trophy.colossus_fist"
+    },
+    {
+      "id": "trophy.ossian_sigil",
+      "kind": "prop",
+      "prompt": "a hunting keepsake, not a cup, golden cult sigils and holy symbols nailed to a dark wooden board",
+      "footprint": 0.5,
+      "board": "trophy.ossian_sigil"
+    },
+    {
+      "id": "trophy.matron_vials",
+      "kind": "prop",
+      "prompt": "a hunting keepsake, not a cup, a small wooden rack of glass vials filled with dark red blood, wax seals",
+      "footprint": 0.5,
+      "board": "trophy.matron_vials"
+    },
+    {
+      "id": "trophy.forgeheart_core",
+      "kind": "prop",
+      "prompt": "a hunting keepsake, not a cup, a cooled iron furnace core, a round grated iron heart with faint orange embers inside, on an iron tripod stand",
+      "footprint": 0.5,
+      "board": "trophy.forgeheart_core"
+    },
+    {
+      "id": "prop.firewood_stack",
+      "kind": "prop",
+      "prompt": "a neat stack of split firewood logs with a hatchet stuck in the top log",
+      "footprint": 0.8,
+      "board": "prop.firewood_stack"
+    },
+    {
+      "id": "prop.chopping_block",
+      "kind": "prop",
+      "prompt": "a tree stump chopping block with an axe buried in it and wood chips around",
+      "footprint": 0.5,
+      "board": "prop.chopping_block"
+    },
+    {
+      "id": "prop.rain_barrel",
+      "kind": "prop",
+      "prompt": "a wooden rain barrel full of water with a tin dipper hanging on its rim",
+      "footprint": 0.5,
+      "board": "prop.rain_barrel"
+    },
+    {
+      "id": "prop.herb_drying_rack",
+      "kind": "prop",
+      "prompt": "a small wooden drying rack hung with bundles of herbs and flowers",
+      "footprint": 0.7,
+      "board": "prop.herb_drying_rack"
+    },
+    {
+      "id": "prop.signpost",
+      "kind": "prop",
+      "prompt": "a wooden signpost with three blank arrow boards pointing different ways, no writing",
+      "footprint": 0.4,
+      "board": "prop.signpost"
+    },
+    {
+      "id": "prop.wildflower_patch",
+      "kind": "prop",
+      "prompt": "a patch of colourful wildflowers, poppies, daisies and bluebells",
+      "footprint": 0.6,
+      "board": "prop.wildflower_patch",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height"
+    },
+    {
+      "id": "prop.clothesline",
+      "kind": "prop",
+      "prompt": "a clothesline strung between two wooden poles with a cloak, a shirt and socks hanging on it",
+      "footprint": 1.5,
+      "board": "prop.clothesline"
+    },
+    {
+      "id": "prop.hollow_coffin_table",
+      "kind": "prop",
+      "prompt": "an old stone coffin used as a table, with a candle, a mug and an open book on its lid",
+      "footprint": 1.0,
+      "board": "prop.hollow_coffin_table"
+    },
+    {
+      "id": "prop.hollow_stone_bench",
+      "kind": "prop",
+      "prompt": "a carved grey stone bench with a folded wool blanket on it",
+      "footprint": 0.9,
+      "board": "prop.hollow_stone_bench"
+    },
+    {
+      "id": "prop.hollow_candle_stack",
+      "kind": "prop",
+      "prompt": "a cluster of melted candles of many heights on a pile of old books, warm flames",
+      "footprint": 0.45,
+      "board": "prop.hollow_candle_stack"
+    },
+    {
+      "id": "prop.hollow_lantern_statue",
+      "kind": "prop",
+      "prompt": "a weathered stone angel statue with a glowing lantern hung from its raised hand",
+      "footprint": 0.55,
+      "board": "prop.hollow_lantern_statue"
+    },
+    {
+      "id": "prop.hollow_bone_chimes",
+      "kind": "prop",
+      "prompt": "a wind chime of small bones and brass bells hanging from a bent iron hook stand",
+      "footprint": 0.4,
+      "board": "prop.hollow_bone_chimes"
+    },
+    {
+      "id": "prop.hollow_rug",
+      "kind": "prop",
+      "prompt": "a worn round woven rug, deep red and gold pattern",
+      "footprint": 1.2,
+      "board": "prop.hollow_rug",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height"
+    },
+    {
+      "id": "prop.hollow_mossy_urn",
+      "kind": "prop",
+      "prompt": "a cracked stone burial urn with ferns and moss growing out of it",
+      "footprint": 0.45,
+      "board": "prop.hollow_mossy_urn"
+    }
+  ]
+}

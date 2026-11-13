@@ -1,0 +1,215 @@
+{
+  "_doc": "A dungeon part set (biome). kind: tile (template-guided, exact iso geometry), wall_decor (a wall tile with something mounted on it), prop (free object, cut out and fitted to `footprint` tiles wide). shape: floor | wall | pillar. height in tile units (1 = tile/2 px). ids match content definitions where they exist (tile.*, feature kinds); prop.* are visual decor. Prompts are added after the dungeon style descriptors.",
+  "id": "barrow",
+  "name": "Frozen Barrow",
+  "tile": 128,
+  "biome": "frozen barrow tomb, frost and ice, pale blue-grey stone, icicles, ancient northern burial mound, stylized fantasy",
+  "pieces": [
+    {
+      "id": "tile.barrow_floor_master",
+      "kind": "tile",
+      "shape": "floor",
+      "method": "master",
+      "board": "tile.barrow_floor",
+      "variants": 1,
+      "prompt": "frosted pale blue-grey flagstones, ice in the cracks, a light dusting of snow, ancient burial floor",
+      "family": {
+        "prompts": [
+          "frosted pale blue-grey flagstones, ice in the cracks, a light dusting of snow, ancient burial floor"
+        ],
+        "variations": [
+          {
+            "id": "v1",
+            "text": "a patch of thick ice"
+          },
+          {
+            "id": "v2",
+            "text": "drifted snow"
+          },
+          {
+            "id": "v3",
+            "text": "old bones frozen in ice"
+          },
+          {
+            "id": "v4",
+            "text": "carved runes in a slab"
+          }
+        ],
+        "sizes": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "weights": {
+          "2": 70,
+          "3": 70,
+          "4": 70
+        },
+        "palette_lock": true,
+        "template": {
+          "pattern": "flagstone",
+          "params": {
+            "across": 2,
+            "mortar": 0.012,
+            "bevel": 0.012
+          },
+          "strength": 0.65,
+          "seed": 1,
+          "link": true,
+          "palette": {
+            "stones": [
+              "#8a96a3",
+              "#7c8896",
+              "#97a3ae",
+              "#6f7a86"
+            ],
+            "mortar": "#3c4652",
+            "variation": 0.07
+          }
+        },
+        "span": "once",
+        "even_tone": 0.8
+      }
+    },
+    {
+      "id": "tile.barrow_wall_master",
+      "kind": "elevation",
+      "shape": "elevation",
+      "method": "wall_master",
+      "variants": 1,
+      "prompt": "an ancient barrow wall of rough pale blue-grey stones packed with frozen earth, frost and hanging icicles along a stone lintel top",
+      "family": {
+        "prompts": [
+          "an ancient barrow wall of rough pale blue-grey stones packed with frozen earth, frost and hanging icicles along a stone lintel top"
+        ],
+        "variations": [
+          {
+            "id": "v1",
+            "text": "long hanging icicles"
+          },
+          {
+            "id": "v2",
+            "text": "a carved runestone set in the wall"
+          },
+          {
+            "id": "v3",
+            "text": "frozen roots"
+          }
+        ],
+        "sizes": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "weights": {
+          "2": 70,
+          "3": 70,
+          "4": 70
+        },
+        "palette_lock": true,
+        "template": {
+          "pattern": "ashlar",
+          "params": {
+            "across": 2,
+            "course": 0.1225,
+            "mortar": 0.012,
+            "bevel": 0.012
+          },
+          "strength": 0.8,
+          "seed": 1,
+          "link": true,
+          "palette": {
+            "stones": [
+              "#8a96a3",
+              "#7c8896",
+              "#97a3ae",
+              "#6f7a86"
+            ],
+            "mortar": "#3c4652",
+            "variation": 0.07
+          }
+        },
+        "span": "once",
+        "doors": [
+          {
+            "id": "d1",
+            "text": "a heavy stone slab door with carved runes"
+          },
+          {
+            "id": "d2",
+            "text": "an iron-banded wooden door crusted with frost"
+          }
+        ],
+        "height": 3,
+        "door_height": 2,
+        "door_width": 1
+      }
+    },
+    {
+      "id": "prop.runestone",
+      "kind": "prop",
+      "prompt": "a tall carved runestone with glowing pale blue runes, frost on top, ancient northern tomb, frosted, pale blue ice, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.5,
+      "board": "prop.runestone",
+      "biome": false
+    },
+    {
+      "id": "prop.ice_crystals",
+      "kind": "prop",
+      "prompt": "a cluster of sharp pale blue ice crystals, ancient northern tomb, frosted, pale blue ice, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.55,
+      "board": "prop.ice_crystals",
+      "biome": false
+    },
+    {
+      "id": "prop.frozen_coffin",
+      "kind": "prop",
+      "prompt": "an ancient stone coffin encased in ice, a warrior's sword frozen on the lid, ancient northern tomb, frosted, pale blue ice, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 1.0,
+      "board": "prop.frozen_coffin",
+      "biome": false
+    },
+    {
+      "id": "prop.frost_brazier",
+      "kind": "prop",
+      "prompt": "a stone brazier burning with cold pale blue flames, ancient northern tomb, frosted, pale blue ice, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.45,
+      "board": "prop.frost_brazier",
+      "biome": false
+    },
+    {
+      "id": "prop.grave_goods",
+      "kind": "prop",
+      "prompt": "a pile of frosty grave goods, round shields, spears, a horned helm and a chest, ancient northern tomb, frosted, pale blue ice, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.8,
+      "board": "prop.grave_goods",
+      "biome": false
+    },
+    {
+      "id": "prop.snow_drift",
+      "kind": "prop",
+      "prompt": "a low drift of snow with a few rocks poking out, ancient northern tomb, frosted, pale blue ice, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.8,
+      "board": "prop.snow_drift",
+      "biome": false
+    }
+  ],
+  "sheet": {
+    "palette": {
+      "stones": [
+        "#8a96a3",
+        "#7c8896",
+        "#97a3ae",
+        "#6f7a86"
+      ],
+      "mortar": "#3c4652",
+      "variation": 0.07
+    },
+    "words": "frosted pale blue-grey stone with ice in the cracks",
+    "floor_stone": 0.4,
+    "wall_brick": 0.4,
+    "floor": "tile.barrow_floor_master"
+  }
+}

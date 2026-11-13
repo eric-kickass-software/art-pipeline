@@ -673,6 +673,268 @@
           "Large polished flagstone floor, with thick dark mortar."
         ]
       }
+    },
+    {
+      "id": "prop.burial_urns",
+      "kind": "prop",
+      "prompt": "a group of three old clay burial urns with lids, cracked",
+      "footprint": 0.55,
+      "board": "prop.burial_urns"
+    },
+    {
+      "id": "prop.open_coffin",
+      "kind": "prop",
+      "prompt": "an open wooden coffin with its lid leaning on it, a skeleton inside",
+      "footprint": 0.95,
+      "board": "prop.open_coffin"
+    },
+    {
+      "id": "prop.skull_pile",
+      "kind": "prop",
+      "prompt": "a heap of old grey skulls",
+      "footprint": 0.55,
+      "board": "prop.skull_pile",
+      "biome": false
+    },
+    {
+      "id": "prop.altar",
+      "kind": "prop",
+      "prompt": "a stone altar with melted candles and an old cloth",
+      "footprint": 0.8,
+      "board": "prop.altar"
+    },
+    {
+      "id": "prop.kneeling_statue",
+      "kind": "prop",
+      "prompt": "a weathered stone statue of a kneeling hooded mourner",
+      "footprint": 0.55,
+      "board": "prop.kneeling_statue"
+    },
+    {
+      "id": "prop.broken_slab",
+      "kind": "prop",
+      "prompt": "a cracked broken grave lid lying on the ground in two pieces",
+      "footprint": 0.8,
+      "board": "prop.broken_slab",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height"
+    },
+    {
+      "id": "prop.reliquary",
+      "kind": "prop",
+      "prompt": "a small iron-bound wooden reliquary box with a gold cross clasp",
+      "footprint": 0.45,
+      "board": "prop.reliquary"
+    },
+    {
+      "id": "feature.lever",
+      "kind": "prop",
+      "prompt": "a dungeon floor lever, an iron lever handle in a stone base, the handle pushed up",
+      "footprint": 0.35,
+      "board": "feature.lever"
+    },
+    {
+      "id": "feature.lever.pulled",
+      "kind": "prop",
+      "prompt": "a dungeon floor lever, an iron lever handle in a stone base, the handle pulled down, a brass glow",
+      "footprint": 0.35,
+      "board": "feature.lever.pulled"
+    },
+    {
+      "id": "feature.gate",
+      "kind": "prop",
+      "prompt": "a closed iron portcullis gate in a small stone frame, bars down",
+      "footprint": 0.9,
+      "board": "feature.gate"
+    },
+    {
+      "id": "feature.gate.open",
+      "kind": "prop",
+      "prompt": "an open iron portcullis gate in a small stone frame, the bars raised up",
+      "footprint": 0.9,
+      "board": "feature.gate.open"
+    },
+    {
+      "id": "feature.chest.open",
+      "kind": "prop",
+      "prompt": "an open wooden treasure chest with iron bands, the lid thrown back, gold coins glowing inside",
+      "footprint": 0.62,
+      "board": "feature.chest.open"
+    },
+    {
+      "id": "feature.floor_item",
+      "kind": "prop",
+      "prompt": "a small cloth loot sack on the ground with a golden glint",
+      "footprint": 0.35,
+      "board": "feature.floor_item"
+    },
+    {
+      "id": "feature.questLock.winch",
+      "kind": "prop",
+      "prompt": "a goblin winch lock, a wooden winch with a crank, chains and a keyhole plate, the crank idle",
+      "footprint": 0.7,
+      "board": "feature.questLock.winch"
+    },
+    {
+      "id": "feature.questLock.winch.turned",
+      "kind": "prop",
+      "prompt": "a goblin winch lock, a wooden winch with a crank, chains pulled taut, the crank turned, a glowing keyhole",
+      "footprint": 0.7,
+      "board": "feature.questLock.winch.turned"
+    },
+    {
+      "id": "feature.questLock.bone_altar",
+      "kind": "prop",
+      "prompt": "a dark bone altar of stacked skulls and bones with an empty candle holder on top, unlit",
+      "footprint": 0.7,
+      "board": "feature.questLock.bone_altar"
+    },
+    {
+      "id": "feature.questLock.bone_altar.lit",
+      "kind": "prop",
+      "prompt": "a bone altar of stacked skulls and bones with a black candle burning on top, purple flame, eerie light",
+      "footprint": 0.7,
+      "board": "feature.questLock.bone_altar.lit"
+    },
+    {
+      "id": "feature.questLock.rune_door",
+      "kind": "prop",
+      "prompt": "a sealed stone rune door slab in a frame, carved runes dark",
+      "footprint": 0.9,
+      "board": "feature.questLock.rune_door"
+    },
+    {
+      "id": "feature.questLock.rune_door.open",
+      "kind": "prop",
+      "prompt": "a stone rune door slab in a frame, the carved runes glowing blue, the slab sliding open",
+      "footprint": 0.9,
+      "board": "feature.questLock.rune_door.open"
+    },
+    {
+      "id": "npc.restoring_pond",
+      "kind": "prop",
+      "prompt": "a small spring shrine at a pond's edge, a mossy stone basin with clear glowing water and a little stone idol",
+      "footprint": 0.7,
+      "board": "npc.restoring_pond"
+    },
+    {
+      "id": "trap.spike_plate",
+      "kind": "prop",
+      "prompt": "a square floor plate with rows of retracted spikes, armed",
+      "footprint": 0.8,
+      "board": "trap.spike_plate",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height"
+    },
+    {
+      "id": "trap.spike_plate.sprung",
+      "kind": "prop",
+      "prompt": "a square floor plate with sharp steel spikes sticking up, sprung",
+      "footprint": 0.8,
+      "board": "trap.spike_plate.sprung"
+    },
+    {
+      "id": "trap.poison_needle",
+      "kind": "prop",
+      "prompt": "a loose flagstone with a tiny needle hole, armed",
+      "footprint": 0.8,
+      "board": "trap.poison_needle",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height"
+    },
+    {
+      "id": "trap.poison_needle.sprung",
+      "kind": "prop",
+      "prompt": "a loose flagstone with a green poison needle sticking up and green droplets",
+      "footprint": 0.8,
+      "board": "trap.poison_needle.sprung"
+    },
+    {
+      "id": "trap.alarm_bell",
+      "kind": "prop",
+      "prompt": "a thin tripwire stretched low across the floor to a small brass bell on a post",
+      "footprint": 0.8,
+      "board": "trap.alarm_bell"
+    },
+    {
+      "id": "trap.alarm_bell.sprung",
+      "kind": "prop",
+      "prompt": "a snapped tripwire and a ringing brass bell on a post, swinging",
+      "footprint": 0.8,
+      "board": "trap.alarm_bell.sprung"
+    },
+    {
+      "id": "trap.cage",
+      "kind": "prop",
+      "prompt": "a square of floor with an iron cage hanging above it, armed",
+      "footprint": 0.8,
+      "board": "trap.cage"
+    },
+    {
+      "id": "trap.cage.sprung",
+      "kind": "prop",
+      "prompt": "an iron cage of bars dropped down onto the floor",
+      "footprint": 0.8,
+      "board": "trap.cage.sprung"
+    },
+    {
+      "id": "trap.teleport_rune",
+      "kind": "prop",
+      "prompt": "a faint carved rune circle on the floor, dim",
+      "footprint": 0.8,
+      "board": "trap.teleport_rune",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height"
+    },
+    {
+      "id": "trap.teleport_rune.sprung",
+      "kind": "prop",
+      "prompt": "a bright glowing violet teleport rune circle on the floor, swirling light",
+      "footprint": 0.8,
+      "board": "trap.teleport_rune.sprung",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height"
+    },
+    {
+      "id": "trap.ambush_pit",
+      "kind": "prop",
+      "prompt": "a square floor area covered with thin boards and straw hiding a pit",
+      "footprint": 0.8,
+      "board": "trap.ambush_pit",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height"
+    },
+    {
+      "id": "trap.ambush_pit.sprung",
+      "kind": "prop",
+      "prompt": "an open square pit in the floor with broken boards around its edge",
+      "footprint": 0.8,
+      "board": "trap.ambush_pit.sprung",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height"
+    },
+    {
+      "id": "trap.falling_rocks",
+      "kind": "prop",
+      "prompt": "a cracked ceiling patch of loose rocks above a floor marked with dust",
+      "footprint": 0.8,
+      "board": "trap.falling_rocks",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height"
+    },
+    {
+      "id": "trap.falling_rocks.sprung",
+      "kind": "prop",
+      "prompt": "a pile of fallen rocks and dust on the floor",
+      "footprint": 0.8,
+      "board": "trap.falling_rocks.sprung"
+    },
+    {
+      "id": "trap.gas_pocket",
+      "kind": "prop",
+      "prompt": "a crack in the floor with a faint wisp of green gas",
+      "footprint": 0.8,
+      "board": "trap.gas_pocket",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height"
+    },
+    {
+      "id": "trap.gas_pocket.sprung",
+      "kind": "prop",
+      "prompt": "a thick cloud of green poison gas billowing from a crack in the floor",
+      "footprint": 0.8,
+      "board": "trap.gas_pocket.sprung"
     }
   ],
   "sheet": {

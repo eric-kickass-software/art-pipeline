@@ -1,0 +1,264 @@
+{
+  "_doc": "A dungeon part set (biome). kind: tile (template-guided, exact iso geometry), wall_decor (a wall tile with something mounted on it), prop (free object, cut out and fitted to `footprint` tiles wide). shape: floor | wall | pillar. height in tile units (1 = tile/2 px). ids match content definitions where they exist (tile.*, feature kinds); prop.* are visual decor. Prompts are added after the dungeon style descriptors.",
+  "id": "mine",
+  "name": "Mine",
+  "tile": 128,
+  "biome": "goblin mine tunnels, rough brown-grey rock, timber props, lantern light, blue-grey crystal ore, stylized fantasy",
+  "pieces": [
+    {
+      "id": "tile.mine_floor_master",
+      "kind": "tile",
+      "shape": "floor",
+      "method": "master",
+      "board": "tile.mine_floor",
+      "variants": 1,
+      "prompt": "plain uneven packed earth and flat rough brown rock slabs seen from directly above, gravel in the gaps, dusty, only ground, no objects, no lanterns, no planks",
+      "family": {
+        "prompts": [
+          "plain uneven packed earth and flat rough brown rock slabs seen from directly above, gravel in the gaps, dusty, only ground, no objects, no lanterns, no planks"
+        ],
+        "variations": [
+          {
+            "id": "v1",
+            "text": "a patch of loose gravel and small rocks"
+          },
+          {
+            "id": "v2",
+            "text": "a glinting blue-grey ore seam in the rock"
+          },
+          {
+            "id": "v3",
+            "text": "old cart rail sleepers half buried"
+          },
+          {
+            "id": "v4",
+            "text": "a dark damp patch with a puddle"
+          }
+        ],
+        "sizes": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "weights": {
+          "2": 70,
+          "3": 70,
+          "4": 70
+        },
+        "palette_lock": true,
+        "template": {
+          "pattern": "flagstone",
+          "params": {
+            "across": 2,
+            "mortar": 0.012,
+            "bevel": 0.012
+          },
+          "strength": 0.65,
+          "seed": 1,
+          "link": true,
+          "palette": {
+            "stones": [
+              "#6e6258",
+              "#615750",
+              "#7a6d62",
+              "#574d45"
+            ],
+            "mortar": "#2e2824",
+            "variation": 0.08
+          }
+        },
+        "span": "once",
+        "even_tone": 0.8
+      }
+    },
+    {
+      "id": "tile.mine_wall_master",
+      "kind": "elevation",
+      "shape": "elevation",
+      "method": "wall_master",
+      "variants": 1,
+      "prompt": "a rough hewn rock tunnel wall of brown-grey stone, propped with thick wooden timber beams, a flat rock top",
+      "family": {
+        "prompts": [
+          "a rough hewn rock tunnel wall of brown-grey stone, propped with thick wooden timber beams, a flat rock top"
+        ],
+        "variations": [
+          {
+            "id": "v1",
+            "text": "a glinting blue-grey ore vein"
+          },
+          {
+            "id": "v2",
+            "text": "a cracked timber prop"
+          },
+          {
+            "id": "v3",
+            "text": "loose rocks and dirt spilling out"
+          }
+        ],
+        "sizes": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "weights": {
+          "2": 70,
+          "3": 70,
+          "4": 70
+        },
+        "palette_lock": true,
+        "template": {
+          "pattern": "ashlar",
+          "params": {
+            "across": 2,
+            "course": 0.1225,
+            "mortar": 0.012,
+            "bevel": 0.012
+          },
+          "strength": 0.8,
+          "seed": 1,
+          "link": true,
+          "palette": {
+            "stones": [
+              "#6e6258",
+              "#615750",
+              "#7a6d62",
+              "#574d45"
+            ],
+            "mortar": "#2e2824",
+            "variation": 0.08
+          }
+        },
+        "span": "once",
+        "doors": [
+          {
+            "id": "d1",
+            "text": "a crude wooden plank door with iron straps"
+          },
+          {
+            "id": "d2",
+            "text": "a goblin door of mismatched planks and scrap metal"
+          }
+        ],
+        "height": 3,
+        "door_height": 2,
+        "door_width": 1
+      }
+    },
+    {
+      "id": "prop.mine_cart",
+      "kind": "prop",
+      "prompt": "a wooden mine cart on iron wheels full of rocks and ore, goblin mine gear, worn wood and rusty iron, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.75,
+      "board": "prop.mine_cart",
+      "biome": false
+    },
+    {
+      "id": "prop.ore_pile",
+      "kind": "prop",
+      "prompt": "a pile of rocks and blue-grey glinting ore chunks, goblin mine gear, worn wood and rusty iron, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.6,
+      "board": "prop.ore_pile",
+      "biome": false
+    },
+    {
+      "id": "prop.tool_rack",
+      "kind": "prop",
+      "prompt": "a wooden rack holding picks and shovels, goblin mine gear, worn wood and rusty iron, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.6,
+      "board": "prop.tool_rack",
+      "biome": false
+    },
+    {
+      "id": "prop.timber_stack",
+      "kind": "prop",
+      "prompt": "a stack of thick wooden timber beams, goblin mine gear, worn wood and rusty iron, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.8,
+      "board": "prop.timber_stack",
+      "biome": false
+    },
+    {
+      "id": "prop.powder_kegs",
+      "kind": "prop",
+      "prompt": "a stack of goblin blasting powder kegs with skull marks and fuses, goblin mine gear, worn wood and rusty iron, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.6,
+      "board": "prop.powder_kegs",
+      "biome": false
+    },
+    {
+      "id": "prop.winch",
+      "kind": "prop",
+      "prompt": "a wooden mine winch with a crank handle and a coil of rope, goblin mine gear, worn wood and rusty iron, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.7,
+      "board": "prop.winch",
+      "biome": false
+    },
+    {
+      "id": "prop.wheelbarrow",
+      "kind": "prop",
+      "prompt": "an old wooden wheelbarrow with a few rocks in it, goblin mine gear, worn wood and rusty iron, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.6,
+      "board": "prop.wheelbarrow",
+      "biome": false
+    },
+    {
+      "id": "prop.sacks",
+      "kind": "prop",
+      "prompt": "a heap of tied burlap sacks, goblin mine gear, worn wood and rusty iron, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.55,
+      "board": "prop.sacks",
+      "biome": false
+    },
+    {
+      "id": "prop.goblin_junk",
+      "kind": "prop",
+      "prompt": "a goblin scrap heap of bent metal, broken tools, gears and rags, goblin mine gear, worn wood and rusty iron, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.7,
+      "board": "prop.goblin_junk",
+      "biome": false
+    },
+    {
+      "id": "prop.crystal_cluster",
+      "kind": "prop",
+      "prompt": "a cluster of blue-grey crystals growing out of a rock, goblin mine gear, worn wood and rusty iron, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.5,
+      "board": "prop.crystal_cluster",
+      "biome": false
+    },
+    {
+      "id": "prop.mushrooms",
+      "kind": "prop",
+      "prompt": "a clump of brown cave mushrooms, goblin mine gear, worn wood and rusty iron, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.4,
+      "board": "prop.mushrooms",
+      "biome": false
+    },
+    {
+      "id": "prop.rails",
+      "kind": "prop",
+      "prompt": "a short straight piece of mine-cart track, iron rails on wooden sleepers, goblin mine gear, worn wood and rusty iron, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 1.0,
+      "board": "prop.rails",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height",
+      "biome": false
+    }
+  ],
+  "sheet": {
+    "palette": {
+      "stones": [
+        "#6e6258",
+        "#615750",
+        "#7a6d62",
+        "#574d45"
+      ],
+      "mortar": "#2e2824",
+      "variation": 0.08
+    },
+    "words": "rough hewn rock and packed earth",
+    "floor_stone": 0.4,
+    "wall_brick": 0.4,
+    "floor": "tile.mine_floor_master"
+  }
+}

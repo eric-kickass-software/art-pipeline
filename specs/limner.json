@@ -758,6 +758,116 @@
     "margin": 0
    },
    "style": "painted_scene"
+  },
+  "monsters/monster.high_priest_ossian": {
+   "subject": "High Priest Ossian, a gaunt old cult high priest in heavy gold-embroidered robes and a tall gilded mitre, sunken glowing amber eyes, a golden censer trailing purple incense smoke and a jewelled chalice of dark red wine"
+  },
+  "tokens/monster.high_priest_ossian": {
+   "subject": "High Priest Ossian, a gaunt old cult high priest in long heavy gold-embroidered robes and a tall gilded mitre, a swinging golden censer trailing purple smoke in one hand and a jewelled golden chalice in the other"
+  },
+  "monsters/monster.blood_matron": {
+   "subject": "The Blood Matron, a tall pale cult matron in layered crimson robes with a high collar, dark lips and a cold smile, a bandolier of small glass vials full of blood across her chest, two curved ritual knives"
+  },
+  "tokens/monster.blood_matron": {
+   "subject": "The Blood Matron, a tall pale cult matron in long layered crimson robes, a bandolier of glass vials full of blood across her chest, a curved ritual knife in each hand"
+  },
+  "monsters/monster.forgeheart": {
+   "subject": "The Forgeheart, a hulking iron furnace construct with no face and no skin, a riveted black iron furnace for a head with a glowing grated slit for eyes, cracked black iron plates, a roaring orange fire glowing through a grated furnace chest, two smoking chimney stacks on its shoulders, a machine, not a person"
+  },
+  "tokens/monster.forgeheart": {
+   "subject": "The Forgeheart, a hulking walking furnace on two thick iron legs, cracked black iron plates, a roaring orange fire glowing through a grated chest, chimney stacks on its shoulders puffing smoke, huge iron fists"
+  },
+  "monsters/monster.summoned_horror": {
+   "subject": "a summoned horror from the void, a hunched purple-black demon with a huge gaping mouth of far too many needle teeth, a cluster of small glowing violet eyes, long thin clawed arms, wisps of shadow peeling off it"
+  },
+  "tokens/monster.summoned_horror": {
+   "subject": "a summoned horror, a hunched purple-black void demon with a huge grinning mouth of far too many teeth, small glowing violet eyes, long thin arms with hooked claws, wisps of shadow trailing off it"
+  },
+  "monsters/monster.captive_miner": {
+   "subject": "Bessa, a stout friendly female dwarf miner with braided copper hair, a dented leather miner's cap with a candle stub, a soot-smudged face with a bruise on one cheek, torn work shirt, a pickaxe over her shoulder, a brave determined smile"
+  },
+  "tokens/monster.captive_miner": {
+   "subject": "Bessa, a stout female dwarf miner with braided copper hair, a dented leather miner's cap, soot-smudged face with a bruise, torn work clothes and boots, a pickaxe held over her shoulder, a determined friendly smile"
+  },
+  "tokens/monster.cat_kitten": {
+   "subject": "a small brave ginger kitten, fluffy orange striped fur, big green eyes, tail held high, prowling on all four legs, body held horizontal, side view"
+  },
+  "tokens/monster.cat_companion": {
+   "subject": "a big muscular tabby war-cat wearing a brown leather harness with brass buckles, a scarred ear, prowling on all four legs, body held horizontal, side view"
+  },
+  "tokens/monster.cat_greater": {
+   "subject": "a sleek black panther with red tribal war paint stripes on its face and shoulders, glowing yellow eyes, prowling"
+  },
+  "tokens/monster.cat_alley": {
+   "subject": "a scruffy skinny grey street cat with a torn ear and matted fur, a mischievous grin, prowling on all four legs, body held horizontal, side view"
+  },
+  "ui/ui.keyart.crypt": {
+   "subject": "wide cinematic view down a vaulted stone crypt hall, rows of carved sarcophagi and burial niches full of skulls, tall candles and a glowing iron brazier, cobwebs, pale green ghostly mist along the floor, skeleton silhouettes lurking in the shadows, a treasure chest glinting gold at the far end, cold blue darkness against warm candle gold, seen from slightly above, cinematic wide composition, no people in the foreground, no text, no letters",
+   "style": "painted_scene",
+   "finish": {
+    "size": 1536,
+    "margin": 0
+   }
+  },
+  "ui/ui.keyart.mine": {
+   "subject": "wide cinematic view into a deep goblin mine, timber-propped rock tunnels, mine cart rails curving away into the dark, hanging oil lanterns, glittering blue-grey crystal ore seams in the rock walls, stacked blasting powder kegs and a wooden winch, an iron-banded treasure chest on a mine cart, the red glow of a furnace deep in the tunnel, warm lantern light against cold dark rock, seen from slightly above, cinematic wide composition, no people in the foreground, no text, no letters",
+   "style": "painted_scene",
+   "finish": {
+    "size": 1536,
+    "margin": 0
+   }
+  },
+  "ui/ui.keyart.ruins": {
+   "subject": "wide cinematic view of overgrown sunken temple ruins, broken sandstone columns and a toppled giant stone idol head, vines and roots everywhere, shafts of green-gold light through a collapsed ceiling, a still reflecting pool, faded red cult banners and a red chalk ritual circle ringed with candles, a treasure chest on a carved stone altar, seen from slightly above, cinematic wide composition, no people in the foreground, no text, no letters",
+   "style": "painted_scene",
+   "finish": {
+    "size": 1536,
+    "margin": 0
+   }
+  },
+  "ui/ui.keyart.random": {
+   "subject": "wide cinematic view of a mysterious dungeon crossroads, three great stone archways leading into a crypt, a timbered mine tunnel and an overgrown temple, a swirling magic portal of gold and violet light in the middle, an ornate treasure chest floating inside the portal, glowing dice and drifting playing cards in the air, mist on the flagstones, seen from slightly above, cinematic wide composition, no people in the foreground, no text, no letters",
+   "style": "painted_scene",
+   "finish": {
+    "size": 1536,
+    "margin": 0
+   }
+  },
+  "ui/ui.action.search": {
+   "subject": "a brass magnifying glass over a glowing lantern beam"
+  },
+  "ui/ui.stat.mana": {
+   "subject": "a glowing blue mana crystal orb with swirling light inside"
+  },
+  "ui/ui.stat.danger": {
+   "subject": "a red skull on a cracked dark shield, warning glow"
+  },
+  "ui/ui.action.roll": {
+   "subject": "two ivory six-sided dice tumbling, golden pips, motion sparkles"
+  },
+  "ui/ui.theme.crypt": {
+   "subject": "a stone crypt archway with a skull keystone and green mist"
+  },
+  "ui/ui.theme.mine": {
+   "subject": "a mine entrance of timber beams with a pickaxe and a blue crystal"
+  },
+  "ui/ui.theme.ruins": {
+   "subject": "a broken sandstone temple column wrapped in green vines"
+  },
+  "ui/ui.currency.gem": {
+   "subject": "a faceted glowing purple gemstone"
+  },
+  "ui/ui.lock": {
+   "subject": "a closed iron padlock with a brass keyhole"
+  },
+  "ui/ui.host": {
+   "subject": "a small golden crown with three points and red gems"
+  },
+  "ui/ui.action.turn": {
+   "subject": "a golden hourglass with sand running"
+  },
+  "ui/ui.action.draw": {
+   "subject": "a fan of three face-down playing cards with ornate gold backs"
   }
  },
  "_house_style": "Portraits: 'semireal' (Eric, 2026-11-01: 'that top row is gold'). Reference: specs/limner_refs/semireal.jpg (seed 11, 832x1024, 4 steps, no LoRA). Change the house style only on purpose.",
@@ -780,6 +890,70 @@
    "ui.splash.keyart": {
     "name": "Splash key art",
     "sub": "splash"
+   },
+   "ui.keyart.crypt": {
+    "name": "Key art: Crypt",
+    "sub": "keyart"
+   },
+   "ui.keyart.mine": {
+    "name": "Key art: Mine",
+    "sub": "keyart"
+   },
+   "ui.keyart.ruins": {
+    "name": "Key art: Ruins",
+    "sub": "keyart"
+   },
+   "ui.keyart.random": {
+    "name": "Key art: Random",
+    "sub": "keyart"
+   },
+   "ui.action.search": {
+    "name": "Search",
+    "sub": "c1"
+   },
+   "ui.stat.mana": {
+    "name": "Mana",
+    "sub": "c1"
+   },
+   "ui.stat.danger": {
+    "name": "Danger",
+    "sub": "c1"
+   },
+   "ui.action.roll": {
+    "name": "Roll",
+    "sub": "c1"
+   },
+   "ui.theme.crypt": {
+    "name": "Theme: Crypt",
+    "sub": "c1"
+   },
+   "ui.theme.mine": {
+    "name": "Theme: Mine",
+    "sub": "c1"
+   },
+   "ui.theme.ruins": {
+    "name": "Theme: Ruins",
+    "sub": "c1"
+   },
+   "ui.currency.gem": {
+    "name": "Gem",
+    "sub": "c1"
+   },
+   "ui.lock": {
+    "name": "Padlock",
+    "sub": "c1"
+   },
+   "ui.host": {
+    "name": "Host crown",
+    "sub": "c1"
+   },
+   "ui.action.turn": {
+    "name": "Turn",
+    "sub": "c1"
+   },
+   "ui.action.draw": {
+    "name": "Draw",
+    "sub": "c1"
    }
   }
  },

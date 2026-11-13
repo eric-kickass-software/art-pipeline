@@ -1,0 +1,216 @@
+{
+  "_doc": "A dungeon part set (biome). kind: tile (template-guided, exact iso geometry), wall_decor (a wall tile with something mounted on it), prop (free object, cut out and fitted to `footprint` tiles wide). shape: floor | wall | pillar. height in tile units (1 = tile/2 px). ids match content definitions where they exist (tile.*, feature kinds); prop.* are visual decor. Prompts are added after the dungeon style descriptors.",
+  "id": "grotto",
+  "name": "Fungal Grotto",
+  "tile": 128,
+  "biome": "fungal grotto cave, giant glowing mushrooms, bioluminescent teal and violet light, damp dark rock, spider webs, stylized fantasy",
+  "pieces": [
+    {
+      "id": "tile.grotto_floor_master",
+      "kind": "tile",
+      "shape": "floor",
+      "method": "master",
+      "board": "tile.grotto_floor",
+      "variants": 1,
+      "prompt": "a damp dark violet-grey cave rock floor, flat uneven stones, glowing teal moss and tiny mushrooms in the cracks",
+      "family": {
+        "prompts": [
+          "a damp dark violet-grey cave rock floor, flat uneven stones, glowing teal moss and tiny mushrooms in the cracks"
+        ],
+        "variations": [
+          {
+            "id": "v1",
+            "text": "a ring of tiny glowing mushrooms"
+          },
+          {
+            "id": "v2",
+            "text": "sticky white spider web strands"
+          },
+          {
+            "id": "v3",
+            "text": "a shallow glowing pool"
+          },
+          {
+            "id": "v4",
+            "text": "violet spore dust"
+          }
+        ],
+        "sizes": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "weights": {
+          "2": 70,
+          "3": 70,
+          "4": 70
+        },
+        "palette_lock": true,
+        "template": {
+          "pattern": "flagstone",
+          "params": {
+            "across": 2,
+            "mortar": 0.012,
+            "bevel": 0.012
+          },
+          "strength": 0.65,
+          "seed": 1,
+          "link": true,
+          "palette": {
+            "stones": [
+              "#4a4552",
+              "#3f3b47",
+              "#55505e",
+              "#463f4a"
+            ],
+            "mortar": "#1f2a2a",
+            "variation": 0.08
+          }
+        },
+        "span": "once",
+        "even_tone": 0.8
+      }
+    },
+    {
+      "id": "tile.grotto_wall_master",
+      "kind": "elevation",
+      "shape": "elevation",
+      "method": "wall_master",
+      "variants": 1,
+      "prompt": "a rough dark cave rock wall of layered violet-grey stone, shelves of glowing teal fungus growing out of it, a rocky top",
+      "family": {
+        "prompts": [
+          "a rough dark cave rock wall of layered violet-grey stone, shelves of glowing teal fungus growing out of it, a rocky top"
+        ],
+        "variations": [
+          {
+            "id": "v1",
+            "text": "big glowing shelf mushrooms"
+          },
+          {
+            "id": "v2",
+            "text": "thick spider webs"
+          },
+          {
+            "id": "v3",
+            "text": "dripping water and moss"
+          }
+        ],
+        "sizes": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "weights": {
+          "2": 70,
+          "3": 70,
+          "4": 70
+        },
+        "palette_lock": true,
+        "template": {
+          "pattern": "ashlar",
+          "params": {
+            "across": 2,
+            "course": 0.1225,
+            "mortar": 0.012,
+            "bevel": 0.012
+          },
+          "strength": 0.8,
+          "seed": 1,
+          "link": true,
+          "palette": {
+            "stones": [
+              "#4a4552",
+              "#3f3b47",
+              "#55505e",
+              "#463f4a"
+            ],
+            "mortar": "#1f2a2a",
+            "variation": 0.08
+          }
+        },
+        "span": "once",
+        "doors": [
+          {
+            "id": "d1",
+            "text": "a hanging curtain of thick web over an opening"
+          },
+          {
+            "id": "d2",
+            "text": "a crude goblin door of planks and mushroom stalks"
+          }
+        ],
+        "height": 3,
+        "door_height": 2,
+        "door_width": 1
+      }
+    },
+    {
+      "id": "prop.giant_mushroom",
+      "kind": "prop",
+      "prompt": "a giant glowing teal mushroom with a wide spotted cap, fungal cave, bioluminescent teal and violet glow, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.8,
+      "board": "prop.giant_mushroom",
+      "biome": false
+    },
+    {
+      "id": "prop.glowcap_cluster",
+      "kind": "prop",
+      "prompt": "a cluster of small glowing violet and teal mushrooms, fungal cave, bioluminescent teal and violet glow, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.5,
+      "board": "prop.glowcap_cluster",
+      "biome": false
+    },
+    {
+      "id": "prop.spider_egg_sacs",
+      "kind": "prop",
+      "prompt": "a clump of pale spider egg sacs wrapped in sticky webs, fungal cave, bioluminescent teal and violet glow, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.6,
+      "board": "prop.spider_egg_sacs",
+      "biome": false
+    },
+    {
+      "id": "prop.webbed_cocoon",
+      "kind": "prop",
+      "prompt": "a body-sized cocoon wrapped in thick white spider silk, hanging from a web, fungal cave, bioluminescent teal and violet glow, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.5,
+      "board": "prop.webbed_cocoon",
+      "biome": false
+    },
+    {
+      "id": "prop.spore_pool",
+      "kind": "prop",
+      "prompt": "a small shallow pool glowing teal with floating spores, fungal cave, bioluminescent teal and violet glow, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.8,
+      "board": "prop.spore_pool",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height",
+      "biome": false
+    },
+    {
+      "id": "prop.goblin_mushroom_basket",
+      "kind": "prop",
+      "prompt": "a goblin's wicker basket overflowing with harvested mushrooms, fungal cave, bioluminescent teal and violet glow, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.45,
+      "board": "prop.goblin_mushroom_basket",
+      "biome": false
+    }
+  ],
+  "sheet": {
+    "palette": {
+      "stones": [
+        "#4a4552",
+        "#3f3b47",
+        "#55505e",
+        "#463f4a"
+      ],
+      "mortar": "#1f2a2a",
+      "variation": 0.08
+    },
+    "words": "damp dark violet-grey cave rock with glowing moss",
+    "floor_stone": 0.45,
+    "wall_brick": 0.4,
+    "floor": "tile.grotto_floor_master"
+  }
+}

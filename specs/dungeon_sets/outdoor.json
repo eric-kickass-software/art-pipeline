@@ -1,0 +1,276 @@
+{
+  "_doc": "A dungeon part set (biome). kind: tile (template-guided, exact iso geometry), wall_decor (a wall tile with something mounted on it), prop (free object, cut out and fitted to `footprint` tiles wide). shape: floor | wall | pillar. height in tile units (1 = tile/2 px). ids match content definitions where they exist (tile.*, feature kinds); prop.* are visual decor. Prompts are added after the dungeon style descriptors.",
+  "id": "outdoor",
+  "name": "Outdoor",
+  "tile": 128,
+  "biome": "sunny forest clearing, lush green grass, leafy trees, wildflowers, stylized fantasy, whimsical",
+  "pieces": [
+    {
+      "id": "tile.outdoor_floor_master",
+      "kind": "tile",
+      "shape": "floor",
+      "method": "master",
+      "board": "tile.forest_grass",
+      "variants": 1,
+      "prompt": "a plain lush green grass lawn texture seen from directly above, short soft grass blades, a few tiny wildflowers, only grass, no trees, no bushes, no objects, no paths",
+      "family": {
+        "prompts": [
+          "a plain lush green grass lawn texture seen from directly above, short soft grass blades, a few tiny wildflowers, only grass, no trees, no bushes, no objects, no paths"
+        ],
+        "variations": [
+          {
+            "id": "v1",
+            "text": "a patch of clover and small white flowers"
+          },
+          {
+            "id": "v2",
+            "text": "a bare dirt patch"
+          },
+          {
+            "id": "v3",
+            "text": "fallen autumn leaves"
+          },
+          {
+            "id": "v4",
+            "text": "a few small stones in the grass"
+          }
+        ],
+        "sizes": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "weights": {
+          "2": 70,
+          "3": 70,
+          "4": 70
+        },
+        "palette_lock": true,
+        "template": {
+          "pattern": "flagstone",
+          "params": {
+            "across": 2,
+            "mortar": 0.012,
+            "bevel": 0.012
+          },
+          "strength": 0.65,
+          "seed": 1,
+          "link": true,
+          "palette": {
+            "stones": [
+              "#5f8a3c",
+              "#56803a",
+              "#6a9645",
+              "#4d7333"
+            ],
+            "mortar": "#3c5a28",
+            "variation": 0.1
+          }
+        },
+        "span": "once",
+        "even_tone": 0.8
+      }
+    },
+    {
+      "id": "tile.outdoor_wall_master",
+      "kind": "elevation",
+      "shape": "elevation",
+      "method": "wall_master",
+      "variants": 1,
+      "prompt": "a dense tree line seen from the side, thick tree trunks close together with leafy green canopy and bushes at their feet",
+      "family": {
+        "prompts": [
+          "a dense tree line seen from the side, thick tree trunks close together with leafy green canopy and bushes at their feet"
+        ],
+        "variations": [
+          {
+            "id": "v1",
+            "text": "a mossy old trunk"
+          },
+          {
+            "id": "v2",
+            "text": "berry bushes at the foot"
+          },
+          {
+            "id": "v3",
+            "text": "a gap with ferns"
+          }
+        ],
+        "sizes": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "weights": {
+          "2": 70,
+          "3": 70,
+          "4": 70
+        },
+        "palette_lock": true,
+        "template": {
+          "pattern": "planks",
+          "params": {
+            "across": 2,
+            "course": 0.1225,
+            "mortar": 0.012,
+            "bevel": 0.012
+          },
+          "strength": 0.8,
+          "seed": 1,
+          "link": true,
+          "palette": {
+            "stones": [
+              "#5f8a3c",
+              "#56803a",
+              "#6a9645",
+              "#4d7333"
+            ],
+            "mortar": "#3c5a28",
+            "variation": 0.1
+          }
+        },
+        "span": "once",
+        "doors": [
+          {
+            "id": "d1",
+            "text": "a rustic wooden gate in a hedge"
+          }
+        ],
+        "height": 3,
+        "door_height": 2,
+        "door_width": 1
+      }
+    },
+    {
+      "id": "prop.stump",
+      "kind": "prop",
+      "prompt": "a mossy old tree stump, sunny forest, lush and green, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.5,
+      "board": "prop.stump",
+      "biome": false
+    },
+    {
+      "id": "prop.fallen_log",
+      "kind": "prop",
+      "prompt": "a fallen mossy log with a few mushrooms, sunny forest, lush and green, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 1.0,
+      "board": "prop.fallen_log",
+      "biome": false
+    },
+    {
+      "id": "prop.boulder",
+      "kind": "prop",
+      "prompt": "a big rounded grey boulder with moss, sunny forest, lush and green, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.6,
+      "board": "prop.boulder",
+      "biome": false
+    },
+    {
+      "id": "prop.mushroom_ring",
+      "kind": "prop",
+      "prompt": "a fairy ring of small red and white mushrooms in the grass, sunny forest, lush and green, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.8,
+      "board": "prop.mushroom_ring",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height",
+      "biome": false
+    },
+    {
+      "id": "prop.flowers",
+      "kind": "prop",
+      "prompt": "a clump of colourful flowers, sunny forest, lush and green, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.4,
+      "board": "prop.flowers",
+      "biome": false
+    },
+    {
+      "id": "prop.grass_tufts",
+      "kind": "prop",
+      "prompt": "a few tall grass tufts, sunny forest, lush and green, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.4,
+      "board": "prop.grass_tufts",
+      "biome": false
+    },
+    {
+      "id": "prop.fern",
+      "kind": "prop",
+      "prompt": "a green fern plant, sunny forest, lush and green, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.4,
+      "board": "prop.fern",
+      "biome": false
+    },
+    {
+      "id": "prop.berry_bush",
+      "kind": "prop",
+      "prompt": "a round bush with red berries, sunny forest, lush and green, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.6,
+      "board": "prop.berry_bush",
+      "biome": false
+    },
+    {
+      "id": "prop.thorn_thicket",
+      "kind": "prop",
+      "prompt": "a tangled thicket of thorny brambles, sunny forest, lush and green, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.7,
+      "board": "prop.thorn_thicket",
+      "biome": false
+    },
+    {
+      "id": "prop.hunters_camp",
+      "kind": "prop",
+      "prompt": "a hunter's lean-to shelter of branches with a cold campfire, sunny forest, lush and green, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 1.0,
+      "board": "prop.hunters_camp",
+      "biome": false
+    },
+    {
+      "id": "prop.magpie_nest",
+      "kind": "prop",
+      "prompt": "a magpie nest of twigs on a low stump with shiny trinkets in it, sunny forest, lush and green, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.45,
+      "board": "prop.magpie_nest",
+      "biome": false
+    },
+    {
+      "id": "prop.herb_patch",
+      "kind": "prop",
+      "prompt": "a small patch of herbs and medicinal plants, sunny forest, lush and green, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.5,
+      "board": "prop.herb_patch",
+      "biome": false
+    },
+    {
+      "id": "tile.forest_tree",
+      "kind": "prop",
+      "prompt": "a leafy round oak tree with a thick trunk, sunny forest, lush and green, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 1.0,
+      "board": "tile.forest_tree",
+      "biome": false
+    },
+    {
+      "id": "tile.forest_bush",
+      "kind": "prop",
+      "prompt": "a round leafy green bush, sunny forest, lush and green, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.6,
+      "board": "tile.forest_bush",
+      "biome": false
+    }
+  ],
+  "sheet": {
+    "palette": {
+      "stones": [
+        "#5f8a3c",
+        "#56803a",
+        "#6a9645",
+        "#4d7333"
+      ],
+      "mortar": "#3c5a28",
+      "variation": 0.1
+    },
+    "words": "soft grass and earth",
+    "floor_stone": 0.5,
+    "wall_brick": 0.5,
+    "floor": "tile.outdoor_floor_master"
+  }
+}

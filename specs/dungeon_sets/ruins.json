@@ -1,0 +1,266 @@
+{
+  "_doc": "A dungeon part set (biome). kind: tile (template-guided, exact iso geometry), wall_decor (a wall tile with something mounted on it), prop (free object, cut out and fitted to `footprint` tiles wide). shape: floor | wall | pillar. height in tile units (1 = tile/2 px). ids match content definitions where they exist (tile.*, feature kinds); prop.* are visual decor. Prompts are added after the dungeon style descriptors.",
+  "id": "ruins",
+  "name": "Ruins",
+  "tile": 128,
+  "biome": "overgrown sunken temple ruins, warm sandstone, vines and roots, green-gold light, stylized fantasy",
+  "pieces": [
+    {
+      "id": "tile.ruins_floor_master",
+      "kind": "tile",
+      "shape": "floor",
+      "method": "master",
+      "board": "tile.ruins_floor",
+      "variants": 1,
+      "prompt": "large worn sandstone floor slabs, warm beige and ochre, moss and small ferns in the joints, cracked edges",
+      "family": {
+        "prompts": [
+          "large worn sandstone floor slabs, warm beige and ochre, moss and small ferns in the joints, cracked edges"
+        ],
+        "variations": [
+          {
+            "id": "v1",
+            "text": "roots breaking through the slabs"
+          },
+          {
+            "id": "v2",
+            "text": "a patch of fallen leaves and vines"
+          },
+          {
+            "id": "v3",
+            "text": "a sunken cracked slab"
+          },
+          {
+            "id": "v4",
+            "text": "a faded carved glyph in one slab"
+          }
+        ],
+        "sizes": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "weights": {
+          "2": 70,
+          "3": 70,
+          "4": 70
+        },
+        "palette_lock": true,
+        "template": {
+          "pattern": "ashlar",
+          "params": {
+            "across": 2,
+            "course": 0.2,
+            "mortar": 0.012,
+            "bevel": 0.012
+          },
+          "strength": 0.65,
+          "seed": 1,
+          "link": true,
+          "palette": {
+            "stones": [
+              "#b59c76",
+              "#a58d69",
+              "#c2aa83",
+              "#9a8262"
+            ],
+            "mortar": "#5b4e3a",
+            "variation": 0.07
+          }
+        },
+        "span": "once",
+        "even_tone": 0.8
+      }
+    },
+    {
+      "id": "tile.ruins_wall_master",
+      "kind": "elevation",
+      "shape": "elevation",
+      "method": "wall_master",
+      "variants": 1,
+      "prompt": "an ancient temple wall of large weathered sandstone blocks, moss and creeping vines, a carved stone cornice along the top",
+      "family": {
+        "prompts": [
+          "an ancient temple wall of large weathered sandstone blocks, moss and creeping vines, a carved stone cornice along the top"
+        ],
+        "variations": [
+          {
+            "id": "v1",
+            "text": "thick vines hanging over it"
+          },
+          {
+            "id": "v2",
+            "text": "a faded carved relief"
+          },
+          {
+            "id": "v3",
+            "text": "a few blocks fallen out"
+          }
+        ],
+        "sizes": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "weights": {
+          "2": 70,
+          "3": 70,
+          "4": 70
+        },
+        "palette_lock": true,
+        "template": {
+          "pattern": "ashlar",
+          "params": {
+            "across": 2,
+            "course": 0.1225,
+            "mortar": 0.012,
+            "bevel": 0.012
+          },
+          "strength": 0.8,
+          "seed": 1,
+          "link": true,
+          "palette": {
+            "stones": [
+              "#b59c76",
+              "#a58d69",
+              "#c2aa83",
+              "#9a8262"
+            ],
+            "mortar": "#5b4e3a",
+            "variation": 0.07
+          }
+        },
+        "span": "once",
+        "doors": [
+          {
+            "id": "d1",
+            "text": "a heavy carved sandstone door"
+          },
+          {
+            "id": "d2",
+            "text": "a bronze-studded temple door"
+          }
+        ],
+        "height": 3,
+        "door_height": 2,
+        "door_width": 1
+      }
+    },
+    {
+      "id": "prop.headless_statue",
+      "kind": "prop",
+      "prompt": "a weathered sandstone statue of a robed figure with its head broken off, ancient temple ruins, weathered sandstone, moss and vines, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.55,
+      "board": "prop.headless_statue",
+      "biome": false
+    },
+    {
+      "id": "prop.column_drum",
+      "kind": "prop",
+      "prompt": "a fallen drum section of a fluted sandstone column lying on its side, ancient temple ruins, weathered sandstone, moss and vines, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.7,
+      "board": "prop.column_drum",
+      "biome": false
+    },
+    {
+      "id": "prop.vine_urn",
+      "kind": "prop",
+      "prompt": "a tall sandstone urn overgrown with vines, ancient temple ruins, weathered sandstone, moss and vines, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.45,
+      "board": "prop.vine_urn",
+      "biome": false
+    },
+    {
+      "id": "prop.stone_altar",
+      "kind": "prop",
+      "prompt": "a carved sandstone altar block with faded reliefs, ancient temple ruins, weathered sandstone, moss and vines, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.8,
+      "board": "prop.stone_altar",
+      "biome": false
+    },
+    {
+      "id": "prop.stele",
+      "kind": "prop",
+      "prompt": "a tall carved sandstone stele tablet with faded glyphs, ancient temple ruins, weathered sandstone, moss and vines, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.45,
+      "board": "prop.stele",
+      "biome": false
+    },
+    {
+      "id": "prop.idol_head",
+      "kind": "prop",
+      "prompt": "a giant toppled stone idol head lying on its side, moss on it, ancient temple ruins, weathered sandstone, moss and vines, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.9,
+      "board": "prop.idol_head",
+      "biome": false
+    },
+    {
+      "id": "prop.bronze_brazier",
+      "kind": "prop",
+      "prompt": "a green-patina bronze brazier on three legs with flames, ancient temple ruins, weathered sandstone, moss and vines, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.45,
+      "board": "prop.bronze_brazier",
+      "biome": false
+    },
+    {
+      "id": "prop.roots",
+      "kind": "prop",
+      "prompt": "thick tree roots breaking up through the ground, ancient temple ruins, weathered sandstone, moss and vines, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.8,
+      "board": "prop.roots",
+      "biome": false
+    },
+    {
+      "id": "prop.fern_clump",
+      "kind": "prop",
+      "prompt": "a lush clump of green ferns, ancient temple ruins, weathered sandstone, moss and vines, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.5,
+      "board": "prop.fern_clump",
+      "biome": false
+    },
+    {
+      "id": "prop.cult_candles",
+      "kind": "prop",
+      "prompt": "a cluster of red cult candles around a small skull, ancient temple ruins, weathered sandstone, moss and vines, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 0.45,
+      "board": "prop.cult_candles",
+      "biome": false
+    },
+    {
+      "id": "prop.ritual_circle",
+      "kind": "prop",
+      "prompt": "a red chalk ritual circle with runes drawn on the ground, ancient temple ruins, weathered sandstone, moss and vines, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 1.0,
+      "board": "prop.ritual_circle",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height",
+      "biome": false
+    },
+    {
+      "id": "prop.reflecting_pool",
+      "kind": "prop",
+      "prompt": "a small square stone-edged reflecting pool of still water, ancient temple ruins, weathered sandstone, moss and vines, just the single object with nothing under it, no floor tile, no base slab, no walls",
+      "footprint": 1.0,
+      "board": "prop.reflecting_pool",
+      "view": "seen from directly above at a steep angle, lying flat on the ground, no height",
+      "biome": false
+    }
+  ],
+  "sheet": {
+    "palette": {
+      "stones": [
+        "#b59c76",
+        "#a58d69",
+        "#c2aa83",
+        "#9a8262"
+      ],
+      "mortar": "#5b4e3a",
+      "variation": 0.07
+    },
+    "words": "weathered sandstone blocks with moss",
+    "floor_stone": 0.4,
+    "wall_brick": 0.45,
+    "floor": "tile.ruins_floor_master"
+  }
+}
